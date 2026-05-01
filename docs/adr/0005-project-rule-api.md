@@ -112,7 +112,7 @@ export function isProjectRule(rule: AnyRule): rule is ProjectRule { ... }
 | `runRulesOnProject(rules, files, runtime)` | **wired** in `src/core/runner.ts` (5 tests in `tests/core/runner.test.ts`) |
 | `lint.ts` partitioning | **wired** — file content read once, shared between passes |
 | `madr/no-duplicate-numbering` (first project rule) | **wired** (7 tests) |
-| `madr/supersedes-bidirectional` | **pending** (M2) |
+| `madr/supersedes-bidirectional` | **wired** (13 tests) |
 | `madr/no-broken-links` | **pending** (M2) |
 | `madr/no-numbering-gap` (warning, opt-in) | **pending** (M2) |
 

@@ -15,4 +15,5 @@ export const recommended: Record<string, RuleSeverity> = {
   'madr/no-duplicate-numbering': 'error',
   'madr/required-sections': 'error',
   'madr/status-enum': 'error',
+  'madr/supersedes-bidirectional': 'error',
 };

@@ -6,3 +6,4 @@ export { default as filenameFormat } from './filename-format/index.js';
 export { default as noDuplicateNumbering } from './no-duplicate-numbering/index.js';
 export { default as requiredSections } from './required-sections/index.js';
 export { default as statusEnum } from './status-enum/index.js';
+export { default as supersedesBidirectional } from './supersedes-bidirectional/index.js';
