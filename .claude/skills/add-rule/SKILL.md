@@ -1,12 +1,12 @@
 ---
 name: add-rule
 description: TDD-gated scaffold for a new madr-lint rule. Generates spec, fixtures, failing test (RED), runs vitest to confirm RED, then scaffolds rule stub + bench stub. Refuses to write the implementation — that is the user's job (GREEN). Use whenever adding a new lint rule such as madr/filename-format or madr/required-sections.
-allowed-tools: Bash(pnpm:*), Bash(mkdir:*), Bash(git:*), Bash(node:*), Read, Write, Edit
+allowed-tools: Bash(pnpm:*), Bash(mise:*), Bash(mkdir:*), Bash(git:*), Bash(node:*), Read, Write, Edit
 ---
 
 # add-rule — TDD-gated scaffold for a new madr-lint rule
 
-This skill enforces strict Red-Green-Refactor TDD discipline per ADR-0003. The skill writes the *spec*, the *fixtures*, the *failing test*, and an *empty rule stub*. The implementation that turns the test green is the user's job. The skill mechanically refuses to bypass the RED state.
+This skill enforces strict Red-Green-Refactor TDD discipline per ADR-0003. The skill writes the *spec*, the *fixtures*, the *failing test*, and an *empty rule stub* + *bench stub*. The implementation that turns the test green is the user's job. Two RED gates are enforced mechanically — the skill refuses to proceed if either gate produces a green result, because that would mean the test is not actually exercising the rule.
 
 ## Inputs
 
@@ -15,19 +15,19 @@ Ask the user (or infer from invocation args):
 1. **Rule ID** — kebab-case, must start with `madr/`. Example: `madr/filename-format`.
 2. **Rule type** — `perFile` (default) or `project` (cross-file).
 3. **MADR version compat** — array of `v2`, `v3`, `v4` (default: all three).
-4. **Recommended preset severity** — should this rule be enabled in `recommended` by default? (`error` / `warn` / `off`, default `error` for spec-grounded rules).
+4. **Recommended preset severity** — `error` (default for spec-grounded rules), `warn`, or `off`.
 
 If any are unclear, ask the user before proceeding. Never guess the rule ID.
 
-Throughout this document, `<kebab>` means the part after `madr/` (e.g. for `madr/filename-format`, `<kebab>` is `filename-format`). `<camel>` is the camelCase of `<kebab>`.
+`<kebab>` below is the part after `madr/`. `<camel>` is the camelCase form.
 
 ## Procedure
 
 ### Step 1: Verify project state
 
-- Confirm cwd is the madr-lint repo root (look for `package.json` with `"name": "madr-lint"`).
-- Confirm working tree is clean (`git status --porcelain` is empty). If not clean, stop and ask the user to commit or stash.
-- Confirm `pnpm` and `vitest` are usable (`pnpm exec vitest --version`). If not, run dependency install first.
+- cwd is madr-lint repo root (look for `package.json` with `"name": "madr-lint"`)
+- working tree is clean (`git status --porcelain` empty); abort if dirty
+- `mise exec -- pnpm exec vitest --version` works (else run `mise exec -- pnpm install` first)
 
 ### Step 2: Create directories
 
@@ -42,15 +42,16 @@ mkdir -p docs/rules
 
 ### Step 3: Generate the RED-phase files
 
-Write these files. The test file MUST fail when run (no impl exists).
+Write these files. The test file MUST fail when run (no impl exists yet).
 
-**`src/rules/<kebab>/spec.md`** — plain-prose Given/When/Then. Lay out:
+**`src/rules/<kebab>/spec.md`** — Given/When/Then in plain prose:
+
 - The MADR aspect this rule enforces (cite spec source if applicable)
 - For each version in `versionCompat`, what is valid vs invalid
-- Diagnostic shape: messageId(s), `data` payload fields, default severity
-- Concrete examples (good / bad) — these become fixtures in step 4
+- Diagnostic shape: `messageId`, `data` payload fields, default severity
+- Concrete examples (good / bad) — these become fixtures
 
-**`src/rules/<kebab>/schema.json`** — AJV options schema. Default skeleton:
+**`src/rules/<kebab>/schema.json`** — AJV schema for options:
 
 ```json
 {
@@ -61,62 +62,77 @@ Write these files. The test file MUST fail when run (no impl exists).
 }
 ```
 
-**`tests/fixtures/<kebab>/valid/<slug>.md`** and **`invalid/<slug>.md`** — concrete ADR markdown matching the spec.md examples. One file per scenario. Valid fixtures: zero diagnostics. Invalid fixtures: exactly the diagnostic in spec.md.
+**`tests/fixtures/<kebab>/valid/<slug>.md`** and **`invalid/<slug>.md`** — concrete ADR markdown files. Valid: zero diagnostics. Invalid: exactly the diagnostic from spec.md.
 
-**`tests/rules/<kebab>.test.ts`** — vitest using the `runRule` helper:
+**`tests/rules/<kebab>.test.ts`** — DO NOT use bare `toMatchInlineSnapshot()` for invalid cases. vitest auto-fills empty snapshots on first run, defeating the RED gate. Use **hard assertions** instead:
 
 ```typescript
-import { describe, it, expect } from 'vitest';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { runRule } from '../helpers/run-rule.js';
-import rule from '../../src/rules/<kebab>/index.js';
+import { describe, it, expect } from 'vitest';
+import { runRule } from '../helpers/run-rule.ts';
+import rule from '../../src/rules/<kebab>/index.ts';
 
 const fixturesDir = join(import.meta.dirname, '../fixtures/<kebab>');
 
 describe('madr/<kebab>', () => {
-  describe('valid fixtures produce no diagnostics', () => {
+  describe('valid fixtures', () => {
     for (const file of readdirSync(join(fixturesDir, 'valid'))) {
-      it(file, () => {
+      it(`${file} produces no diagnostics`, () => {
         const content = readFileSync(join(fixturesDir, 'valid', file), 'utf8');
-        const diagnostics = runRule(rule, { content, path: file });
-        expect(diagnostics).toEqual([]);
+        expect(runRule(rule, { content, path: file })).toEqual([]);
       });
     }
   });
 
-  describe('invalid fixtures produce expected diagnostics', () => {
+  describe('invalid fixtures', () => {
     for (const file of readdirSync(join(fixturesDir, 'invalid'))) {
-      it(file, () => {
+      it(`${file} produces <messageId> diagnostic`, () => {
         const content = readFileSync(join(fixturesDir, 'invalid', file), 'utf8');
         const diagnostics = runRule(rule, { content, path: file });
-        expect(diagnostics).toMatchInlineSnapshot();
+        expect(diagnostics, `expected exactly one diagnostic for ${file}`).toHaveLength(1);
+        expect(diagnostics[0]).toMatchObject({
+          ruleName: 'madr/<kebab>',
+          messageId: '<messageId>',
+          severity: 'error',
+          path: file,
+          data: { /* spec-defined data fields, e.g. filename, expected */ },
+        });
       });
     }
   });
 });
 ```
 
-The import of `../../src/rules/<kebab>/index.js` deliberately fails — that is RED.
+The `toHaveLength(1)` + `toMatchObject({ data: { ... } })` shape is **mandatory** — it is what makes the second RED gate (Step 10) actually fire when the impl is empty.
 
-### Step 4: Confirm RED (gate #1)
+### Step 4: Confirm RED — gate #1
 
 ```bash
-pnpm vitest run tests/rules/<kebab>.test.ts
+mise exec -- pnpm vitest run tests/rules/<kebab>.test.ts
 ```
 
-Expected: **exit code != 0** (import fails or assertions fail). This is RED.
+Expected: **exit code != 0** (import fails: `Cannot find module '../../src/rules/<kebab>/index.ts'`).
 
-If exit code == 0: **skill failure**. Either the test imports nothing meaningful or fixtures are empty. Stop and report to the user; do not proceed.
+Verify using `vitest`'s output, NOT exit code alone — a typo in the test path also yields non-zero. Specifically check:
 
-### Step 5: Generate the rule stub (intentionally produces a *different* RED)
+- vitest reports "Failed Suites" or "Failed Tests" (not "no tests found")
+- the failure reason is the import error or assertion failure (substantive)
 
-Write `src/rules/<kebab>/index.ts` with type-correct meta and an empty `create()` returning no diagnostics. This makes the import resolve but does NOT implement the rule.
+If exit code 0: **skill failure**. Stop, report to user.
+
+### Step 5: Generate the rule stub (intentionally still RED)
+
+Write `src/rules/<kebab>/index.ts`. This makes the import resolve but produces no diagnostics, so invalid fixtures will still fail at Step 10.
 
 ```typescript
-import type { Rule } from '../../core/rule.js';
+import type { Rule } from '../../core/types.ts';
 
-const rule: Rule = {
+interface <Camel>Options extends Record<string, unknown> {
+  // <option fields per spec.md>
+}
+
+const rule: Rule<<Camel>Options> = {
   meta: {
     name: 'madr/<kebab>',
     type: '<perFile|project>',
@@ -129,12 +145,13 @@ const rule: Rule = {
     messages: {
       // <messageId>: '<template with {{placeholders}}>'
     },
-    defaultOptions: {},
+    defaultOptions: {
+      // <defaults>
+    },
     schema: () => import('./schema.json', { with: { type: 'json' } }),
   },
   create(_context) {
     // GREEN phase: the user (or Claude in a later turn) implements this.
-    return {};
   },
 };
 
@@ -143,52 +160,76 @@ export default rule;
 
 ### Step 6: Ensure helpers exist
 
-If `tests/helpers/run-rule.ts` doesn't exist, create a minimal version that constructs a fresh runner instance per invocation, parses the file with `gray-matter` + `mdast-util-from-markdown`, dispatches to the rule's visitor (or per-file callback), and collects diagnostics. Reference `CLAUDE.md` § Architecture principles for the runner contract.
+`tests/helpers/run-rule.ts` already exists for filename/metadata-style rules. For the **first** AST-based rule, the helper needs to grow:
 
-If the runner core itself doesn't exist yet (this is the very first rule), create a minimum runner first — but apply the same TDD discipline: write a test for the runner first, confirm RED, then implement.
+- parse frontmatter with `gray-matter`
+- parse body with `mdast-util-from-markdown`
+- walk the tree once, calling listeners returned by `rule.create()` (`enter` / `exit` keyed by mdast node type — see `RuleListeners` in `src/core/types.ts`)
+
+If the AST step is the new work for this rule, scope a separate task:
+write a failing test for the AST traversal helper itself first, then implement.
 
 ### Step 7: Generate the benchmark stub
 
 `benchmarks/<kebab>/bench.ts`:
 
 ```typescript
+import { writeFileSync, readFileSync } from 'node:fs';
+import { execSync } from 'node:child_process';
 import { Bench } from 'tinybench';
-import { readFileSync } from 'node:fs';
-import { runRule } from '../../tests/helpers/run-rule.js';
-import rule from '../../src/rules/<kebab>/index.js';
+import { runRule } from '../../tests/helpers/run-rule.ts';
+import rule from '../../src/rules/<kebab>/index.ts';
 
 const tiny = readFileSync(new URL('./fixtures/tiny.md', import.meta.url), 'utf8');
 const typical = readFileSync(new URL('./fixtures/typical.md', import.meta.url), 'utf8');
 
 const bench = new Bench({ time: 500 });
 bench
-  .add('madr/<kebab> — tiny', () => runRule(rule, { content: tiny, path: 'tiny.md' }))
-  .add('madr/<kebab> — typical', () => runRule(rule, { content: typical, path: 'typical.md' }));
+  .add('madr/<kebab> — tiny', () => {
+    runRule(rule, { content: tiny, path: '0001-bench.md' });
+  })
+  .add('madr/<kebab> — typical', () => {
+    runRule(rule, { content: typical, path: '0001-bench.md' });
+  });
 
 await bench.run();
 console.table(bench.table());
+
+// Emit JSON for bench-rule + perf-regression-check skills to consume.
+const sha = execSync('git rev-parse --short HEAD').toString().trim();
+const results = bench.tasks.map((t) => ({
+  name: t.name,
+  hz: t.result?.hz,
+  mean: t.result?.mean,
+  rme: t.result?.rme,
+  samples: t.result?.samples.length,
+}));
+writeFileSync(
+  new URL(`./${sha}.json`, import.meta.url),
+  JSON.stringify(results, null, 2),
+);
 ```
 
 Plus minimal `benchmarks/<kebab>/fixtures/{tiny,typical}.md` corpora.
 
 ### Step 8: Update registry and recommended preset
 
-- Append `export { default as <camel> } from './<kebab>/index.js';` to `src/rules/index.ts`.
+- Append `export { default as <camel> } from './<kebab>/index.ts';` to `src/rules/index.ts`.
 - Append the severity entry (input #4) to `src/configs/recommended.ts`.
 
 ### Step 9: Generate the docs stub
 
-`docs/rules/<kebab>.md` with sections: Description, Rationale, Examples (good/bad), Options, MADR version compat table, When to disable.
+`docs/rules/<kebab>.md` with sections: Description, Rationale, Examples (good/bad), Options table, MADR version compat table, When to disable.
 
-### Step 10: Re-run vitest — confirm *different* RED (gate #2)
+### Step 10: Re-run vitest — confirm *different* RED — gate #2
 
 ```bash
-pnpm vitest run tests/rules/<kebab>.test.ts
+mise exec -- pnpm vitest run tests/rules/<kebab>.test.ts
 ```
 
-Expected: tests now execute (imports resolve) but invalid fixtures produce empty `[]` instead of the expected diagnostic. Inline snapshots are still empty. This is RED-prime — proves the test is exercising the rule.
+Expected: tests now execute (imports resolve) but invalid fixtures fail at `toHaveLength(1)` because the empty `create()` produces no diagnostics. Valid fixtures pass (empty diagnostics array equals empty). This is the second RED state.
 
-If tests pass at this point: **skill failure**. Either fixtures are wrong or the snapshot was pre-filled. Stop and report.
+If all tests pass: **skill failure**. Either the test was generated with an auto-filling snapshot, or fixtures are empty. Stop and report.
 
 ### Step 11: Hand off to user
 
@@ -205,23 +246,24 @@ Files created:
   - docs/rules/<kebab>.md
 Registry & recommended preset updated.
 
-RED state confirmed (N tests failing). Next steps (GREEN phase):
+RED state confirmed (N tests failing at toHaveLength(1)).
+Next steps (GREEN phase):
   1. Implement src/rules/<kebab>/index.ts so each invalid fixture
-     produces the expected diagnostic.
-  2. Run `pnpm vitest run tests/rules/<kebab>.test.ts -u` to lock
-     inline snapshots after the diagnostics are correct.
+     produces the expected diagnostic with the data shape from spec.md.
+  2. Run `mise exec -- pnpm vitest run tests/rules/<kebab>.test.ts`
+     until all tests pass.
   3. Verify all valid fixtures still produce zero diagnostics.
 
-Discipline: do NOT modify tests/rules/<kebab>.test.ts after this point
-except via `vitest -u` snapshot updates — and only after the impl is correct.
+Discipline: do NOT modify tests/rules/<kebab>.test.ts after this point —
+the test is the contract, the impl follows it.
 ```
 
 ## Hard rules
 
 - MUST run vitest at Step 4 (gate #1) and Step 10 (gate #2). Skipping either breaks TDD.
 - MUST NOT write the rule's implementation logic. `create()` body stays empty until the user takes over.
-- MUST refuse to proceed if Step 4 produces a green test.
-- MUST NOT modify `tests/rules/<kebab>.test.ts` after Step 4, except snapshot updates after impl is verified.
+- MUST NOT use bare `toMatchInlineSnapshot()` in the generated test — only hard assertions (`toHaveLength` + `toMatchObject({ data: {...} })`). Snapshot-based assertions can be added LATER, only after the impl is correct, via `vitest -u`.
+- MUST refuse to proceed if either RED gate produces a green test.
 
 ## When to invoke
 

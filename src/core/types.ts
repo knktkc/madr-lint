@@ -1,13 +1,31 @@
 // MADR linter core types.
 // Per ADR-0002, the runner uses a single-pass visitor registry over mdast.
-// At v0.1.0 we ship the simple rule shape (no AST visitor); the visitor map
-// is added when the first AST-using rule lands.
+// The Rule type below supports BOTH:
+//   - Filename / metadata-only rules: create() returns void
+//   - AST-based rules: create() returns RuleListeners with enter/exit handlers
+// keyed by mdast node type. The runner walks each file's tree once and
+// dispatches to all subscribed rules.
+
+import type { Nodes } from 'mdast';
+
+export type MdastNodeType = Nodes['type'];
+
+/** Severity levels supported by every rule. */
+export type Severity = 'error' | 'warn';
+
+/**
+ * User-facing severity declaration in config files.
+ * - bare string: enable/disable with default options
+ * - tuple: enable with explicit options
+ */
+export type RuleSeverity =
+  | Severity
+  | 'off'
+  | readonly [Severity, Record<string, unknown>];
 
 export type MadrVersion = 'v2' | 'v3' | 'v4';
 
-export type Severity = 'error' | 'warn';
-
-export interface RuleMeta {
+export interface RuleMeta<TOptions = Record<string, unknown>> {
   /** Rule identifier, e.g. 'madr/filename-format'. */
   name: string;
   /** Whether the rule operates per-file or across the project. */
@@ -22,7 +40,7 @@ export interface RuleMeta {
   /** messageId -> template string with {{placeholders}}. */
   messages: Record<string, string>;
   /** Default options merged with user config. */
-  defaultOptions: Record<string, unknown>;
+  defaultOptions: TOptions;
   /** Lazy-loaded JSON Schema for options. */
   schema?: () => Promise<unknown>;
 }
@@ -52,16 +70,34 @@ export interface Diagnostic {
   data?: Record<string, unknown>;
 }
 
-export interface RuleContext {
+export interface RuleContext<TOptions = Record<string, unknown>> {
   /** The file being linted. */
   file: FileContext;
-  /** User-merged options for this rule. */
-  options: Record<string, unknown>;
+  /** User-merged options for this rule (validated against rule.meta.schema). */
+  options: TOptions;
   /** Emit a diagnostic. */
   report(diagnostic: Omit<Diagnostic, 'ruleName' | 'severity' | 'path'>): void;
 }
 
-export interface Rule {
-  meta: RuleMeta;
-  create(context: RuleContext): void;
+/**
+ * Visitor map dispatched during single-pass mdast traversal.
+ * Rules subscribe to specific node types; the runner walks the tree once
+ * and calls the matching enter/exit handler for each node.
+ */
+export interface RuleListeners {
+  enter?: Partial<Record<MdastNodeType, (node: Nodes) => void>>;
+  exit?: Partial<Record<MdastNodeType, (node: Nodes) => void>>;
+}
+
+/**
+ * A lint rule.
+ *
+ * - Filename / metadata-only rules: `create` reports diagnostics directly,
+ *   then returns void.
+ * - AST-based rules: `create` returns RuleListeners; the runner invokes
+ *   them during single-pass traversal of the file's mdast tree.
+ */
+export interface Rule<TOptions = Record<string, unknown>> {
+  meta: RuleMeta<TOptions>;
+  create(context: RuleContext<TOptions>): RuleListeners | void;
 }

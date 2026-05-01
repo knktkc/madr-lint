@@ -1,7 +1,11 @@
 import { basename } from 'node:path';
 import type { Rule } from '../../core/types.ts';
 
-const rule: Rule = {
+interface FilenameFormatOptions extends Record<string, unknown> {
+  pattern: string;
+}
+
+const rule: Rule<FilenameFormatOptions> = {
   meta: {
     name: 'madr/filename-format',
     type: 'perFile',
@@ -21,7 +25,7 @@ const rule: Rule = {
     schema: () => import('./schema.json', { with: { type: 'json' } }),
   },
   create(context) {
-    const pattern = context.options.pattern as string;
+    const { pattern } = context.options;
     const regex = new RegExp(pattern);
     const filename = basename(context.file.path);
     if (!regex.test(filename)) {
