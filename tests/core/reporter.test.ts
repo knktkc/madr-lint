@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import { textReporter } from '../../src/core/reporter.js';
-import type { Diagnostic, Rule } from '../../src/core/types.js';
+import type { AnyRule, Diagnostic, Rule } from '../../src/core/types.js';
 
 beforeAll(() => {
   process.env.NO_COLOR = '1';
@@ -26,7 +26,7 @@ describe('core/reporter — text', () => {
   });
 
   it('groups diagnostics by file path', () => {
-    const rules = new Map<string, Rule>([
+    const rules = new Map<string, AnyRule>([
       ['test/r', makeRule('test/r', { foo: 'msg {{x}}' })],
     ]);
     const diagnostics: Diagnostic[] = [
@@ -42,7 +42,7 @@ describe('core/reporter — text', () => {
   });
 
   it('renders {{placeholder}} from data', () => {
-    const rules = new Map<string, Rule>([
+    const rules = new Map<string, AnyRule>([
       ['test/r', makeRule('test/r', { hello: 'Hello {{name}}!' })],
     ]);
     const diagnostics: Diagnostic[] = [
@@ -58,7 +58,7 @@ describe('core/reporter — text', () => {
   });
 
   it('shows summary with error and warning counts', () => {
-    const rules = new Map<string, Rule>([
+    const rules = new Map<string, AnyRule>([
       ['test/r', makeRule('test/r', { x: 'msg' })],
     ]);
     const diagnostics: Diagnostic[] = [
@@ -80,7 +80,7 @@ describe('core/reporter — text', () => {
   });
 
   it('includes rule name in each diagnostic line', () => {
-    const rules = new Map<string, Rule>([
+    const rules = new Map<string, AnyRule>([
       ['test/r', makeRule('test/r', { x: 'msg' })],
     ]);
     const diagnostics: Diagnostic[] = [
@@ -90,7 +90,7 @@ describe('core/reporter — text', () => {
   });
 
   it('keeps unmatched placeholders intact (visible bug surface)', () => {
-    const rules = new Map<string, Rule>([
+    const rules = new Map<string, AnyRule>([
       ['test/r', makeRule('test/r', { x: 'value: {{notProvided}}' })],
     ]);
     const diagnostics: Diagnostic[] = [

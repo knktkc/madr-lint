@@ -112,3 +112,58 @@ export interface Rule<TOptions = Record<string, unknown>> {
   meta: RuleMeta<TOptions>;
   create(context: RuleContext<TOptions>): RuleListeners | void;
 }
+
+// ──────────────────────────────────────────────────────────────────
+// Project rules (cross-file). See ADR-0005.
+// ──────────────────────────────────────────────────────────────────
+
+/**
+ * A pre-parsed file passed to project rules. Built once per
+ * `runRulesOnProject` invocation.
+ */
+export interface ProjectFile {
+  /** File path relative to the project root. */
+  path: string;
+  /** Raw file content (unparsed). */
+  content: string;
+  /** Parsed YAML frontmatter, or null if absent. */
+  frontmatter: Record<string, unknown> | null;
+  /** mdast root of the body (frontmatter stripped). */
+  ast: Root;
+}
+
+export interface ProjectRuleContext<TOptions = Record<string, unknown>> {
+  /** All files in the project (eager-parsed). */
+  files: readonly ProjectFile[];
+  /** User-merged options for this rule. */
+  options: TOptions;
+  /**
+   * Emit a diagnostic. Unlike per-file rules, project rules MUST set
+   * `path` explicitly — the runner cannot infer which file the
+   * diagnostic relates to.
+   */
+  report(diagnostic: Omit<Diagnostic, 'ruleName' | 'severity'>): void;
+}
+
+/**
+ * A cross-file rule. Receives all parsed files at once and reports
+ * diagnostics with explicit `path` per file.
+ *
+ * Project rules use a different runner function (`runRulesOnProject`)
+ * and a distinct context shape from per-file rules. See ADR-0005 for
+ * the rationale behind keeping the two APIs separate.
+ */
+export interface ProjectRule<TOptions = Record<string, unknown>> {
+  meta: RuleMeta<TOptions>;
+  check(context: ProjectRuleContext<TOptions>): void;
+}
+
+/** Either a per-file or a project rule. */
+export type AnyRule<TOptions = Record<string, unknown>> =
+  | Rule<TOptions>
+  | ProjectRule<TOptions>;
+
+/** Type guard distinguishing project rules from per-file rules. */
+export function isProjectRule(rule: AnyRule): rule is ProjectRule {
+  return 'check' in rule;
+}

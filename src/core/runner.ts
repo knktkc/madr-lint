@@ -3,6 +3,9 @@ import type {
   Diagnostic,
   FileContext,
   MdastNode,
+  ProjectFile,
+  ProjectRule,
+  ProjectRuleContext,
   Rule,
   RuleContext,
   RuleListeners,
@@ -164,7 +167,7 @@ export function runRulesOnFile(
 // never something the user wants to silence as a warning.
 function internalErrorDiagnostic(
   ruleName: string,
-  operation: 'create' | 'enter' | 'exit',
+  operation: 'create' | 'enter' | 'exit' | 'check',
   err: unknown,
   path: string,
 ): Diagnostic {
@@ -232,4 +235,80 @@ function walk(
   if (exitHandlers) {
     for (const handler of exitHandlers) handler(node);
   }
+}
+
+/**
+ * Build a `ProjectFile` (path + content + parsed frontmatter + AST) from
+ * a raw file. Used by `runRulesOnProject` and by the lint orchestrator
+ * to share parsing between per-file and project passes when needed.
+ */
+export function buildProjectFile(file: FileContext): ProjectFile {
+  const parsed: ParsedFile = parseFile(file.content);
+  return {
+    path: file.path,
+    content: file.content,
+    frontmatter: parsed.frontmatter,
+    ast: parsed.ast,
+  };
+}
+
+/**
+ * Run multiple project rules across all parsed files. Each rule's
+ * `check()` is called once with the full file array. Throws are
+ * captured as `core/internal-error` diagnostics (attached to the
+ * first file's path, since project rules have no file context).
+ *
+ * See ADR-0005 for the API rationale.
+ */
+export function runRulesOnProject(
+  rules: readonly ProjectRule[],
+  files: readonly ProjectFile[],
+  runtime: RunRuleOptions = {},
+): Diagnostic[] {
+  const diagnostics: Diagnostic[] = [];
+  const severity = runtime.severity ?? 'error';
+
+  for (const rule of rules) {
+    const mergedOptions = {
+      ...rule.meta.defaultOptions,
+      ...runtime.options,
+    };
+
+    if (rule.meta.schema && !runtime.skipValidation) {
+      const validator = getValidator(rule.meta.schema);
+      if (!validator(mergedOptions)) {
+        throw new RuleOptionsError(
+          rule.meta.name,
+          ajv.errorsText(validator.errors),
+        );
+      }
+    }
+
+    const context: ProjectRuleContext = {
+      files,
+      options: mergedOptions,
+      report(d) {
+        diagnostics.push({
+          ruleName: rule.meta.name,
+          severity,
+          ...d,
+        });
+      },
+    };
+
+    try {
+      rule.check(context);
+    } catch (err) {
+      diagnostics.push(
+        internalErrorDiagnostic(
+          rule.meta.name,
+          'check',
+          err,
+          files[0]?.path ?? '<project>',
+        ),
+      );
+    }
+  }
+
+  return diagnostics;
 }

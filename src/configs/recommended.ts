@@ -12,6 +12,7 @@ import type { RuleSeverity } from '../core/types.js';
 export const recommended: Record<string, RuleSeverity> = {
   'madr/date-iso8601': 'error',
   'madr/filename-format': 'error',
+  'madr/no-duplicate-numbering': 'error',
   'madr/required-sections': 'error',
   'madr/status-enum': 'error',
 };

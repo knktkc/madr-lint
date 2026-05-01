@@ -4,6 +4,7 @@ import { loadConfig, resolveExtends, type ResolvedConfig } from './core/config.j
 import { findAdrFiles } from './core/discover.js';
 import { lintFiles } from './core/lint.js';
 import { textReporter } from './core/reporter.js';
+import type { AnyRule } from './core/types.js';
 import * as builtinRules from './rules/index.js';
 
 const pkg = JSON.parse(
@@ -41,7 +42,7 @@ const main = defineCommand({
       process.exit(0);
     }
 
-    const allRulesArray = Object.values(builtinRules);
+    const allRulesArray: AnyRule[] = Object.values(builtinRules);
     const result = lintFiles({
       rules: allRulesArray,
       ruleSeverity: config.rules,
@@ -49,7 +50,9 @@ const main = defineCommand({
       cwd,
     });
 
-    const rulesByName = new Map(allRulesArray.map((r) => [r.meta.name, r]));
+    const rulesByName = new Map<string, AnyRule>(
+      allRulesArray.map((r) => [r.meta.name, r]),
+    );
     console.log(textReporter.format(result.diagnostics, rulesByName));
 
     const errorCount = result.diagnostics.filter(

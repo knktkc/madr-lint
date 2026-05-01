@@ -1,8 +1,11 @@
 import pc from 'picocolors';
-import type { Diagnostic, Rule } from './types.js';
+import type { AnyRule, Diagnostic } from './types.js';
 
 export interface Reporter {
-  format(diagnostics: readonly Diagnostic[], rulesByName: Map<string, Rule>): string;
+  format(
+    diagnostics: readonly Diagnostic[],
+    rulesByName: Map<string, AnyRule>,
+  ): string;
 }
 
 /**
@@ -52,7 +55,10 @@ function groupByFile(diagnostics: readonly Diagnostic[]): Map<string, Diagnostic
   return map;
 }
 
-function renderMessage(d: Diagnostic, rulesByName: Map<string, Rule>): string {
+function renderMessage(
+  d: Diagnostic,
+  rulesByName: Map<string, AnyRule>,
+): string {
   const rule = rulesByName.get(d.ruleName);
   const template = rule?.meta.messages[d.messageId] ?? d.messageId;
   return interpolate(template, d.data ?? {});

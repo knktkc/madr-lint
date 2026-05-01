@@ -25,8 +25,8 @@ These decisions are very expensive to retrofit. They are baked into the rule API
 2. **`mdast-util-from-markdown` direct, NOT `unified+remark`**. Skip the `unified` Processor overhead (~25-29x slower per March 2026 benchmarks). Use `gray-matter` for frontmatter, then feed body to `fromMarkdown`. See ADR-0002.
    - **Status (M0)**: **wired** in `src/core/parser.ts`. Frontmatter is exposed lazily via `context.frontmatter` (only triggers parse when accessed)
 
-3. **Two-tier rule API**: `perFile` rules are pure (file content + AST → diagnostics, parallelizable). `project` rules (numbering uniqueness, supersedes graph, link rot) consume a pre-built index built once from per-file outputs. Locks in parallelism from day one.
-   - **Status (M0)**: `RuleMeta.type` field **defined**; perFile path **wired** (filename-format + AST runner); project path **pending** (M2 cross-file rules)
+3. **Two-tier rule API**: `perFile` rules are pure (file content + AST → diagnostics, parallelizable). `project` rules (numbering uniqueness, supersedes graph, link rot) consume eager-parsed files in a single `check()` call. See ADR-0005.
+   - **Status (M2)**: BOTH wired — perFile via `runRulesOnFile`, project via `runRulesOnProject` in `src/core/runner.ts`. First project rule `madr/no-duplicate-numbering` shipped.
 
 4. **Pre-compile AJV schemas + regex at config load time**. ReDoS-guarded via `safe-regex2` in CI. Per-file regex execution has a 5ms soft budget.
    - **Status (M0)**: AJV **wired** in `src/core/runner.ts` (per-rule WeakMap-cached validators, throws `RuleOptionsError` on invalid options); `safe-regex2` **installed**, ReDoS check **pending** CI integration; per-file regex 5ms budget **pending**
@@ -150,3 +150,4 @@ ADRs use **MADR v4 frontmatter** format (this project's recommended target).
 - ADR-0002: AST parsing strategy (single-pass + mdast-util-from-markdown)
 - ADR-0003: TDD discipline as project convention
 - ADR-0004: Tooling adjustments (pnpm 10, vitest 4)
+- ADR-0005: Project rule API design (M2)
