@@ -1,38 +1,43 @@
 ---
 name: add-rule
-description: TDD-gated scaffold for a new madr-lint rule. Generates spec, fixtures, failing test (RED), runs vitest to confirm RED, then scaffolds rule stub + bench stub. Refuses to write the implementation — that is the user's job (GREEN). Use whenever adding a new lint rule such as madr/filename-format or madr/required-sections.
+description: TDD-gated scaffold for a new madr-lint rule. Generates spec, fixtures, failing test (RED), runs vitest to confirm RED, then scaffolds an empty rule stub + bench stub. Refuses to write the implementation — that is the user's job (GREEN). Use whenever adding a new lint rule such as madr/required-sections or madr/status-enum.
 allowed-tools: Bash(pnpm:*), Bash(mise:*), Bash(mkdir:*), Bash(git:*), Bash(node:*), Read, Write, Edit
 ---
 
 # add-rule — TDD-gated scaffold for a new madr-lint rule
 
-This skill enforces strict Red-Green-Refactor TDD discipline per ADR-0003. The skill writes the *spec*, the *fixtures*, the *failing test*, and an *empty rule stub* + *bench stub*. The implementation that turns the test green is the user's job. Two RED gates are enforced mechanically — the skill refuses to proceed if either gate produces a green result, because that would mean the test is not actually exercising the rule.
+Enforces strict Red-Green-Refactor TDD discipline per ADR-0003.
 
-> **Conventions** (must match HEAD as of 2026-05-01):
+The skill writes the *spec*, *fixtures*, *failing test*, *empty rule stub*, *bench stub*, *docs stub*, and updates the registry. The implementation that turns the test green is the user's job. Two RED gates are enforced mechanically.
+
+> **Conventions** (must match HEAD):
 > - Project-internal imports use the **`.js` extension** (Node ESM idiom). tsc + tsup resolve them to the `.ts` source.
-> - Rule meta `schema` is a **plain object** imported via `import schema from './schema.json' with { type: 'json' }`. NOT an async loader function.
+> - Rule meta `schema` is a plain object via `import schema from './schema.json' with { type: 'json' }`. NOT an async loader.
 > - Test assertions on invalid fixtures use **hard `toHaveLength(N)` + `toMatchObject({ data: {...} })`** — never bare `toMatchInlineSnapshot()` (auto-fills, defeats the gate).
+> - All vitest invocations go through `mise exec -- pnpm vitest run …` for tool-version consistency.
 
 ## Inputs
 
 Ask the user (or infer from invocation args):
 
-1. **Rule ID** — kebab-case, must start with `madr/`. Example: `madr/filename-format`.
+1. **Rule ID** — kebab-case, must start with `madr/`. Example: `madr/required-sections`.
 2. **Rule type** — `perFile` (default) or `project` (cross-file).
-3. **MADR version compat** — array of `v2`, `v3`, `v4` (default: all three).
-4. **Recommended preset severity** — `error` (default for spec-grounded rules), `warn`, or `off`.
+3. **Rule shape** — `A` (filename / metadata-only) / `B` (frontmatter-only) / `C` (AST traversal). See "Shapes" appendix below for examples.
+4. **MADR version compat** — array of `v2`, `v3`, `v4` (default: all three).
+5. **Recommended preset severity** — `error` (default for spec-grounded rules), `warn`, or `off`.
 
-If any are unclear, ask the user before proceeding. Never guess the rule ID.
+If the rule needs to validate something across versions where MADR conventions differ (e.g. v2 uses `## Context and Problem Statement` but v3+ moved sections around — verify against the upstream MADR template before writing the spec), explicitly enumerate per-version expectations in spec.md.
 
-`<kebab>` below is the part after `madr/`. `<camel>` is the camelCase form (e.g. `filename-format` → `filenameFormat`; `no-broken-links` → `noBrokenLinks`).
+`<kebab>` is the part after `madr/`. `<camel>` is camelCase (e.g. `required-sections` → `requiredSections`, `no-broken-links` → `noBrokenLinks`).
 
 ## Procedure
 
 ### Step 1: Verify project state
 
-- cwd is madr-lint repo root (look for `package.json` with `"name": "madr-lint"`)
+- cwd is the madr-lint repo root (look for `package.json` with `"name": "madr-lint"`)
 - working tree is clean (`git status --porcelain` empty); abort if dirty
-- `mise exec -- pnpm exec vitest --version` works (else run `mise exec -- pnpm install` first)
+- `mise exec -- pnpm vitest --version` works (else run `mise exec -- pnpm install` first)
+- `src/rules/<kebab>/` does not already exist (else stop and ask the user — re-running the skill would overwrite)
 
 ### Step 2: Create directories
 
@@ -47,29 +52,34 @@ mkdir -p docs/rules
 
 ### Step 3: Generate the RED-phase files
 
-Write these files. The test file MUST fail when run (no impl exists yet).
+The CONTENTS depend on the chosen rule shape. The skeletons below stay empty enough that gate #2 (Step 10) fires correctly when the user has not yet implemented the rule.
 
 **`src/rules/<kebab>/spec.md`** — Given/When/Then in plain prose:
 
-- The MADR aspect this rule enforces (cite spec source if applicable)
-- For each version in `versionCompat`, what is valid vs invalid
-- Diagnostic shape: `messageId`, `data` payload fields, default severity
-- Concrete examples (good / bad) — these become fixtures
+- The MADR aspect this rule enforces. **Cite the MADR template URL for each version in your `versionCompat`** (e.g. https://github.com/adr/madr/blob/develop/template/adr-template.md). Do not infer from memory.
+- For each version, list the EXACT valid section names / status values / date format / etc. that count as "valid" for this rule.
+- Diagnostic shape: `messageId(s)`, `data` payload fields (define them — do NOT copy filename-format's `{ filename, expected }`; pick the shape your spec needs), default severity.
+- Concrete examples (good / bad) — these become the fixtures.
 
-**`src/rules/<kebab>/schema.json`** — AJV draft-07 schema:
+**`src/rules/<kebab>/schema.json`** — AJV draft-07 schema. **The schema must declare every option key listed in `defaultOptions`** (see the option/schema/default coupling check at Step 3.5). Skeleton:
 
 ```json
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "type": "object",
   "additionalProperties": false,
-  "properties": {}
+  "properties": {
+    "<optionName>": {
+      "type": "<type>",
+      "description": "<what it controls>"
+    }
+  }
 }
 ```
 
 **`tests/fixtures/<kebab>/valid/<slug>.md`** and **`invalid/<slug>.md`** — concrete ADR markdown files. Valid: zero diagnostics. Invalid: exactly the diagnostic from spec.md.
 
-**`tests/rules/<kebab>.test.ts`** — DO NOT use bare `toMatchInlineSnapshot()` for invalid cases. vitest auto-fills empty snapshots on first run, defeating the RED gate. Use **hard assertions** instead:
+**`tests/rules/<kebab>.test.ts`**:
 
 ```typescript
 import { readdirSync, readFileSync } from 'node:fs';
@@ -95,13 +105,16 @@ describe('madr/<kebab>', () => {
       it(`${file} produces <messageId> diagnostic`, () => {
         const content = readFileSync(join(fixturesDir, 'invalid', file), 'utf8');
         const diagnostics = runRule(rule, { content, path: file });
-        expect(diagnostics, `expected exactly one diagnostic for ${file}`).toHaveLength(1);
+        expect(diagnostics, `expected at least one diagnostic for ${file}`).toHaveLength(1);
         expect(diagnostics[0]).toMatchObject({
           ruleName: 'madr/<kebab>',
           messageId: '<messageId>',
           severity: 'error',
           path: file,
-          data: { /* spec-defined data fields, e.g. filename, expected */ },
+          data: {
+            // Replace this with the EXACT data fields your spec.md
+            // declared. Do NOT keep this comment in the committed file.
+          },
         });
       });
     }
@@ -109,7 +122,15 @@ describe('madr/<kebab>', () => {
 });
 ```
 
-The `toHaveLength(1)` + `toMatchObject({ data: { ... } })` shape is **mandatory** — it is what makes the second RED gate (Step 10) actually fire when the impl is empty.
+### Step 3.5: Schema / defaultOptions / fixture coupling check
+
+Before invoking vitest, sanity-check three things — getting them out of sync makes Step 10 RED for the wrong reason:
+
+1. **Every key in `defaultOptions` must be declared in `schema.json` `properties`.** AJV runs in `strict: true` mode and rejects unknown options because of `additionalProperties: false`. If `defaultOptions: { sections: [...] }` but `schema.json: { properties: {} }`, AJV throws `RuleOptionsError` at runtime (not a `toHaveLength` failure — different RED, masks the real problem).
+
+2. **Invalid fixtures must trigger the rule's logic with `defaultOptions` only** (the test does not pass per-rule `options`). For Shape C rules requiring options, set the values in `defaultOptions` so a fresh `runRule` call exercises the rule.
+
+3. **Fixture file names in `valid/` and `invalid/` should not collide with each other** (vitest `it()` titles are filenames; duplicates across describe blocks are allowed but confusing).
 
 ### Step 4: Confirm RED — gate #1
 
@@ -117,22 +138,19 @@ The `toHaveLength(1)` + `toMatchObject({ data: { ... } })` shape is **mandatory*
 mise exec -- pnpm vitest run tests/rules/<kebab>.test.ts
 ```
 
-Expected: **exit code != 0** (import fails: `Cannot find module '../../src/rules/<kebab>/index.js'`).
+Look for ONE of these in output:
+- `Failed Suites N` (import error — expected)
+- `Tests  N failed` (assertion failure — expected)
 
-Verify using `vitest`'s output, NOT exit code alone — a typo in the test path also yields non-zero. Specifically check:
+If the output says `Tests  no tests` or `0 tests`: **skill failure** — the test was generated but never imported the rule (typo in path). Stop, fix, retry.
 
-- vitest reports "Failed Suites" or "Failed Tests" (not "no tests found")
-- the failure reason is the import error or assertion failure (substantive)
-
-If exit code 0: **skill failure**. Stop, report to user.
+If exit code 0: **skill failure** — the test passed without an impl, meaning it does not exercise the rule. Stop, report.
 
 ### Step 5: Generate the rule stub (intentionally still RED)
 
-Write `src/rules/<kebab>/index.ts`. This makes the import resolve but produces no diagnostics, so invalid fixtures will still fail at Step 10.
+Pick the matching shape for input #3. The stub MUST stay empty — do not write impl logic. The user (or Claude in a later turn) implements GREEN.
 
-Three rule shapes are supported. Pick the one matching the rule's job:
-
-**Shape A — filename / metadata-only** (e.g. `madr/filename-format`). Reports directly from `create()`, returns void:
+**Shape A — filename / metadata-only:**
 
 ```typescript
 import type { Rule } from '../../core/types.js';
@@ -143,59 +161,47 @@ interface <Camel>Options extends Record<string, unknown> {
 }
 
 const rule: Rule<<Camel>Options> = {
-  meta: { /* see common shape below */ },
-  create(context) {
-    // Inspect context.file.path / context.options; report directly.
-    // Return nothing.
+  meta: { /* ...common shape below... */ },
+  create(_context) {
+    // GREEN phase: read context.file.path / context.options, call context.report().
   },
 };
 
 export default rule;
 ```
 
-**Shape B — frontmatter-only** (e.g. `madr/status-enum`, `madr/date-iso8601`). Reads `context.frontmatter` (lazy-parsed; only triggers parse on access):
+**Shape B — frontmatter-only:**
 
 ```typescript
-create(context) {
-  const fm = context.frontmatter;
-  if (!fm) return;
-  // Validate fm.status, fm.date, etc., reporting via context.report().
+create(_context) {
+  // GREEN phase: read context.frontmatter (lazy-parsed), validate fields,
+  // call context.report().
 }
 ```
 
-**Shape C — AST traversal** (e.g. `madr/required-sections`, `madr/no-broken-links`). Returns `RuleListeners`:
+**Shape C — AST traversal:**
 
 ```typescript
-import type { Rule, RuleListeners } from '../../core/types.js';
-// ...
+import type { Rule, RuleListeners, MdastNode } from '../../core/types.js';
+import schema from './schema.json' with { type: 'json' };
 
-create(context): RuleListeners {
-  const seenSections: string[] = [];
-  return {
-    enter: {
-      heading(node) {
-        if ('children' in node && node.children?.[0]?.type === 'text') {
-          seenSections.push(node.children[0].value);
-        }
-      },
-    },
-    exit: {
-      root() {
-        for (const required of context.options.sections) {
-          if (!seenSections.includes(required)) {
-            context.report({
-              messageId: 'missingSection',
-              data: { section: required, found: seenSections },
-            });
-          }
-        }
-      },
-    },
-  };
+interface <Camel>Options extends Record<string, unknown> {
+  // <option fields>
 }
+
+const rule: Rule<<Camel>Options> = {
+  meta: { /* ...common shape below... */ },
+  create(_context): RuleListeners {
+    // GREEN phase: return { enter: { ... }, exit: { ... } } subscribing to
+    // mdast node types. See "Shapes" appendix for a worked example.
+    return {};
+  },
+};
+
+export default rule;
 ```
 
-**Common meta shape** (used by all three):
+**Common meta shape:**
 
 ```typescript
 const rule: Rule<<Camel>Options> = {
@@ -212,30 +218,21 @@ const rule: Rule<<Camel>Options> = {
       // <messageId>: '<template with {{placeholders}}>'
     },
     defaultOptions: {
-      // <defaults>
+      // <defaults — every key must be in schema.json>
     },
     schema,
   },
   create(_context) {
-    // GREEN phase: implement per the chosen shape.
+    // GREEN phase: see shape-specific body above.
   },
 };
 ```
 
-Pick the shape that matches the rule. Do NOT mix multiple shapes — one rule, one return type.
+### Step 6: Helpers — already wired
 
-### Step 6: Helpers (already wired by the runner)
+The runner in `src/core/runner.ts` already handles everything an AST-based rule needs: gray-matter frontmatter parsing, `mdast-util-from-markdown` body parsing (per ADR-0002), single-pass visitor dispatch from listeners returned by `create()`, AJV-validated options, and per-rule error isolation (a buggy rule throws → captured as `core/internal-error` diagnostic, other rules continue).
 
-The runner in `src/core/runner.ts` already handles everything an AST-based rule needs:
-
-- frontmatter is parsed lazily (gray-matter) and exposed via `context.frontmatter`
-- the body AST (`mdast-util-from-markdown`) is parsed once per file and walked once per `runRulesOnFile` invocation
-- `RuleListeners` returned by `create()` are dispatched per node type during the single tree walk
-- `RuleContext.report()` collects diagnostics
-
-`tests/helpers/run-rule.ts` is a thin re-export of the runner — tests import `runRule` from there. No helper modifications are needed when adding a new rule (regardless of shape).
-
-If the rule needs something the runner does not provide (e.g., access to a different parser, project-wide indexing for cross-file rules), pause and add a separate ADR before extending the runner.
+`tests/helpers/run-rule.ts` is a thin re-export of the runner. No helper changes are needed when adding a rule, regardless of shape.
 
 ### Step 7: Generate the benchmark stub
 
@@ -263,8 +260,6 @@ bench
 await bench.run();
 console.table(bench.table());
 
-// Emit JSON for bench-rule + perf-regression-check skills to consume.
-// `bench.table()` shape is API-stable across tinybench versions.
 const sha = execSync('git rev-parse --short HEAD').toString().trim();
 writeFileSync(
   new URL(`./${sha}.json`, import.meta.url),
@@ -276,12 +271,22 @@ Plus minimal `benchmarks/<kebab>/fixtures/{tiny,typical}.md` corpora.
 
 ### Step 8: Update registry and recommended preset
 
-- Append `export { default as <camel> } from './<kebab>/index.js';` to `src/rules/index.ts`.
-- Append the severity entry (input #4) to `src/configs/recommended.ts`.
+- Append to `src/rules/index.ts`:
+  ```typescript
+  export { default as <camel> } from './<kebab>/index.js';
+  ```
+  Example for `madr/required-sections`:
+  ```typescript
+  export { default as requiredSections } from './required-sections/index.js';
+  ```
+- Append the severity entry (input #5) to `src/configs/recommended.ts`:
+  ```typescript
+  'madr/<kebab>': '<severity>',
+  ```
 
 ### Step 9: Generate the docs stub
 
-`docs/rules/<kebab>.md` with sections: Description, Rationale, Examples (good/bad), Options table, MADR version compat table, When to disable.
+`docs/rules/<kebab>.md` with: Description, Rationale, Examples (good/bad — one example per fixture, with a one-line "why" each), Options table, MADR version compat table, "When to disable".
 
 ### Step 10: Re-run vitest — confirm *different* RED — gate #2
 
@@ -289,9 +294,11 @@ Plus minimal `benchmarks/<kebab>/fixtures/{tiny,typical}.md` corpora.
 mise exec -- pnpm vitest run tests/rules/<kebab>.test.ts
 ```
 
-Expected: tests now execute (imports resolve) but invalid fixtures fail at `toHaveLength(1)` because the empty `create()` produces no diagnostics. Valid fixtures pass (empty diagnostics array equals empty). This is the second RED state.
+For an empty stub:
+- **Shape A/B**: invalid fixtures fail at `toHaveLength(1)` (no diagnostics emitted). Valid fixtures pass.
+- **Shape C**: `create()` returns `{}` — `runRulesOnFile` sees a non-undefined return, walks the AST, but no listeners fire. invalid fixtures still fail at `toHaveLength(1)`.
 
-If all tests pass: **skill failure**. Either the test was generated with an auto-filling snapshot, or fixtures are empty. Stop and report.
+If all tests pass at this point: **skill failure**. Either the test asserts nothing meaningful, or the stub silently emits something. Stop and report.
 
 ### Step 11: Hand off to user
 
@@ -314,7 +321,6 @@ Next steps (GREEN phase):
      produces the expected diagnostic with the data shape from spec.md.
   2. Run `mise exec -- pnpm vitest run tests/rules/<kebab>.test.ts`
      until all tests pass.
-  3. Verify all valid fixtures still produce zero diagnostics.
 
 Discipline: do NOT modify tests/rules/<kebab>.test.ts after this point —
 the test is the contract, the impl follows it.
@@ -323,15 +329,61 @@ the test is the contract, the impl follows it.
 ## Hard rules
 
 - MUST run vitest at Step 4 (gate #1) and Step 10 (gate #2). Skipping either breaks TDD.
-- MUST NOT write the rule's implementation logic. `create()` body stays empty until the user takes over.
-- MUST NOT use bare `toMatchInlineSnapshot()` in the generated test — only hard assertions (`toHaveLength` + `toMatchObject({ data: {...} })`). Snapshot-based assertions can be added LATER, only after the impl is correct, via `vitest -u`.
+- MUST NOT write the rule's implementation logic. `create()` body stays empty (or `return {}` for Shape C) until the user takes over.
+- MUST NOT use bare `toMatchInlineSnapshot()` in the generated test — only hard assertions (`toHaveLength` + `toMatchObject({ data: {...} })`).
 - MUST refuse to proceed if either RED gate produces a green test.
-- MUST use `.js` extensions in all generated imports (Node ESM convention; tsc resolves to `.ts` source).
+- MUST use `.js` extensions in all generated imports.
 - MUST use static `import schema from './schema.json' with { type: 'json' }` — never the async-loader form.
+- MUST verify Step 3.5 coupling before running the gates (avoids `RuleOptionsError`-as-RED false signal).
+
+## Shapes — worked references (for the user during GREEN)
+
+> These are GREEN-phase examples to consult AFTER the skill exits and you start implementing. They are NOT generated as part of the stub.
+
+### Shape C — extracting heading text robustly
+
+A heading like `## **Status**` has `heading > strong > text` shape. The naive `node.children?.[0]?.type === 'text'` skips this. Either narrow first or use `mdast-util-to-string`:
+
+```typescript
+import { toString } from 'mdast-util-to-string';
+
+create(context): RuleListeners {
+  const seen: string[] = [];
+  return {
+    enter: {
+      heading(node) {
+        if (node.type === 'heading') {
+          seen.push(toString(node).trim());
+        }
+      },
+    },
+    exit: {
+      root() {
+        const required = (context.options.sections as string[] | undefined) ?? [];
+        for (const section of required) {
+          if (!seen.includes(section)) {
+            context.report({
+              messageId: 'missingSection',
+              data: { section, found: seen },
+            });
+          }
+        }
+      },
+    },
+  };
+}
+```
+
+If `mdast-util-to-string` is not yet installed, add it as a runtime dep before implementing the rule:
+
+```bash
+mise exec -- pnpm add mdast-util-to-string
+```
+
+The narrowing `if (node.type === 'heading')` is required for TypeScript to discriminate `MdastNode` (the union of `Root | Nodes`).
 
 ## When to invoke
 
-User says:
 - "add a new rule X"
 - "create rule madr/X"
 - "implement madr/X" (start here, hand off for impl)

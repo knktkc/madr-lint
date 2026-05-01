@@ -2,10 +2,12 @@
 
 import type { MadrVersion, RuleSeverity } from './core/types.js';
 
+// Types
 export type {
   Diagnostic,
   FileContext,
   MadrVersion,
+  MdastNode,
   MdastNodeType,
   Rule,
   RuleContext,
@@ -15,6 +17,20 @@ export type {
   Severity,
 } from './core/types.js';
 
+// Runner — programmatic linting API
+export {
+  runRule,
+  runRulesOnFile,
+  RuleOptionsError,
+  INTERNAL_ERROR_RULE_NAME,
+} from './core/runner.js';
+export type { RunRuleOptions } from './core/runner.js';
+
+// Parser — exposed for tools that want to parse without linting
+export { parseFile } from './core/parser.js';
+export type { ParsedFile } from './core/parser.js';
+
+// Built-in rules and presets
 export * as rules from './rules/index.js';
 export { recommended } from './configs/recommended.js';
 

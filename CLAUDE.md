@@ -68,8 +68,13 @@ Linters live or die by speed. Performance is treated as a feature, not an aftert
 
 - **ID format**: `madr/<kebab-case>`, e.g., `madr/required-sections`. ESLint-style. No `MADR001` numbering.
 - **Severity**: every rule supports `error | warn | off`. Defaults set in `recommended` preset.
-- **Options**: every rule accepts an options object validated by an AJV schema. Defaults defined in rule meta.
-- **MADR version awareness**: rules respect the configured `madrVersion` (`v2 | v3 | v4 | auto`). Use `versionMap[version]` for spec lookup.
+- **Options**: every rule accepts an options object validated by an AJV schema (`strict: true`). Every key in `defaultOptions` MUST be declared in `schema.json` `properties` (we use `additionalProperties: false`).
+- **MADR version awareness**: rules respect the configured `madrVersion` (`v2 | v3 | v4 | auto`). Use `versionMap[version]` for spec lookup. Cite the actual MADR template URL in `spec.md` per version — do not infer section names from memory.
+- **Rule shapes**: a rule's `create()` returns one of three shapes — pick the simplest that fits:
+  - **A. filename / metadata-only** — reports directly from `create()`, returns void. Example: `madr/filename-format` (regex on `context.file.path`).
+  - **B. frontmatter-only** — reads `context.frontmatter` (lazy-parsed), returns void. Use for status enum, date format, decision-maker presence checks.
+  - **C. AST traversal** — returns `RuleListeners` with `enter`/`exit` keyed by mdast node type. Use for required sections, link rot, structure validation. Use `mdast-util-to-string` (or recursive text extraction) to read heading content; naive `children[0].value` misses `## **Status**`.
+- **Reserved rule names**: `core/internal-error` is reserved — emitted by the runner when a rule throws. Do not register a rule with this name.
 
 ## Directory structure
 

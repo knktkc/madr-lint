@@ -29,6 +29,12 @@ function getValidator(schema: AnySchemaObject): ValidateFunction {
 }
 
 /**
+ * The reserved rule name used for internal-error diagnostics. A real rule
+ * cannot register with this name (the registry should reject collisions).
+ */
+export const INTERNAL_ERROR_RULE_NAME = 'core/internal-error';
+
+/**
  * Thrown when a rule's merged options fail AJV validation against
  * `rule.meta.schema`. Distinct from generic `Error` so callers can
  * `instanceof` to skip rules with bad config and continue.
@@ -135,14 +141,14 @@ export function runRulesOnFile(
       listeners = rule.create(context);
     } catch (err) {
       diagnostics.push(
-        internalErrorDiagnostic(rule.meta.name, 'create', err, severity, file.path),
+        internalErrorDiagnostic(rule.meta.name, 'create', err, file.path),
       );
       continue;
     }
 
     if (listeners) {
       hasASTRule = true;
-      collectListeners(rule, listeners, enterMap, exitMap, diagnostics, file, severity);
+      collectListeners(rule, listeners, enterMap, exitMap, diagnostics, file);
     }
   }
 
@@ -153,17 +159,19 @@ export function runRulesOnFile(
   return diagnostics;
 }
 
+// Internal-error diagnostics are ALWAYS severity 'error' regardless of the
+// runtime-passed severity for the rule that threw — a rule misbehaving is
+// never something the user wants to silence as a warning.
 function internalErrorDiagnostic(
   ruleName: string,
   operation: 'create' | 'enter' | 'exit',
   err: unknown,
-  severity: Severity,
   path: string,
 ): Diagnostic {
   return {
-    ruleName: 'core/internal-error',
+    ruleName: INTERNAL_ERROR_RULE_NAME,
     messageId: 'ruleThrew',
-    severity,
+    severity: 'error',
     path,
     data: {
       rule: ruleName,
@@ -180,7 +188,6 @@ function collectListeners(
   exitMap: Record<string, Array<(node: MdastNode) => void>>,
   diagnostics: Diagnostic[],
   file: FileContext,
-  severity: Severity,
 ): void {
   const wrap =
     (op: 'enter' | 'exit') => (handler: (node: MdastNode) => void) => (node: MdastNode) => {
@@ -188,7 +195,7 @@ function collectListeners(
         handler(node);
       } catch (err) {
         diagnostics.push(
-          internalErrorDiagnostic(rule.meta.name, op, err, severity, file.path),
+          internalErrorDiagnostic(rule.meta.name, op, err, file.path),
         );
       }
     };
