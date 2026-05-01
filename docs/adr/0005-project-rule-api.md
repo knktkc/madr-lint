@@ -113,7 +113,7 @@ export function isProjectRule(rule: AnyRule): rule is ProjectRule { ... }
 | `lint.ts` partitioning | **wired** — file content read once, shared between passes |
 | `madr/no-duplicate-numbering` (first project rule) | **wired** (7 tests) |
 | `madr/supersedes-bidirectional` | **wired** (13 tests) |
-| `madr/no-broken-links` | **pending** (M2) |
+| `madr/no-broken-links` | **wired** (14 tests) |
 | `madr/no-numbering-gap` (warning, opt-in) | **pending** (M2) |
 
 ## Links
