@@ -8,6 +8,11 @@ allowed-tools: Bash(pnpm:*), Bash(mise:*), Bash(mkdir:*), Bash(git:*), Bash(node
 
 This skill enforces strict Red-Green-Refactor TDD discipline per ADR-0003. The skill writes the *spec*, the *fixtures*, the *failing test*, and an *empty rule stub* + *bench stub*. The implementation that turns the test green is the user's job. Two RED gates are enforced mechanically — the skill refuses to proceed if either gate produces a green result, because that would mean the test is not actually exercising the rule.
 
+> **Conventions** (must match HEAD as of 2026-05-01):
+> - Project-internal imports use the **`.js` extension** (Node ESM idiom). tsc + tsup resolve them to the `.ts` source.
+> - Rule meta `schema` is a **plain object** imported via `import schema from './schema.json' with { type: 'json' }`. NOT an async loader function.
+> - Test assertions on invalid fixtures use **hard `toHaveLength(N)` + `toMatchObject({ data: {...} })`** — never bare `toMatchInlineSnapshot()` (auto-fills, defeats the gate).
+
 ## Inputs
 
 Ask the user (or infer from invocation args):
@@ -19,7 +24,7 @@ Ask the user (or infer from invocation args):
 
 If any are unclear, ask the user before proceeding. Never guess the rule ID.
 
-`<kebab>` below is the part after `madr/`. `<camel>` is the camelCase form.
+`<kebab>` below is the part after `madr/`. `<camel>` is the camelCase form (e.g. `filename-format` → `filenameFormat`; `no-broken-links` → `noBrokenLinks`).
 
 ## Procedure
 
@@ -51,7 +56,7 @@ Write these files. The test file MUST fail when run (no impl exists yet).
 - Diagnostic shape: `messageId`, `data` payload fields, default severity
 - Concrete examples (good / bad) — these become fixtures
 
-**`src/rules/<kebab>/schema.json`** — AJV schema for options:
+**`src/rules/<kebab>/schema.json`** — AJV draft-07 schema:
 
 ```json
 {
@@ -70,8 +75,8 @@ Write these files. The test file MUST fail when run (no impl exists yet).
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, it, expect } from 'vitest';
-import { runRule } from '../helpers/run-rule.ts';
-import rule from '../../src/rules/<kebab>/index.ts';
+import { runRule } from '../helpers/run-rule.js';
+import rule from '../../src/rules/<kebab>/index.js';
 
 const fixturesDir = join(import.meta.dirname, '../fixtures/<kebab>');
 
@@ -112,7 +117,7 @@ The `toHaveLength(1)` + `toMatchObject({ data: { ... } })` shape is **mandatory*
 mise exec -- pnpm vitest run tests/rules/<kebab>.test.ts
 ```
 
-Expected: **exit code != 0** (import fails: `Cannot find module '../../src/rules/<kebab>/index.ts'`).
+Expected: **exit code != 0** (import fails: `Cannot find module '../../src/rules/<kebab>/index.js'`).
 
 Verify using `vitest`'s output, NOT exit code alone — a typo in the test path also yields non-zero. Specifically check:
 
@@ -126,7 +131,8 @@ If exit code 0: **skill failure**. Stop, report to user.
 Write `src/rules/<kebab>/index.ts`. This makes the import resolve but produces no diagnostics, so invalid fixtures will still fail at Step 10.
 
 ```typescript
-import type { Rule } from '../../core/types.ts';
+import type { Rule } from '../../core/types.js';
+import schema from './schema.json' with { type: 'json' };
 
 interface <Camel>Options extends Record<string, unknown> {
   // <option fields per spec.md>
@@ -148,7 +154,7 @@ const rule: Rule<<Camel>Options> = {
     defaultOptions: {
       // <defaults>
     },
-    schema: () => import('./schema.json', { with: { type: 'json' } }),
+    schema,
   },
   create(_context) {
     // GREEN phase: the user (or Claude in a later turn) implements this.
@@ -158,27 +164,28 @@ const rule: Rule<<Camel>Options> = {
 export default rule;
 ```
 
-### Step 6: Ensure helpers exist
+### Step 6: Helpers
 
-`tests/helpers/run-rule.ts` already exists for filename/metadata-style rules. For the **first** AST-based rule, the helper needs to grow:
+`tests/helpers/run-rule.ts` already exists and supports filename / metadata-style rules. It validates options via AJV before invoking `create()`.
+
+For the **first AST-based rule**, the helper needs to grow:
 
 - parse frontmatter with `gray-matter`
 - parse body with `mdast-util-from-markdown`
 - walk the tree once, calling listeners returned by `rule.create()` (`enter` / `exit` keyed by mdast node type — see `RuleListeners` in `src/core/types.ts`)
 
-If the AST step is the new work for this rule, scope a separate task:
-write a failing test for the AST traversal helper itself first, then implement.
+If the AST step is the new work for this rule, scope a separate task: write a failing test for the AST traversal helper itself first, then implement.
 
 ### Step 7: Generate the benchmark stub
 
 `benchmarks/<kebab>/bench.ts`:
 
 ```typescript
-import { writeFileSync, readFileSync } from 'node:fs';
 import { execSync } from 'node:child_process';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { Bench } from 'tinybench';
-import { runRule } from '../../tests/helpers/run-rule.ts';
-import rule from '../../src/rules/<kebab>/index.ts';
+import { runRule } from '../../tests/helpers/run-rule.js';
+import rule from '../../src/rules/<kebab>/index.js';
 
 const tiny = readFileSync(new URL('./fixtures/tiny.md', import.meta.url), 'utf8');
 const typical = readFileSync(new URL('./fixtures/typical.md', import.meta.url), 'utf8');
@@ -196,17 +203,11 @@ await bench.run();
 console.table(bench.table());
 
 // Emit JSON for bench-rule + perf-regression-check skills to consume.
+// `bench.table()` shape is API-stable across tinybench versions.
 const sha = execSync('git rev-parse --short HEAD').toString().trim();
-const results = bench.tasks.map((t) => ({
-  name: t.name,
-  hz: t.result?.hz,
-  mean: t.result?.mean,
-  rme: t.result?.rme,
-  samples: t.result?.samples.length,
-}));
 writeFileSync(
   new URL(`./${sha}.json`, import.meta.url),
-  JSON.stringify(results, null, 2),
+  JSON.stringify(bench.table(), null, 2),
 );
 ```
 
@@ -214,7 +215,7 @@ Plus minimal `benchmarks/<kebab>/fixtures/{tiny,typical}.md` corpora.
 
 ### Step 8: Update registry and recommended preset
 
-- Append `export { default as <camel> } from './<kebab>/index.ts';` to `src/rules/index.ts`.
+- Append `export { default as <camel> } from './<kebab>/index.js';` to `src/rules/index.ts`.
 - Append the severity entry (input #4) to `src/configs/recommended.ts`.
 
 ### Step 9: Generate the docs stub
@@ -264,6 +265,8 @@ the test is the contract, the impl follows it.
 - MUST NOT write the rule's implementation logic. `create()` body stays empty until the user takes over.
 - MUST NOT use bare `toMatchInlineSnapshot()` in the generated test — only hard assertions (`toHaveLength` + `toMatchObject({ data: {...} })`). Snapshot-based assertions can be added LATER, only after the impl is correct, via `vitest -u`.
 - MUST refuse to proceed if either RED gate produces a green test.
+- MUST use `.js` extensions in all generated imports (Node ESM convention; tsc resolves to `.ts` source).
+- MUST use static `import schema from './schema.json' with { type: 'json' }` — never the async-loader form.
 
 ## When to invoke
 

@@ -139,7 +139,7 @@ jobs:
           fetch-depth: 0
       - uses: pnpm/action-setup@v4
         with:
-          version: 9
+          version: 10
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -199,13 +199,18 @@ src/rules/ @knktkc
 docs/rules/ @knktkc
 ```
 
-### Step 6: Set up changesets
-
-Run:
+### Step 6: Set up changesets (idempotent)
 
 ```bash
-mise exec -- pnpm add -D @changesets/cli
-mise exec -- pnpm changeset init
+# Add @changesets/cli only if missing
+if ! mise exec -- pnpm list @changesets/cli >/dev/null 2>&1; then
+  mise exec -- pnpm add -D @changesets/cli
+fi
+
+# Init only if .changeset/config.json doesn't exist
+if [ ! -f .changeset/config.json ]; then
+  mise exec -- pnpm changeset init
+fi
 ```
 
 Then edit `.changeset/config.json`:

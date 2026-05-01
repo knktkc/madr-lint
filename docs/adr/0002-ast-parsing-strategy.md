@@ -69,7 +69,7 @@ This ADR was adopted on 2026-05-01. Implementation lands incrementally:
 | `gray-matter` for frontmatter | dependency **installed**, not yet imported |
 | `perFile` rule path | **wired** (filename-format) |
 | `project` rule path | **pending** (M2 cross-file rules) |
-| Pre-compiled AJV options validation | dependency **installed**, integration **pending** (Round 3 of post-review fixes) |
+| Pre-compiled AJV options validation | **wired** in `tests/helpers/run-rule.ts` (per-rule WeakMap-cached validators, throws on invalid options) |
 | `safe-regex2` ReDoS guard in CI | dependency **installed**, CI integration **pending** |
 | Content-hash cache | **pending** (M2+) |
 

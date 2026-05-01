@@ -1,4 +1,4 @@
-import Ajv, { type ValidateFunction } from 'ajv';
+import Ajv, { type AnySchemaObject, type ValidateFunction } from 'ajv';
 import type {
   Diagnostic,
   FileContext,
@@ -16,10 +16,16 @@ interface RunRuleOptions {
   skipValidation?: boolean;
 }
 
-const ajv = new Ajv({ strict: false, allErrors: true });
-const validatorCache = new WeakMap<object, ValidateFunction>();
+// strict: true catches typo'd schema keywords (e.g. `requireed` instead of
+// `required`) at compile time rather than letting them silently no-op.
+// allErrors: true so `errorsText` shows every validation issue at once.
+const ajv = new Ajv({ strict: true, allErrors: true });
 
-function getValidator(schema: object): ValidateFunction {
+// Cache compiled validators per schema object reference. Schemas live on
+// rule.meta.schema and are stable across runRule calls for the same rule.
+const validatorCache = new WeakMap<AnySchemaObject, ValidateFunction>();
+
+function getValidator(schema: AnySchemaObject): ValidateFunction {
   let validator = validatorCache.get(schema);
   if (!validator) {
     validator = ajv.compile(schema);

@@ -69,3 +69,4 @@ Adopted: **TypeScript + Node 22+ (ESM, pnpm)**
 - pnpm: https://pnpm.io/
 - Node 22 LTS: https://nodejs.org/en/blog/announcements/v22-release-announce
 - Parent project: https://github.com/xtone/frontend-implementation-boilerplate
+- ADR-0004: pnpm 10 + vitest 4 (refines the pnpm baseline pinned in `mise.toml`)

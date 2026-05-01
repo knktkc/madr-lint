@@ -29,7 +29,7 @@ These decisions are very expensive to retrofit. They are baked into the rule API
    - **Status (M0)**: `RuleMeta.type` field **defined**; perFile path **wired** (`madr/filename-format`); project path **pending**
 
 4. **Pre-compile AJV schemas + regex at config load time**. ReDoS-guarded via `safe-regex2` in CI. Per-file regex execution has a 5ms soft budget.
-   - **Status (M0)**: AJV and safe-regex2 **installed**; AJV integration **pending** (post-review Round 3); ReDoS check **pending** CI integration
+   - **Status (M0)**: AJV **wired** in `tests/helpers/run-rule.ts` (per-rule WeakMap-cached validators, throws on invalid options); `safe-regex2` **installed**, ReDoS check **pending** CI integration; per-file regex 5ms budget **pending**
 
 5. **Content-hash cache** at `.madr-lint/cache/`, key = `sha1(content + rule-version-vector + config-hash)`. Persistent across runs.
    - **Status (M0)**: **pending**; targeted at M2+
@@ -133,7 +133,7 @@ export default defineConfig({
 - oxlint for code lint
 - AJV for JSON Schema (pre-compiled)
 - citty for CLI
-- tinybench / mitata for benchmarks
+- tinybench for benchmarks
 - 0x or clinic.js for flame graphs (dev-only)
 - safe-regex2 in CI for ReDoS detection
 

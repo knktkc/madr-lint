@@ -6,6 +6,7 @@
 // keyed by mdast node type. The runner walks each file's tree once and
 // dispatches to all subscribed rules.
 
+import type { AnySchemaObject } from 'ajv';
 import type { Nodes } from 'mdast';
 // Note: imports of project-internal modules use the `.js` extension per
 // Node ESM convention. tsc resolves these to the .ts source files.
@@ -43,8 +44,8 @@ export interface RuleMeta<TOptions = Record<string, unknown>> {
   messages: Record<string, string>;
   /** Default options merged with user config. */
   defaultOptions: TOptions;
-  /** AJV-compatible JSON Schema for options. Validated at runRule time. */
-  schema?: object;
+  /** AJV JSON Schema for options. Validated at runRule time. */
+  schema?: AnySchemaObject;
 }
 
 export interface FileContext {

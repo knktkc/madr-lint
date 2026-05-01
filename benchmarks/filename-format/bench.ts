@@ -1,4 +1,5 @@
-import { readFileSync } from 'node:fs';
+import { execSync } from 'node:child_process';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { Bench } from 'tinybench';
 import { runRule } from '../../tests/helpers/run-rule.js';
 import rule from '../../src/rules/filename-format/index.js';
@@ -20,3 +21,12 @@ bench
 
 await bench.run();
 console.table(bench.table());
+
+// Emit JSON for bench-rule + perf-regression-check skills to consume.
+// We write the same shape `bench.table()` produces — it survives tinybench
+// API drift (v6 dropped result.rme/samples in favor of result.latency.*).
+const sha = execSync('git rev-parse --short HEAD').toString().trim();
+writeFileSync(
+  new URL(`./${sha}.json`, import.meta.url),
+  JSON.stringify(bench.table(), null, 2),
+);

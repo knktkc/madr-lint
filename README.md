@@ -45,8 +45,9 @@ A linter for [MADR](https://adr.github.io/madr/) (Markdown Architectural Decisio
 
 ## Requirements
 
-- Node.js 22+
-- pnpm (managed via [mise](https://mise.jdx.dev/))
+- Node.js 22+ (pinned to 22.11.0 in `mise.toml`)
+- pnpm 10+ (pinned to 10.28.0 in `mise.toml`; see [ADR-0004](docs/adr/0004-pnpm-10-and-vitest-4.md))
+- [mise](https://mise.jdx.dev/) for tool version management
 
 ## License
 
