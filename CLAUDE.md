@@ -29,7 +29,7 @@ These decisions are very expensive to retrofit. They are baked into the rule API
    - **Status (M0)**: `RuleMeta.type` field **defined**; perFile path **wired** (filename-format + AST runner); project path **pending** (M2 cross-file rules)
 
 4. **Pre-compile AJV schemas + regex at config load time**. ReDoS-guarded via `safe-regex2` in CI. Per-file regex execution has a 5ms soft budget.
-   - **Status (M0)**: AJV **wired** in `tests/helpers/run-rule.ts` (per-rule WeakMap-cached validators, throws on invalid options); `safe-regex2` **installed**, ReDoS check **pending** CI integration; per-file regex 5ms budget **pending**
+   - **Status (M0)**: AJV **wired** in `src/core/runner.ts` (per-rule WeakMap-cached validators, throws `RuleOptionsError` on invalid options); `safe-regex2` **installed**, ReDoS check **pending** CI integration; per-file regex 5ms budget **pending**
 
 5. **Content-hash cache** at `.madr-lint/cache/`, key = `sha1(content + rule-version-vector + config-hash)`. Persistent across runs.
    - **Status (M0)**: **pending**; targeted at M2+

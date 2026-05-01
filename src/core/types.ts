@@ -7,11 +7,17 @@
 // dispatches to all subscribed rules.
 
 import type { AnySchemaObject } from 'ajv';
-import type { Nodes } from 'mdast';
+import type { Nodes, Root } from 'mdast';
 // Note: imports of project-internal modules use the `.js` extension per
 // Node ESM convention. tsc resolves these to the .ts source files.
 
-export type MdastNodeType = Nodes['type'];
+// All mdast node types rules can subscribe to. `'root'` is the top-level
+// document node — useful for "after all children visited" reporting in
+// exit handlers.
+export type MdastNodeType = Root['type'] | Nodes['type'];
+
+// The argument type for visitor handlers — covers root + all descendants.
+export type MdastNode = Root | Nodes;
 
 /** Severity levels supported by every rule. */
 export type Severity = 'error' | 'warn';
@@ -90,8 +96,8 @@ export interface RuleContext<TOptions = Record<string, unknown>> {
  * and calls the matching enter/exit handler for each node.
  */
 export interface RuleListeners {
-  enter?: Partial<Record<MdastNodeType, (node: Nodes) => void>>;
-  exit?: Partial<Record<MdastNodeType, (node: Nodes) => void>>;
+  enter?: Partial<Record<MdastNodeType, (node: MdastNode) => void>>;
+  exit?: Partial<Record<MdastNodeType, (node: MdastNode) => void>>;
 }
 
 /**

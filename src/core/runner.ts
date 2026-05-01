@@ -1,8 +1,8 @@
 import Ajv, { type AnySchemaObject, type ValidateFunction } from 'ajv';
-import type { Nodes, Root } from 'mdast';
 import type {
   Diagnostic,
   FileContext,
+  MdastNode,
   Rule,
   RuleContext,
   RuleListeners,
@@ -11,11 +11,12 @@ import type {
 import { parseFile, type ParsedFile } from './parser.js';
 
 // strict: true catches typo'd schema keywords at compile time.
-// allErrors: true so errorsText shows every issue.
+// allErrors: true so RuleOptionsError surfaces every issue at once.
 const ajv = new Ajv({ strict: true, allErrors: true });
 
 // Cache compiled validators per schema object reference.
-// Schemas live on rule.meta.schema and are stable per rule instance.
+// Schemas are module-level static on rules, so the cache key never goes stale.
+// (If a rule mutates `meta.schema` post-load — don't — the cache will desync.)
 const validatorCache = new WeakMap<AnySchemaObject, ValidateFunction>();
 
 function getValidator(schema: AnySchemaObject): ValidateFunction {
@@ -25,6 +26,21 @@ function getValidator(schema: AnySchemaObject): ValidateFunction {
     validatorCache.set(schema, validator);
   }
   return validator;
+}
+
+/**
+ * Thrown when a rule's merged options fail AJV validation against
+ * `rule.meta.schema`. Distinct from generic `Error` so callers can
+ * `instanceof` to skip rules with bad config and continue.
+ */
+export class RuleOptionsError extends Error {
+  constructor(
+    public readonly ruleName: string,
+    public readonly ajvErrors: string,
+  ) {
+    super(`Invalid options for rule ${ruleName}: ${ajvErrors}`);
+    this.name = 'RuleOptionsError';
+  }
 }
 
 export interface RunRuleOptions {
@@ -51,18 +67,21 @@ export function runRule<TOptions extends Record<string, unknown>>(
 /**
  * Run multiple rules against a single file with a single mdast traversal.
  *
- * The runner:
- *   1. Validates each rule's merged options against its schema (AJV).
- *   2. Calls each rule's create(). Rules may either report directly
- *      (filename/metadata-style) and return void, or return RuleListeners
- *      (AST-style) that subscribe to mdast node types.
- *   3. If ANY rule returns listeners, parse the file once (gray-matter
- *      for frontmatter + mdast-util-from-markdown for the body) and walk
- *      the tree once, dispatching enter/exit handlers from all rules per
- *      node type.
+ * Steps:
+ *   1. Validate each rule's merged options against its schema (AJV).
+ *      Throws RuleOptionsError on failure (caller decides whether to skip).
+ *   2. Call each rule's create(). If a rule throws, the error is caught
+ *      and reported as a `core/internal-error` diagnostic — other rules
+ *      continue. The same isolation wraps every enter/exit handler so a
+ *      single buggy rule cannot abort the whole lint run.
+ *   3. If at least one rule returned RuleListeners, call parseFile()
+ *      ONCE (gray-matter + mdast-util-from-markdown together; there is
+ *      no separate cheap "frontmatter only" path) and walk the tree,
+ *      dispatching enter/exit handlers per node type.
  *
- * Frontmatter is parsed lazily — only on first access via context.frontmatter.
- * This keeps filename-style rules zero-cost on the parse path.
+ * Frontmatter is exposed lazily via context.frontmatter — the getter
+ * triggers parseFile() on first access. Filename-style rules that never
+ * touch frontmatter and return void from create() pay zero parse cost.
  */
 export function runRulesOnFile(
   rules: readonly Rule[],
@@ -72,16 +91,14 @@ export function runRulesOnFile(
   const diagnostics: Diagnostic[] = [];
   const severity = runtime.severity ?? 'error';
 
-  // Lazy parse: only triggered when a rule accesses frontmatter or returns
-  // listeners (AST traversal needed).
   let parsed: ParsedFile | null = null;
   const ensureParsed = (): ParsedFile => {
     parsed ??= parseFile(file.content);
     return parsed;
   };
 
-  const enterMap: Record<string, Array<(node: Nodes) => void>> = {};
-  const exitMap: Record<string, Array<(node: Nodes) => void>> = {};
+  const enterMap: Record<string, Array<(node: MdastNode) => void>> = {};
+  const exitMap: Record<string, Array<(node: MdastNode) => void>> = {};
   let hasASTRule = false;
 
   for (const rule of rules) {
@@ -93,9 +110,7 @@ export function runRulesOnFile(
     if (rule.meta.schema && !runtime.skipValidation) {
       const validator = getValidator(rule.meta.schema);
       if (!validator(mergedOptions)) {
-        throw new Error(
-          `Invalid options for rule ${rule.meta.name}: ${ajv.errorsText(validator.errors)}`,
-        );
+        throw new RuleOptionsError(rule.meta.name, ajv.errorsText(validator.errors));
       }
     }
 
@@ -115,10 +130,19 @@ export function runRulesOnFile(
       },
     };
 
-    const listeners = rule.create(context);
+    let listeners: RuleListeners | void;
+    try {
+      listeners = rule.create(context);
+    } catch (err) {
+      diagnostics.push(
+        internalErrorDiagnostic(rule.meta.name, 'create', err, severity, file.path),
+      );
+      continue;
+    }
+
     if (listeners) {
       hasASTRule = true;
-      collectListeners(listeners, enterMap, exitMap);
+      collectListeners(rule, listeners, enterMap, exitMap, diagnostics, file, severity);
     }
   }
 
@@ -129,39 +153,76 @@ export function runRulesOnFile(
   return diagnostics;
 }
 
+function internalErrorDiagnostic(
+  ruleName: string,
+  operation: 'create' | 'enter' | 'exit',
+  err: unknown,
+  severity: Severity,
+  path: string,
+): Diagnostic {
+  return {
+    ruleName: 'core/internal-error',
+    messageId: 'ruleThrew',
+    severity,
+    path,
+    data: {
+      rule: ruleName,
+      operation,
+      error: err instanceof Error ? err.message : String(err),
+    },
+  };
+}
+
 function collectListeners(
+  rule: Rule,
   listeners: RuleListeners,
-  enterMap: Record<string, Array<(node: Nodes) => void>>,
-  exitMap: Record<string, Array<(node: Nodes) => void>>,
+  enterMap: Record<string, Array<(node: MdastNode) => void>>,
+  exitMap: Record<string, Array<(node: MdastNode) => void>>,
+  diagnostics: Diagnostic[],
+  file: FileContext,
+  severity: Severity,
 ): void {
+  const wrap =
+    (op: 'enter' | 'exit') => (handler: (node: MdastNode) => void) => (node: MdastNode) => {
+      try {
+        handler(node);
+      } catch (err) {
+        diagnostics.push(
+          internalErrorDiagnostic(rule.meta.name, op, err, severity, file.path),
+        );
+      }
+    };
+
   if (listeners.enter) {
+    const wrapEnter = wrap('enter');
     for (const [type, handler] of Object.entries(listeners.enter)) {
-      if (handler) (enterMap[type] ??= []).push(handler);
+      if (handler) (enterMap[type] ??= []).push(wrapEnter(handler));
     }
   }
   if (listeners.exit) {
+    const wrapExit = wrap('exit');
     for (const [type, handler] of Object.entries(listeners.exit)) {
-      if (handler) (exitMap[type] ??= []).push(handler);
+      if (handler) (exitMap[type] ??= []).push(wrapExit(handler));
     }
   }
 }
 
 function walk(
-  node: Nodes | Root,
-  enterMap: Record<string, Array<(node: Nodes) => void>>,
-  exitMap: Record<string, Array<(node: Nodes) => void>>,
+  node: MdastNode,
+  enterMap: Record<string, Array<(node: MdastNode) => void>>,
+  exitMap: Record<string, Array<(node: MdastNode) => void>>,
 ): void {
   const enterHandlers = enterMap[node.type];
   if (enterHandlers) {
-    for (const handler of enterHandlers) handler(node as Nodes);
+    for (const handler of enterHandlers) handler(node);
   }
   if ('children' in node && Array.isArray(node.children)) {
     for (const child of node.children) {
-      walk(child as Nodes, enterMap, exitMap);
+      walk(child as MdastNode, enterMap, exitMap);
     }
   }
   const exitHandlers = exitMap[node.type];
   if (exitHandlers) {
-    for (const handler of exitHandlers) handler(node as Nodes);
+    for (const handler of exitHandlers) handler(node);
   }
 }

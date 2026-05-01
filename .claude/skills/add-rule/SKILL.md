@@ -130,6 +130,10 @@ If exit code 0: **skill failure**. Stop, report to user.
 
 Write `src/rules/<kebab>/index.ts`. This makes the import resolve but produces no diagnostics, so invalid fixtures will still fail at Step 10.
 
+Three rule shapes are supported. Pick the one matching the rule's job:
+
+**Shape A — filename / metadata-only** (e.g. `madr/filename-format`). Reports directly from `create()`, returns void:
+
 ```typescript
 import type { Rule } from '../../core/types.js';
 import schema from './schema.json' with { type: 'json' };
@@ -138,6 +142,62 @@ interface <Camel>Options extends Record<string, unknown> {
   // <option fields per spec.md>
 }
 
+const rule: Rule<<Camel>Options> = {
+  meta: { /* see common shape below */ },
+  create(context) {
+    // Inspect context.file.path / context.options; report directly.
+    // Return nothing.
+  },
+};
+
+export default rule;
+```
+
+**Shape B — frontmatter-only** (e.g. `madr/status-enum`, `madr/date-iso8601`). Reads `context.frontmatter` (lazy-parsed; only triggers parse on access):
+
+```typescript
+create(context) {
+  const fm = context.frontmatter;
+  if (!fm) return;
+  // Validate fm.status, fm.date, etc., reporting via context.report().
+}
+```
+
+**Shape C — AST traversal** (e.g. `madr/required-sections`, `madr/no-broken-links`). Returns `RuleListeners`:
+
+```typescript
+import type { Rule, RuleListeners } from '../../core/types.js';
+// ...
+
+create(context): RuleListeners {
+  const seenSections: string[] = [];
+  return {
+    enter: {
+      heading(node) {
+        if ('children' in node && node.children?.[0]?.type === 'text') {
+          seenSections.push(node.children[0].value);
+        }
+      },
+    },
+    exit: {
+      root() {
+        for (const required of context.options.sections) {
+          if (!seenSections.includes(required)) {
+            context.report({
+              messageId: 'missingSection',
+              data: { section: required, found: seenSections },
+            });
+          }
+        }
+      },
+    },
+  };
+}
+```
+
+**Common meta shape** (used by all three):
+
+```typescript
 const rule: Rule<<Camel>Options> = {
   meta: {
     name: 'madr/<kebab>',
@@ -157,24 +217,25 @@ const rule: Rule<<Camel>Options> = {
     schema,
   },
   create(_context) {
-    // GREEN phase: the user (or Claude in a later turn) implements this.
+    // GREEN phase: implement per the chosen shape.
   },
 };
-
-export default rule;
 ```
 
-### Step 6: Helpers
+Pick the shape that matches the rule. Do NOT mix multiple shapes — one rule, one return type.
 
-`tests/helpers/run-rule.ts` already exists and supports filename / metadata-style rules. It validates options via AJV before invoking `create()`.
+### Step 6: Helpers (already wired by the runner)
 
-For the **first AST-based rule**, the helper needs to grow:
+The runner in `src/core/runner.ts` already handles everything an AST-based rule needs:
 
-- parse frontmatter with `gray-matter`
-- parse body with `mdast-util-from-markdown`
-- walk the tree once, calling listeners returned by `rule.create()` (`enter` / `exit` keyed by mdast node type — see `RuleListeners` in `src/core/types.ts`)
+- frontmatter is parsed lazily (gray-matter) and exposed via `context.frontmatter`
+- the body AST (`mdast-util-from-markdown`) is parsed once per file and walked once per `runRulesOnFile` invocation
+- `RuleListeners` returned by `create()` are dispatched per node type during the single tree walk
+- `RuleContext.report()` collects diagnostics
 
-If the AST step is the new work for this rule, scope a separate task: write a failing test for the AST traversal helper itself first, then implement.
+`tests/helpers/run-rule.ts` is a thin re-export of the runner — tests import `runRule` from there. No helper modifications are needed when adding a new rule (regardless of shape).
+
+If the rule needs something the runner does not provide (e.g., access to a different parser, project-wide indexing for cross-file rules), pause and add a separate ADR before extending the runner.
 
 ### Step 7: Generate the benchmark stub
 

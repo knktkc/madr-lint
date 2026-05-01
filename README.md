@@ -38,10 +38,18 @@ A linter for [MADR](https://adr.github.io/madr/) (Markdown Architectural Decisio
 - [ ] M5: Production use in `frontend-implementation-boilerplate`
 - [ ] M6: v1.0.0 stable release
 
-> **What works today** (M0): one rule (`madr/filename-format`) with
-> RuleListeners type, generic Rule, AJV-ready meta, and dual-entry
-> tsup build. The runner that walks mdast trees and dispatches to AST
-> rules lands with M1's first AST-using rule.
+> **What works today** (M0 + post-review fixes through R6):
+> - One rule (`madr/filename-format`) with hard-asserted test shape
+> - Single-pass AST runner (`src/core/runner.ts`) — gray-matter +
+>   `mdast-util-from-markdown` direct, lazy frontmatter via
+>   `context.frontmatter`, `RuleListeners` enter/exit dispatch
+> - AJV-validated rule options (`strict: true`, WeakMap-cached
+>   validators per schema)
+> - Generic `Rule<TOptions>` type, dual-entry tsup ESM build, `pnpm
+>   build` produces `dist/{index,cli}.{js,d.ts}`
+>
+> The runner is ready for the first AST-using rule
+> (`madr/required-sections`).
 
 ## Requirements
 
