@@ -1,0 +1,52 @@
+{
+  "name": "madr-lint",
+  "version": "0.1.0-alpha.0",
+  "description": "A linter for MADR (Markdown Architectural Decision Records) — structure, numbering, status, supersedes integrity",
+  "type": "module",
+  "private": true,
+  "bin": {
+    "madr-lint": "./dist/cli.js"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "lint": "oxlint src tests"
+  },
+  "keywords": [
+    "madr",
+    "adr",
+    "lint",
+    "linter",
+    "architecture-decision-records",
+    "markdown"
+  ],
+  "license": "MIT",
+  "author": "t.kaneko",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/knktkc/madr-lint.git"
+  },
+  "bugs": {
+    "url": "https://github.com/knktkc/madr-lint/issues"
+  },
+  "homepage": "https://github.com/knktkc/madr-lint#readme"
+}
