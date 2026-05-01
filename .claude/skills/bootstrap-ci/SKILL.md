@@ -59,7 +59,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
         with:
-          version: 9
+          version: 10
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node }}
@@ -73,13 +73,16 @@ jobs:
   perf:
     name: Perf regression check
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write   # for posting bench delta as PR comment
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 2
       - uses: pnpm/action-setup@v4
         with:
-          version: 9
+          version: 10
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -96,7 +99,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
         with:
-          version: 9
+          version: 10
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -213,37 +216,54 @@ Then edit `.changeset/config.json`:
 
 ### Step 7: Add the package.json scripts referenced above
 
-Add to `package.json` `scripts`:
+Add to `package.json` `scripts`. Note: do NOT name a script `version` — npm
+auto-runs that on `npm version` and would clobber the changesets workflow.
+Use `changeset:version` instead.
 
 ```json
 {
-  "publish-ci": "pnpm publish --access public --no-git-checks",
+  "publish-ci": "pnpm publish --access public --provenance --no-git-checks",
   "perf:check": "node scripts/perf-regression-check.mjs",
   "redos": "node scripts/redos-scan.mjs",
   "changeset": "changeset",
-  "version": "changeset version"
+  "changeset:version": "changeset version"
 }
 ```
+
+The `--provenance` flag is required to actually emit the npm provenance
+attestation. The `NPM_CONFIG_PROVENANCE=true` env in `release.yml` makes
+provenance the default, but adding the flag explicitly is belt-and-braces
+and survives env stripping in some action wrappers.
 
 (The two `scripts/*.mjs` are stubs that wrap the skills' core logic for
 non-Claude execution. Generate skeletons that print "TODO: implement".)
 
-### Step 8: Document the npm Trusted Publisher requirement
+### Step 8: Document the npm Trusted Publisher setup
+
+Check current npm Trusted Publishers policy at invocation time
+(https://docs.npmjs.com/trusted-publishers) — the policy has evolved.
+As of 2026-Q1, npm supports OIDC trusted publishing for new packages
+without requiring a manual first publish, provided the Trusted Publisher
+entry is created before the first CI publish attempt.
 
 Print to the user:
 
 ```
-Bootstrap complete. One manual step before the first npm publish:
+Bootstrap complete. Before the first CI publish:
 
-1. Publish madr-lint manually once (npm publish) so the package exists.
-2. Visit https://www.npmjs.com/package/madr-lint/access
-3. Under "Trusted Publishers", add a GitHub Actions entry:
+1. Visit https://www.npmjs.com/package/madr-lint/access
+   (or, for new packages: https://www.npmjs.com/settings/<your-user>/trusted-publishers)
+2. Add a GitHub Actions Trusted Publisher entry:
    - Owner: knktkc
    - Repository: madr-lint
    - Workflow file: release.yml
    - Environment: (leave blank)
+3. Confirm the policy applies to new packages or requires manual
+   first publish — see https://docs.npmjs.com/trusted-publishers
 
-Verify with: npm view madr-lint --json | jq .signatures
+Verify post-publish:
+  npm view madr-lint --json | jq .signatures
+  → should show GitHub Actions OIDC attestation
 
 After this, the release workflow uses OIDC. There is no NPM_TOKEN to
 rotate or leak.

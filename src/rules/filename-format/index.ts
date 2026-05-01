@@ -1,5 +1,6 @@
 import { basename } from 'node:path';
 import type { Rule } from '../../core/types.js';
+import schema from './schema.json' with { type: 'json' };
 
 interface FilenameFormatOptions extends Record<string, unknown> {
   pattern: string;
@@ -22,7 +23,7 @@ const rule: Rule<FilenameFormatOptions> = {
     defaultOptions: {
       pattern: '^[0-9]{4}-[a-z0-9-]+\\.md$',
     },
-    schema: () => import('./schema.json', { with: { type: 'json' } }),
+    schema,
   },
   create(context) {
     const { pattern } = context.options;

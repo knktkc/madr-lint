@@ -39,6 +39,9 @@ Applies to v2, v3, v4. The filename pattern is the same across MADR versions.
 | `0001-Title-Case.md` | uppercase letters in slug |
 | `not-numbered.md` | no leading 4-digit prefix |
 | `0001nohyphen.md` | missing hyphen after the number |
+| `0001-trailing-dot..md` | double dot before `.md` (slug ends with `.`) |
+| `0001-test.markdown` | wrong extension (must be `.md`) |
+| `0001-.md` | empty slug (regex requires `[a-z0-9-]+` after the hyphen) |
 
 ## Options
 

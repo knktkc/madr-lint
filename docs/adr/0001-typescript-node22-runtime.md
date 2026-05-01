@@ -31,7 +31,7 @@ informed: []
 
 ## Decision Outcome
 
-採択: **TypeScript + Node 22+ (ESM, pnpm)**
+Adopted: **TypeScript + Node 22+ (ESM, pnpm)**
 
 ### Rationale
 

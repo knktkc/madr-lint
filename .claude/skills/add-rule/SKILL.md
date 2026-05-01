@@ -55,7 +55,7 @@ Write these files. The test file MUST fail when run (no impl exists yet).
 
 ```json
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$schema": "http://json-schema.org/draft-07/schema#",
   "type": "object",
   "additionalProperties": false,
   "properties": {}

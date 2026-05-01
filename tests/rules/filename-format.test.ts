@@ -27,6 +27,10 @@ describe('madr/filename-format', () => {
           messageId: 'invalidFilename',
           severity: 'error',
           path: file,
+          data: {
+            filename: file,
+            expected: '^[0-9]{4}-[a-z0-9-]+\\.md$',
+          },
         });
       });
     }

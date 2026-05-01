@@ -39,7 +39,7 @@ Investigation in May 2026 found:
 
 ## Decision Outcome
 
-採択: **Option 2 — `mdast-util-from-markdown` direct + single-pass visitor registry**
+Adopted: **Option 2 — `mdast-util-from-markdown` direct + single-pass visitor registry**
 
 ### Rationale
 

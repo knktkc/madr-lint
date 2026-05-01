@@ -42,8 +42,29 @@ proceed. Capture the process ID for later termination.
 
 ### Step 3: Monitor stdout for transitions
 
-Use the `Monitor` tool to stream the watcher's output. Track the test
-suite's pass/fail state across each "Tests" line emitted by vitest.
+Use the `Monitor` tool to stream the watcher's output. **Run vitest with
+`--reporter=json --reporter=default`** so transitions can be detected
+from the JSON stream (each test run emits a JSON record with
+`numFailedTests`, `numPassedTests`, `testResults`). The default reporter
+is kept on so the user still sees pretty output in their terminal.
+
+Sample command:
+
+```bash
+mise exec -- pnpm vitest --watch --reporter=json --reporter=default \
+  tests/rules/<kebab>.test.ts
+```
+
+Transition logic:
+
+- Track the previous run's `numFailedTests` per file
+- Each new JSON line ending a run is one snapshot
+- Compare to previous: any transition (fail-count crossed zero, or set
+  of failing test names changed) is a transition event
+
+If JSON reporter output is unavailable (vitest version doesn't support
+it), fall back to parsing `Tests N passed (M)` lines from stdout, but
+note that this is brittle (varies with vitest version, ANSI colors).
 
 For each transition:
 

@@ -25,13 +25,23 @@ A linter for [MADR](https://adr.github.io/madr/) (Markdown Architectural Decisio
 
 ## Roadmap
 
-- [x] M0: Repository scaffold
-- [ ] M1: MVP — 4 core rules + CLI
-- [ ] M2: Cross-file integrity rules
+- [x] M0: Repository scaffold (CLAUDE.md, ADRs, types, build pipeline)
+- [ ] M1: MVP — 4 core rules + CLI runtime
+  - [x] `madr/filename-format` (the only rule that exists today)
+  - [ ] `madr/required-sections`
+  - [ ] `madr/status-enum`
+  - [ ] `madr/date-iso8601`
+  - [ ] CLI runtime (citty stub exists, lint logic pending)
+- [ ] M2: Cross-file integrity rules (numbering, supersedes, link rot)
 - [ ] M3: GitHub Action distribution
 - [ ] M4: Frontmatter (v3/v4) full support
 - [ ] M5: Production use in `frontend-implementation-boilerplate`
 - [ ] M6: v1.0.0 stable release
+
+> **What works today** (M0): one rule (`madr/filename-format`) with
+> RuleListeners type, generic Rule, AJV-ready meta, and dual-entry
+> tsup build. The runner that walks mdast trees and dispatches to AST
+> rules lands with M1's first AST-using rule.
 
 ## Requirements
 

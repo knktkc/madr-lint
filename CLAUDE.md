@@ -144,3 +144,4 @@ ADRs use **MADR v4 frontmatter** format (this project's recommended target).
 - ADR-0001: TypeScript + Node 22 + pnpm runtime
 - ADR-0002: AST parsing strategy (single-pass + mdast-util-from-markdown)
 - ADR-0003: TDD discipline as project convention
+- ADR-0004: Tooling adjustments (pnpm 10, vitest 4)

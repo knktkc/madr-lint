@@ -1,0 +1,4 @@
+# ADR-0001: wrong extension
+
+- Status: Proposed
+- Date: 2026-05-01

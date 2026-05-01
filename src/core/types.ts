@@ -43,8 +43,8 @@ export interface RuleMeta<TOptions = Record<string, unknown>> {
   messages: Record<string, string>;
   /** Default options merged with user config. */
   defaultOptions: TOptions;
-  /** Lazy-loaded JSON Schema for options. */
-  schema?: () => Promise<unknown>;
+  /** AJV-compatible JSON Schema for options. Validated at runRule time. */
+  schema?: object;
 }
 
 export interface FileContext {

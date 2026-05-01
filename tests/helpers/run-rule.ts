@@ -1,3 +1,4 @@
+import Ajv, { type ValidateFunction } from 'ajv';
 import type {
   Diagnostic,
   FileContext,
@@ -11,10 +12,28 @@ interface RunRuleOptions {
   options?: Record<string, unknown>;
   /** Severity to attach to emitted diagnostics. Defaults to 'error'. */
   severity?: Severity;
+  /** Skip AJV options validation. Default false. */
+  skipValidation?: boolean;
+}
+
+const ajv = new Ajv({ strict: false, allErrors: true });
+const validatorCache = new WeakMap<object, ValidateFunction>();
+
+function getValidator(schema: object): ValidateFunction {
+  let validator = validatorCache.get(schema);
+  if (!validator) {
+    validator = ajv.compile(schema);
+    validatorCache.set(schema, validator);
+  }
+  return validator;
 }
 
 /**
  * Minimal in-memory rule runner for tests.
+ *
+ * Validates merged options against `rule.meta.schema` (AJV) before invoking
+ * `create()`. Throws if options are invalid — callers can pass
+ * `skipValidation: true` to bypass (e.g. for negative tests).
  *
  * For v0.1.0 only the simple shape (rules that report directly from create()
  * and return void) is exercised. When the first AST-using rule lands the
@@ -32,6 +51,15 @@ export function runRule<TOptions extends Record<string, unknown>>(
     ...rule.meta.defaultOptions,
     ...runtime.options,
   } as TOptions;
+
+  if (rule.meta.schema && !runtime.skipValidation) {
+    const validator = getValidator(rule.meta.schema);
+    if (!validator(mergedOptions)) {
+      throw new Error(
+        `Invalid options for rule ${rule.meta.name}: ${ajv.errorsText(validator.errors)}`,
+      );
+    }
+  }
 
   const context: RuleContext<TOptions> = {
     file,

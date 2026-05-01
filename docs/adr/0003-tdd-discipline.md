@@ -32,7 +32,7 @@ LLM-assisted development (Claude Code) is used heavily on this project. LLMs rel
 
 ## Decision Outcome
 
-採択: **Strict TDD discipline (Red-Green-Refactor) for all rules and core utilities**
+Adopted: **Strict TDD discipline (Red-Green-Refactor) for all rules and core utilities**
 
 ### Rationale
 
