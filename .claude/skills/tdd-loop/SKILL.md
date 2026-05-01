@@ -78,8 +78,9 @@ For each transition:
   ```
   REGRESSION: madr/<kebab> — N tests failing.
   Failing: <test name 1>, <test name 2>
-  Last edit at: <time> on <file>
   ```
+  (Surfacing edit time/file is not feasible from vitest stdout alone;
+  add a separate fs.watch hook later if needed.)
 - **RED → RED-prime** (different failures, progress): print
   ```
   PROGRESS: madr/<kebab> — different failures.

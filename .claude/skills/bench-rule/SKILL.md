@@ -30,7 +30,12 @@ Runs the tinybench script for one rule, captures results to
 mise exec -- pnpm tsx benchmarks/<kebab>/bench.ts > .bench-output.tmp
 ```
 
-(If `tsx` is not installed, install as dev dep: `mise exec -- pnpm add -D tsx`.)
+`tsx` is a dev dependency of madr-lint as of post-review Round 4.
+If absent in some other context, install: `mise exec -- pnpm add -D tsx`.
+
+The bench script (per the `add-rule` template) writes a JSON file
+alongside itself: `benchmarks/<kebab>/<short-sha>.json`. The `<short-sha>`
+is `git rev-parse --short HEAD` (the short hash, ~7 chars).
 
 The bench script prints a `console.table` of tinybench results. Capture the
 JSON form by modifying the bench script's tail temporarily, or use
