@@ -10,6 +10,7 @@ import type { RuleSeverity } from '../core/types.js';
 //   'madr/foo': ['error', { pattern: '^X' }]         — enable with override
 
 export const recommended: Record<string, RuleSeverity> = {
+  'madr/date-iso8601': 'error',
   'madr/filename-format': 'error',
   'madr/required-sections': 'error',
   'madr/status-enum': 'error',

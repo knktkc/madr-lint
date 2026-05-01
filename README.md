@@ -26,33 +26,59 @@ A linter for [MADR](https://adr.github.io/madr/) (Markdown Architectural Decisio
 ## Roadmap
 
 - [x] M0: Repository scaffold (CLAUDE.md, ADRs, types, build pipeline)
-- [ ] M1: MVP — 4 core rules + CLI runtime
-  - [x] `madr/filename-format` (the only rule that exists today)
-  - [ ] `madr/required-sections`
-  - [ ] `madr/status-enum`
-  - [ ] `madr/date-iso8601`
-  - [ ] CLI runtime (citty stub exists, lint logic pending)
+- [x] **M1: MVP — 4 core rules + CLI runtime**
+  - [x] `madr/filename-format`
+  - [x] `madr/required-sections`
+  - [x] `madr/status-enum`
+  - [x] `madr/date-iso8601`
+  - [x] CLI runtime (Phase 1: text reporter, JSON config, file or directory targets)
 - [ ] M2: Cross-file integrity rules (numbering, supersedes, link rot)
 - [ ] M3: GitHub Action distribution
-- [ ] M4: Frontmatter (v3/v4) full support
+- [ ] M4: Frontmatter v3/v4 full support + v2 bold-list compatibility
 - [ ] M5: Production use in `frontend-implementation-boilerplate`
 - [ ] M6: v1.0.0 stable release
 
-> **What works today** (M0 + post-review fixes through R8):
-> - One rule (`madr/filename-format`) with hard-asserted test shape (11 tests)
-> - Single-pass AST runner (`src/core/runner.ts`) — gray-matter +
->   `mdast-util-from-markdown` direct, lazy frontmatter via
->   `context.frontmatter`, `RuleListeners` enter/exit dispatch (root included)
-> - AJV-validated rule options (`strict: true`, WeakMap-cached validators
->   per schema, throws typed `RuleOptionsError`)
-> - Per-rule error isolation — buggy rules captured as `core/internal-error`
->   diagnostics (always severity `error`), other rules continue
-> - Public API: `runRule`, `runRulesOnFile`, `parseFile`, `RuleOptionsError`,
->   `MdastNode` exported from `src/index.ts`
-> - Generic `Rule<TOptions>` type, dual-entry tsup ESM build
->
-> The runner is ready for the first AST-using rule
-> (`madr/required-sections`).
+> **What works today** (M0 + M1 + post-review fixes through R8):
+> - **4 lint rules** (all in the `recommended` preset, severity `error`):
+>   `madr/filename-format`, `madr/required-sections`, `madr/status-enum`,
+>   `madr/date-iso8601`
+> - **CLI runtime** — `madr-lint <dir-or-file>` produces text reports
+>   with file grouping and {{placeholder}}-rendered messages. Loads
+>   `.madrlintrc.json` config; falls back to `recommended` preset.
+>   Exit 0/1 for clean/errors.
+> - **Single-pass AST runner** (`src/core/runner.ts`) — gray-matter +
+>   `mdast-util-from-markdown` direct, lazy `context.frontmatter`,
+>   `RuleListeners` enter/exit dispatch including `root`
+> - **AJV-validated options** (`strict: true`, WeakMap-cached, typed
+>   `RuleOptionsError` on failure)
+> - **Per-rule error isolation** — buggy rules captured as
+>   `core/internal-error` diagnostics, other rules continue
+> - **Property-based testing** — `fast-check` exercises `madr/date-iso8601`
+>   against random Dates and malformed strings (200 runs each)
+> - **Public API** — `runRule`, `runRulesOnFile`, `parseFile`,
+>   `RuleOptionsError`, `MdastNode` exported from the package entry
+
+### Quick start
+
+```bash
+# Lint a directory
+madr-lint docs/adr
+
+# Lint a single file
+madr-lint docs/adr/0001-example.md
+
+# Custom config (`.madrlintrc.json`)
+{
+  "extends": ["madr-lint:recommended"],
+  "adrDir": "docs/decisions",
+  "rules": {
+    "madr/required-sections": ["error", {
+      "sections": ["Context", "Decision", "Consequences"],
+      "matchMode": "startsWith"
+    }]
+  }
+}
+```
 
 ## Requirements
 
