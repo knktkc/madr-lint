@@ -3,3 +3,4 @@
 
 export { default as filenameFormat } from './filename-format/index.js';
 export { default as requiredSections } from './required-sections/index.js';
+export { default as statusEnum } from './status-enum/index.js';

@@ -12,4 +12,5 @@ import type { RuleSeverity } from '../core/types.js';
 export const recommended: Record<string, RuleSeverity> = {
   'madr/filename-format': 'error',
   'madr/required-sections': 'error',
+  'madr/status-enum': 'error',
 };
