@@ -50,4 +50,22 @@ describe('core/discover', () => {
   it('returns empty array for non-existent directory', () => {
     expect(findAdrFiles(join(dir, 'does-not-exist'))).toEqual([]);
   });
+
+  describe('single file target', () => {
+    it('returns the file itself when target is a .md file', () => {
+      const file = join(dir, '0001-x.md');
+      writeFileSync(file, '# x');
+      expect(findAdrFiles(file)).toEqual([file]);
+    });
+
+    it('returns empty array when target is a non-.md file', () => {
+      const file = join(dir, 'README.txt');
+      writeFileSync(file, 'x');
+      expect(findAdrFiles(file)).toEqual([]);
+    });
+
+    it('returns empty array when target is a non-existent file', () => {
+      expect(findAdrFiles(join(dir, 'nope.md'))).toEqual([]);
+    });
+  });
 });
