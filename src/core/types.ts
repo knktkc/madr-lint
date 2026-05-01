@@ -76,6 +76,8 @@ export interface Diagnostic {
 export interface RuleContext<TOptions = Record<string, unknown>> {
   /** The file being linted. */
   file: FileContext;
+  /** Parsed YAML frontmatter, or null if absent. */
+  frontmatter: Record<string, unknown> | null;
   /** User-merged options for this rule (validated against rule.meta.schema). */
   options: TOptions;
   /** Emit a diagnostic. */

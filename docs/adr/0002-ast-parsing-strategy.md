@@ -62,18 +62,18 @@ This ADR was adopted on 2026-05-01. Implementation lands incrementally:
 
 | Aspect | Status (as of 2026-05-01, M0) |
 |---|---|
-| `RuleListeners` type with enter/exit | **defined** in `src/core/types.ts` |
-| Generic `Rule<TOptions>` accepting `RuleListeners \| void` | **wired** (`madr/filename-format` returns void) |
-| Single-pass runner walking mdast and dispatching to listeners | **pending** (M1, with first AST-using rule) |
-| `mdast-util-from-markdown` direct call | dependency **installed**, not yet imported |
-| `gray-matter` for frontmatter | dependency **installed**, not yet imported |
-| `perFile` rule path | **wired** (filename-format) |
-| `project` rule path | **pending** (M2 cross-file rules) |
-| Pre-compiled AJV options validation | **wired** in `tests/helpers/run-rule.ts` (per-rule WeakMap-cached validators, throws on invalid options) |
+| `RuleListeners` type with enter/exit | **wired** in `src/core/types.ts`; verified by `tests/core/runner.test.ts` |
+| Generic `Rule<TOptions>` accepting `RuleListeners \| void` | **wired** (`madr/filename-format` returns void; runner test uses listener-returning rules) |
+| Single-pass runner walking mdast and dispatching to listeners | **wired** in `src/core/runner.ts` — `runRulesOnFile` collects listeners from all rules and dispatches per node type during one tree walk |
+| `mdast-util-from-markdown` direct call | **wired** in `src/core/parser.ts` |
+| `gray-matter` for frontmatter | **wired** in `src/core/parser.ts`; lazy via `context.frontmatter` getter |
+| `perFile` rule path | **wired** (filename-format + AST runner test fixtures) |
+| `project` rule path | **pending** (M2 cross-file rules — runner currently single-file only) |
+| Pre-compiled AJV options validation | **wired** in `src/core/runner.ts` (per-rule WeakMap-cached validators, throws on invalid options) |
 | `safe-regex2` ReDoS guard in CI | dependency **installed**, CI integration **pending** |
 | Content-hash cache | **pending** (M2+) |
 
-The first AST-using rule (`madr/required-sections`) is the trigger for the runner to grow: parse pipeline, single-pass dispatch, listener invocation. Until then, `runRule` in `tests/helpers/run-rule.ts` accepts only filename / metadata-style rules that report from `create()` directly.
+The runner is now ready for the first AST-using rule (`madr/required-sections`). Adding it should require only the rule file + fixtures + test — no further runner work. The `tests/helpers/run-rule.ts` helper is now a thin re-export of `src/core/runner.ts`.
 
 ## Consequences
 

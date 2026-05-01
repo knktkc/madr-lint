@@ -20,13 +20,13 @@ These decisions are very expensive to retrofit. They are baked into the rule API
 > - **pending** — dependency installed but not yet integrated, or not yet started
 
 1. **Single-pass AST traversal with visitor registry**. Rules export `RuleListeners { enter, exit }` keyed by mdast node type (see `src/core/types.ts`). The runner walks each file's tree once, dispatching to all subscribed rules. Never `unist-util-visit` per-rule. See ADR-0002.
-   - **Status (M0)**: type **defined**; runner **pending** (lands with first AST-using rule in M1)
+   - **Status (M0)**: **wired** in `src/core/runner.ts` (`runRule` and `runRulesOnFile`). Single-pass dispatch verified by `tests/core/runner.test.ts` — multiple rules see the same node from one tree walk
 
 2. **`mdast-util-from-markdown` direct, NOT `unified+remark`**. Skip the `unified` Processor overhead (~25-29x slower per March 2026 benchmarks). Use `gray-matter` for frontmatter, then feed body to `fromMarkdown`. See ADR-0002.
-   - **Status (M0)**: dependencies **installed**; not yet wired into the runner
+   - **Status (M0)**: **wired** in `src/core/parser.ts`. Frontmatter is exposed lazily via `context.frontmatter` (only triggers parse when accessed)
 
 3. **Two-tier rule API**: `perFile` rules are pure (file content + AST → diagnostics, parallelizable). `project` rules (numbering uniqueness, supersedes graph, link rot) consume a pre-built index built once from per-file outputs. Locks in parallelism from day one.
-   - **Status (M0)**: `RuleMeta.type` field **defined**; perFile path **wired** (`madr/filename-format`); project path **pending**
+   - **Status (M0)**: `RuleMeta.type` field **defined**; perFile path **wired** (filename-format + AST runner); project path **pending** (M2 cross-file rules)
 
 4. **Pre-compile AJV schemas + regex at config load time**. ReDoS-guarded via `safe-regex2` in CI. Per-file regex execution has a 5ms soft budget.
    - **Status (M0)**: AJV **wired** in `tests/helpers/run-rule.ts` (per-rule WeakMap-cached validators, throws on invalid options); `safe-regex2` **installed**, ReDoS check **pending** CI integration; per-file regex 5ms budget **pending**
