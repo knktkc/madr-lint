@@ -1,5 +1,5 @@
 import { basename } from 'node:path';
-import type { Rule } from '../../core/types.ts';
+import type { Rule } from '../../core/types.js';
 
 interface FilenameFormatOptions extends Record<string, unknown> {
   pattern: string;

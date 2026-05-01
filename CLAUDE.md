@@ -12,17 +12,27 @@ This file is auto-attached to every Claude Code session in this repository. It c
 
 ## Architecture principles (locked at v0.1.0)
 
-These decisions are very expensive to retrofit. They are baked into the rule API and runner from day one.
+These decisions are very expensive to retrofit. They are baked into the rule API and runner from day one. Implementation lands incrementally — the **Status** lines below show what is shipped today vs aspirational.
 
-1. **Single-pass AST traversal with visitor registry**. Rules export `{ enter: { heading, link, ... } }` keyed by mdast node type. The runner walks each file's tree once, dispatching to all subscribed rules. Never `unist-util-visit` per-rule. See ADR-0002.
+> **Status legend**:
+> - **defined** — type / interface declared in code, not yet exercised at runtime
+> - **wired** — actually invoked at runtime
+> - **pending** — dependency installed but not yet integrated, or not yet started
+
+1. **Single-pass AST traversal with visitor registry**. Rules export `RuleListeners { enter, exit }` keyed by mdast node type (see `src/core/types.ts`). The runner walks each file's tree once, dispatching to all subscribed rules. Never `unist-util-visit` per-rule. See ADR-0002.
+   - **Status (M0)**: type **defined**; runner **pending** (lands with first AST-using rule in M1)
 
 2. **`mdast-util-from-markdown` direct, NOT `unified+remark`**. Skip the `unified` Processor overhead (~25-29x slower per March 2026 benchmarks). Use `gray-matter` for frontmatter, then feed body to `fromMarkdown`. See ADR-0002.
+   - **Status (M0)**: dependencies **installed**; not yet wired into the runner
 
 3. **Two-tier rule API**: `perFile` rules are pure (file content + AST → diagnostics, parallelizable). `project` rules (numbering uniqueness, supersedes graph, link rot) consume a pre-built index built once from per-file outputs. Locks in parallelism from day one.
+   - **Status (M0)**: `RuleMeta.type` field **defined**; perFile path **wired** (`madr/filename-format`); project path **pending**
 
 4. **Pre-compile AJV schemas + regex at config load time**. ReDoS-guarded via `safe-regex2` in CI. Per-file regex execution has a 5ms soft budget.
+   - **Status (M0)**: AJV and safe-regex2 **installed**; AJV integration **pending** (post-review Round 3); ReDoS check **pending** CI integration
 
 5. **Content-hash cache** at `.madr-lint/cache/`, key = `sha1(content + rule-version-vector + config-hash)`. Persistent across runs.
+   - **Status (M0)**: **pending**; targeted at M2+
 
 ## TDD discipline (ADR-0003)
 

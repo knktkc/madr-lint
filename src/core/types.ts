@@ -7,6 +7,8 @@
 // dispatches to all subscribed rules.
 
 import type { Nodes } from 'mdast';
+// Note: imports of project-internal modules use the `.js` extension per
+// Node ESM convention. tsc resolves these to the .ts source files.
 
 export type MdastNodeType = Nodes['type'];
 

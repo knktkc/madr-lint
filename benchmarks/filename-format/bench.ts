@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { Bench } from 'tinybench';
-import { runRule } from '../../tests/helpers/run-rule.ts';
-import rule from '../../src/rules/filename-format/index.ts';
+import { runRule } from '../../tests/helpers/run-rule.js';
+import rule from '../../src/rules/filename-format/index.js';
 
 const tiny = readFileSync(new URL('./fixtures/tiny.md', import.meta.url), 'utf8');
 const typical = readFileSync(new URL('./fixtures/typical.md', import.meta.url), 'utf8');

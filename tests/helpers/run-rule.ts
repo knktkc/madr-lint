@@ -4,7 +4,7 @@ import type {
   Rule,
   RuleContext,
   Severity,
-} from '../../src/core/types.ts';
+} from '../../src/core/types.js';
 
 interface RunRuleOptions {
   /** Per-rule options to merge over rule.meta.defaultOptions. */

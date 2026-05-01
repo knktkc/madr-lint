@@ -56,6 +56,25 @@ Investigation in May 2026 found:
 - **Option 3 (`markdown-it-ts`)**: loses the mdast ecosystem; every rule needs an AST shape adapter
 - **Option 4 (`micromark`)**: too low-level; reinvents mdast construction for marginal gain
 
+## Implementation status
+
+This ADR was adopted on 2026-05-01. Implementation lands incrementally:
+
+| Aspect | Status (as of 2026-05-01, M0) |
+|---|---|
+| `RuleListeners` type with enter/exit | **defined** in `src/core/types.ts` |
+| Generic `Rule<TOptions>` accepting `RuleListeners \| void` | **wired** (`madr/filename-format` returns void) |
+| Single-pass runner walking mdast and dispatching to listeners | **pending** (M1, with first AST-using rule) |
+| `mdast-util-from-markdown` direct call | dependency **installed**, not yet imported |
+| `gray-matter` for frontmatter | dependency **installed**, not yet imported |
+| `perFile` rule path | **wired** (filename-format) |
+| `project` rule path | **pending** (M2 cross-file rules) |
+| Pre-compiled AJV options validation | dependency **installed**, integration **pending** (Round 3 of post-review fixes) |
+| `safe-regex2` ReDoS guard in CI | dependency **installed**, CI integration **pending** |
+| Content-hash cache | **pending** (M2+) |
+
+The first AST-using rule (`madr/required-sections`) is the trigger for the runner to grow: parse pipeline, single-pass dispatch, listener invocation. Until then, `runRule` in `tests/helpers/run-rule.ts` accepts only filename / metadata-style rules that report from `create()` directly.
+
 ## Consequences
 
 ### Positive

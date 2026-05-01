@@ -1,8 +1,8 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, it, expect } from 'vitest';
-import { runRule } from '../helpers/run-rule.ts';
-import rule from '../../src/rules/filename-format/index.ts';
+import { runRule } from '../helpers/run-rule.js';
+import rule from '../../src/rules/filename-format/index.js';
 
 const fixturesDir = join(import.meta.dirname, '../fixtures/filename-format');
 
