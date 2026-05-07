@@ -1,0 +1,9 @@
+# Global ownership
+* @knktkc
+
+# Skills directory
+.claude/skills/ @knktkc
+
+# Rule-specific ownership (extend as contributors arrive)
+src/rules/ @knktkc
+docs/rules/ @knktkc
