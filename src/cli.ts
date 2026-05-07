@@ -1,7 +1,9 @@
 import { readFileSync } from 'node:fs';
+import { relative } from 'node:path';
 import { defineCommand, runMain } from 'citty';
 import { loadConfig, resolveExtends, type ResolvedConfig } from './core/config.js';
 import { findAdrFiles } from './core/discover.js';
+import { shouldIgnore } from './core/ignore.js';
 import { lintFiles } from './core/lint.js';
 import { textReporter } from './core/reporter.js';
 import type { AnyRule } from './core/types.js';
@@ -36,9 +38,17 @@ const main = defineCommand({
     }
 
     const adrDir = args.path ?? config.adrDir;
-    const files = findAdrFiles(adrDir);
+    const allFiles = findAdrFiles(adrDir);
+
+    // Apply ignorePatterns from config (e.g. README.md, template.md, 9999-*)
+    const files = allFiles.filter(
+      (absPath) => !shouldIgnore(relative(cwd, absPath), config.ignorePatterns),
+    );
+
     if (files.length === 0) {
-      console.log(`No .md files found in ${adrDir}`);
+      const skipped = allFiles.length - files.length;
+      const note = skipped > 0 ? ` (${skipped} ignored by config)` : '';
+      console.log(`No .md files to lint in ${adrDir}${note}`);
       process.exit(0);
     }
 
