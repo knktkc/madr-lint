@@ -32,7 +32,12 @@ A linter for [MADR](https://adr.github.io/madr/) (Markdown Architectural Decisio
   - [x] `madr/status-enum`
   - [x] `madr/date-iso8601`
   - [x] CLI runtime (Phase 1: text reporter, JSON config, file or directory targets)
-- [ ] M2: Cross-file integrity rules (numbering, supersedes, link rot)
+- [x] **M2: Cross-file integrity rules**
+  - [x] `madr/no-duplicate-numbering`
+  - [x] `madr/supersedes-bidirectional`
+  - [x] `madr/no-broken-links`
+  - [x] `madr/no-numbering-gap` (opt-in)
+  - [x] Project rule API (ADR-0005)
 - [ ] M3: GitHub Action distribution
 - [ ] M4: Frontmatter v3/v4 full support + v2 bold-list compatibility
 - [ ] M5: Production use in `frontend-implementation-boilerplate`

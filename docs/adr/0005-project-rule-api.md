@@ -114,7 +114,7 @@ export function isProjectRule(rule: AnyRule): rule is ProjectRule { ... }
 | `madr/no-duplicate-numbering` (first project rule) | **wired** (7 tests) |
 | `madr/supersedes-bidirectional` | **wired** (13 tests) |
 | `madr/no-broken-links` | **wired** (14 tests) |
-| `madr/no-numbering-gap` (warning, opt-in) | **pending** (M2) |
+| `madr/no-numbering-gap` (opt-in, default `off`) | **wired** (12 tests) |
 
 ## Links
 
