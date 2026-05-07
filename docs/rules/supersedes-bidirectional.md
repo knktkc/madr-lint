@@ -88,4 +88,4 @@ Disable for repos that track supersession outside ADR frontmatter (e.g. via Git 
 ## Source
 
 - Spec: [`src/rules/supersedes-bidirectional/spec.md`](../../src/rules/supersedes-bidirectional/spec.md)
-- ADR-0005: project rule API
+- [ADR-0005](../adr/0005-project-rule-api.md): project rule API

@@ -70,4 +70,4 @@ Disable for repos that track ADR cross-references outside the Markdown body.
 ## Source
 
 - Spec: [`src/rules/no-broken-links/spec.md`](../../src/rules/no-broken-links/spec.md)
-- ADR-0005: project rule API
+- [ADR-0005](../adr/0005-project-rule-api.md): project rule API

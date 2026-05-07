@@ -81,7 +81,7 @@ const rule: ProjectRule<SupersedesBidirectionalOptions> = {
             messageId: 'missingBackReference',
             path: target.path,
             data: {
-              ref: target.path,
+              ref,
               source: file.path,
               direction: BACKWARD_FIELD,
               expected: fileRef,
@@ -108,7 +108,7 @@ const rule: ProjectRule<SupersedesBidirectionalOptions> = {
             messageId: 'missingBackReference',
             path: target.path,
             data: {
-              ref: target.path,
+              ref,
               source: file.path,
               direction: FORWARD_FIELD,
               expected: fileRef,

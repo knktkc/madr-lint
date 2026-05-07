@@ -14,6 +14,9 @@ export const recommended: Record<string, RuleSeverity> = {
   'madr/filename-format': 'error',
   'madr/no-broken-links': 'error',
   'madr/no-duplicate-numbering': 'error',
+  // Convention-only — opt in if your team treats ADR numbering as a
+  // contiguous sequence. See docs/rules/no-numbering-gap.md.
+  'madr/no-numbering-gap': 'off',
   'madr/required-sections': 'error',
   'madr/status-enum': 'error',
   'madr/supersedes-bidirectional': 'error',

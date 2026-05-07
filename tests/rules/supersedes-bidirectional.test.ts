@@ -64,6 +64,8 @@ describe('madr/supersedes-bidirectional', () => {
         messageId: 'missingBackReference',
         path: '0001-old.md',
         data: {
+          // ref is the target's own ADR-NNNN identifier (the file missing the back-ref)
+          ref: 'ADR-0001',
           source: '0042-new.md',
           expected: 'ADR-0042',
           direction: 'superseded-by',
@@ -82,6 +84,7 @@ describe('madr/supersedes-bidirectional', () => {
         messageId: 'missingBackReference',
         path: '0042-new.md',
         data: {
+          ref: 'ADR-0042',
           source: '0001-old.md',
           expected: 'ADR-0001',
           direction: 'supersedes',
@@ -99,7 +102,12 @@ describe('madr/supersedes-bidirectional', () => {
       expect(diagnostics).toHaveLength(1);
       expect(diagnostics[0]).toMatchObject({
         path: '0002-b.md',
-        data: { expected: 'ADR-0042', source: '0042-merge.md' },
+        data: {
+          ref: 'ADR-0002',
+          expected: 'ADR-0042',
+          source: '0042-merge.md',
+          direction: 'superseded-by',
+        },
       });
     });
   });

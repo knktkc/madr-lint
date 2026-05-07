@@ -1,10 +1,22 @@
 import { readFileSync } from 'node:fs';
-import { relative } from 'node:path';
+import { relative, sep } from 'node:path';
 import {
   buildProjectFile,
   runRulesOnFile,
   runRulesOnProject,
 } from './runner.js';
+
+/**
+ * Normalize a relative path to POSIX form (forward-slashes). On Windows,
+ * `relative()` returns backslash-separated paths, but project rules
+ * (e.g. `no-broken-links`) resolve URLs using `posix.normalize`. Mixing
+ * separators causes silent false positives — so the orchestrator owns
+ * the normalization.
+ */
+function toPosix(p: string): string {
+  if (sep === '/') return p;
+  return p.split(sep).join('/');
+}
 import {
   isProjectRule,
   type AnyRule,
@@ -45,8 +57,10 @@ export function lintFiles(opts: LintOptions): LintResult {
   const allDiagnostics: Diagnostic[] = [];
 
   // Read all file contents once — shared between per-file and project passes.
+  // POSIX-normalize the relative path so cross-platform diagnostics and
+  // path-based rules (e.g. no-broken-links) work consistently on Windows.
   const fileEntries = opts.files.map((absolutePath) => ({
-    relativePath: relative(opts.cwd, absolutePath),
+    relativePath: toPosix(relative(opts.cwd, absolutePath)),
     content: readFileSync(absolutePath, 'utf8'),
   }));
 

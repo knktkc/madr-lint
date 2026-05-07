@@ -68,7 +68,7 @@ This ADR was adopted on 2026-05-01. Implementation lands incrementally:
 | `mdast-util-from-markdown` direct call | **wired** in `src/core/parser.ts` |
 | `gray-matter` for frontmatter | **wired** in `src/core/parser.ts`; lazy via `context.frontmatter` getter |
 | `perFile` rule path | **wired** (filename-format + AST runner test fixtures) |
-| `project` rule path | **pending** (M2 cross-file rules — runner currently single-file only) |
+| `project` rule path | **wired** in `src/core/runner.ts` (`runRulesOnProject`) — see ADR-0005 for the cross-file API design |
 | Pre-compiled AJV options validation | **wired** in `src/core/runner.ts` (per-rule WeakMap-cached validators, throws `RuleOptionsError` on invalid options) |
 | Rule error isolation (per-rule try/catch around `create()` + handlers) | **wired** in `src/core/runner.ts` — buggy rules emit `core/internal-error` diagnostics (severity hardcoded `error`), other rules continue |
 | Public API (`runRule` / `runRulesOnFile` / `parseFile` / `RuleOptionsError`) | **wired** — exported from `src/index.ts` and `dist/index.d.ts` |

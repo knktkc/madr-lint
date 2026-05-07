@@ -299,13 +299,11 @@ export function runRulesOnProject(
     try {
       rule.check(context);
     } catch (err) {
+      // Project rules have no current-file context — attribute the
+      // internal-error to a sentinel path rather than mis-attributing
+      // to whatever file happens to be first in the array.
       diagnostics.push(
-        internalErrorDiagnostic(
-          rule.meta.name,
-          'check',
-          err,
-          files[0]?.path ?? '<project>',
-        ),
+        internalErrorDiagnostic(rule.meta.name, 'check', err, '<project>'),
       );
     }
   }

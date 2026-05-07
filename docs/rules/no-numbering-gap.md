@@ -86,4 +86,4 @@ export default defineConfig({
 ## Source
 
 - Spec: [`src/rules/no-numbering-gap/spec.md`](../../src/rules/no-numbering-gap/spec.md)
-- ADR-0005: project rule API
+- [ADR-0005](../adr/0005-project-rule-api.md): project rule API

@@ -70,10 +70,11 @@ Linters live or die by speed. Performance is treated as a feature, not an aftert
 - **Severity**: every rule supports `error | warn | off`. Defaults set in `recommended` preset.
 - **Options**: every rule accepts an options object validated by an AJV schema (`strict: true`). Every key in `defaultOptions` MUST be declared in `schema.json` `properties` (we use `additionalProperties: false`).
 - **MADR version awareness**: rules respect the configured `madrVersion` (`v2 | v3 | v4 | auto`). Use `versionMap[version]` for spec lookup. Cite the actual MADR template URL in `spec.md` per version — do not infer section names from memory.
-- **Rule shapes**: a rule's `create()` returns one of three shapes — pick the simplest that fits:
-  - **A. filename / metadata-only** — reports directly from `create()`, returns void. Example: `madr/filename-format` (regex on `context.file.path`).
-  - **B. frontmatter-only** — reads `context.frontmatter` (lazy-parsed), returns void. Use for status enum, date format, decision-maker presence checks.
-  - **C. AST traversal** — returns `RuleListeners` with `enter`/`exit` keyed by mdast node type. Use for required sections, link rot, structure validation. Use `mdast-util-to-string` (or recursive text extraction) to read heading content; naive `children[0].value` misses `## **Status**`.
+- **Rule shapes**: a rule has one of four shapes — pick the simplest that fits. Shapes A/B/C are per-file rules (`Rule<TOptions>` with `create()`); Shape D is the cross-file project rule (`ProjectRule<TOptions>` with `check()`):
+  - **A. filename / metadata-only** — `create()` reports directly from `context.file.path`, returns void. Example: `madr/filename-format`.
+  - **B. frontmatter-only** — `create()` reads `context.frontmatter` (lazy-parsed), returns void. Examples: `madr/status-enum`, `madr/date-iso8601`.
+  - **C. AST traversal** — `create()` returns `RuleListeners` with `enter`/`exit` keyed by mdast node type. Use `mdast-util-to-string` (or recursive text extraction) to read heading content — naive `children[0].value` misses `## **Status**`. Example: `madr/required-sections`.
+  - **D. project (cross-file)** — `meta.type: 'project'`, has `check(context)` instead of `create()`. `context.files: readonly ProjectFile[]` is eager-parsed (path + content + frontmatter + AST). `context.report({ messageId, path, data })` requires explicit `path` (no current-file context). See [ADR-0005](docs/adr/0005-project-rule-api.md). Examples: `madr/no-duplicate-numbering`, `madr/no-broken-links`.
 - **Reserved rule names**: `core/internal-error` is reserved — emitted by the runner when a rule throws. Do not register a rule with this name.
 
 ## Directory structure

@@ -103,22 +103,33 @@ export function isProjectRule(rule: AnyRule): rule is ProjectRule { ... }
 - Eager parsing for the project pass (no lazy path) — perf cost at scale, addressed in M2 milestones (5000-file target)
 - `recommended` preset uniform `Record<string, RuleSeverity>` — rule ID alone does not reveal the kind (must inspect the rule object)
 
-## Implementation status (M2 in progress)
+## Implementation status (M2 complete)
 
 | Aspect | Status |
 |---|---|
 | `ProjectRule` / `ProjectRuleContext` / `ProjectFile` / `AnyRule` / `isProjectRule` types | **wired** in `src/core/types.ts` |
 | `buildProjectFile()` helper (eager parse) | **wired** in `src/core/runner.ts` |
 | `runRulesOnProject(rules, files, runtime)` | **wired** in `src/core/runner.ts` (5 tests in `tests/core/runner.test.ts`) |
-| `lint.ts` partitioning | **wired** — file content read once, shared between passes |
+| `lint.ts` partitioning + cross-platform POSIX path normalization | **wired** — file content read once, paths normalized to POSIX |
 | `madr/no-duplicate-numbering` (first project rule) | **wired** (7 tests) |
 | `madr/supersedes-bidirectional` | **wired** (13 tests) |
 | `madr/no-broken-links` | **wired** (14 tests) |
 | `madr/no-numbering-gap` (opt-in, default `off`) | **wired** (12 tests) |
+| Project rule benchmarks | **wired** for all 4 rules under `benchmarks/<rule>/bench.ts` |
+| `add-rule` skill Shape D template | **wired** in `.claude/skills/add-rule/SKILL.md` |
 
 ## Links
 
-- ADR-0002: AST parsing strategy (the original two-tier promise)
-- src/core/types.ts (type definitions)
-- src/core/runner.ts (runRulesOnProject)
-- docs/rules/no-duplicate-numbering.md (first project rule)
+- [ADR-0002](./0002-ast-parsing-strategy.md): AST parsing strategy (the original two-tier promise)
+- `src/core/types.ts` — type definitions
+- `src/core/runner.ts` — `runRulesOnProject`, `buildProjectFile`, `RuleOptionsError`
+- `src/core/lint.ts` — orchestrator partitions per-file vs project rules
+- `docs/rules/no-duplicate-numbering.md`
+- `docs/rules/supersedes-bidirectional.md`
+- `docs/rules/no-broken-links.md`
+- `docs/rules/no-numbering-gap.md`
+
+> Note: paths above use plain `code` formatting rather than Markdown
+> links. `madr/no-broken-links` (this rule's own check!) flagged
+> file-system relative links to `src/`/`docs/rules/` because those are
+> outside the configured `adrDir`. The dogfood worked. ✓

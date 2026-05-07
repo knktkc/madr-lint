@@ -22,7 +22,12 @@ Ask the user (or infer from invocation args):
 
 1. **Rule ID** — kebab-case, must start with `madr/`. Example: `madr/required-sections`.
 2. **Rule type** — `perFile` (default) or `project` (cross-file).
-3. **Rule shape** — `A` (filename / metadata-only) / `B` (frontmatter-only) / `C` (AST traversal). See "Shapes" appendix below for examples.
+3. **Rule shape** — pick one:
+   - `A` — filename / metadata-only (per-file, returns void)
+   - `B` — frontmatter-only (per-file, returns void)
+   - `C` — AST traversal (per-file, returns RuleListeners)
+   - `D` — project rule (cross-file, ProjectRule.check())
+   See Step 5 for examples. Shapes A/B/C → `type: 'perFile'`, Shape D → `type: 'project'`.
 4. **MADR version compat** — array of `v2`, `v3`, `v4` (default: all three).
 5. **Recommended preset severity** — `error` (default for spec-grounded rules), `warn`, or `off`.
 
@@ -79,7 +84,9 @@ The CONTENTS depend on the chosen rule shape. The skeletons below stay empty eno
 
 **`tests/fixtures/<kebab>/valid/<slug>.md`** and **`invalid/<slug>.md`** — concrete ADR markdown files. Valid: zero diagnostics. Invalid: exactly the diagnostic from spec.md.
 
-**`tests/rules/<kebab>.test.ts`**:
+**`tests/rules/<kebab>.test.ts`** — for **per-file rules (Shape A/B/C)** use the directory-based valid/invalid pattern below. For **project rules (Shape D)** use the inline-files pattern (see `tests/rules/no-duplicate-numbering.test.ts` as the canonical example).
+
+For **per-file rules**:
 
 ```typescript
 import { readdirSync, readFileSync } from 'node:fs';
@@ -122,6 +129,38 @@ describe('madr/<kebab>', () => {
 });
 ```
 
+For **project rules (Shape D)** — fixtures are constructed inline because the rule sees multiple files at once:
+
+```typescript
+import { describe, it, expect } from 'vitest';
+import { buildProjectFile, runRulesOnProject } from '../../src/core/runner.js';
+import rule from '../../src/rules/<kebab>/index.js';
+
+function file(path: string, content = '# x\n') {
+  return buildProjectFile({ path, content });
+}
+
+describe('madr/<kebab>', () => {
+  it('valid project — no diagnostics', () => {
+    const files = [file('0001-a.md'), file('0002-b.md')];
+    expect(runRulesOnProject([rule], files)).toEqual([]);
+  });
+
+  it('invalid project — reports <messageId>', () => {
+    const files = [/* ... a configuration that should trigger ... */];
+    const diagnostics = runRulesOnProject([rule], files);
+    expect(diagnostics).toHaveLength(1);
+    expect(diagnostics[0]).toMatchObject({
+      ruleName: 'madr/<kebab>',
+      messageId: '<messageId>',
+      severity: 'error',
+      path: '<which file the diagnostic attaches to>',
+      data: { /* spec-defined fields */ },
+    });
+  });
+});
+```
+
 ### Step 3.5: Schema / defaultOptions / fixture coupling check
 
 Before invoking vitest, sanity-check three things — getting them out of sync makes Step 10 RED for the wrong reason:
@@ -150,6 +189,8 @@ If exit code 0: **skill failure** — the test passed without an impl, meaning i
 
 Pick the matching shape for input #3. The stub MUST stay empty — do not write impl logic. The user (or Claude in a later turn) implements GREEN.
 
+Four shapes are supported. **Shapes A, B, C are per-file rules** (`Rule<TOptions>` with `create()`); **Shape D is the cross-file project rule** (`ProjectRule<TOptions>` with `check()`). Project rules go through a different runner (`runRulesOnProject`) — `meta.type` must be `'project'`.
+
 **Shape A — filename / metadata-only:**
 
 ```typescript
@@ -161,7 +202,7 @@ interface <Camel>Options extends Record<string, unknown> {
 }
 
 const rule: Rule<<Camel>Options> = {
-  meta: { /* ...common shape below... */ },
+  meta: { /* ...common shape below, type: 'perFile'... */ },
   create(_context) {
     // GREEN phase: read context.file.path / context.options, call context.report().
   },
@@ -190,7 +231,7 @@ interface <Camel>Options extends Record<string, unknown> {
 }
 
 const rule: Rule<<Camel>Options> = {
-  meta: { /* ...common shape below... */ },
+  meta: { /* ...common shape below, type: 'perFile'... */ },
   create(_context): RuleListeners {
     // GREEN phase: return { enter: { ... }, exit: { ... } } subscribing to
     // mdast node types. See "Shapes" appendix for a worked example.
@@ -200,6 +241,36 @@ const rule: Rule<<Camel>Options> = {
 
 export default rule;
 ```
+
+**Shape D — project rule (cross-file):** for rules that need access to ALL files at once (numbering uniqueness, supersedes graphs, link rot).
+
+```typescript
+import type { ProjectRule } from '../../core/types.js';
+import schema from './schema.json' with { type: 'json' };
+
+interface <Camel>Options extends Record<string, unknown> {
+  // <option fields>
+}
+
+const rule: ProjectRule<<Camel>Options> = {
+  meta: { /* ...common shape below, type: 'project'... */ },
+  check(_context) {
+    // GREEN phase: read _context.files (each ProjectFile has path,
+    // content, frontmatter, ast). Build any needed cross-file index,
+    // then iterate and report. Use _context.report({ messageId, path,
+    // data }) — `path` is REQUIRED (no current-file context).
+  },
+};
+
+export default rule;
+```
+
+**Project rule API differences (vs per-file)**:
+- `meta.type === 'project'`, no `'perFile'`
+- `check(context)` instead of `create(context)`; called once with all files
+- `context.files: readonly ProjectFile[]` — each pre-parsed (frontmatter + AST)
+- `context.report({ messageId, path, data })` — **`path` is required**; the runner does not auto-fill it because there is no current-file context
+- See [ADR-0005](../../../docs/adr/0005-project-rule-api.md) and `src/rules/no-duplicate-numbering/index.ts` for a worked example
 
 **Common meta shape:**
 
@@ -232,11 +303,11 @@ const rule: Rule<<Camel>Options> = {
 
 The runner in `src/core/runner.ts` already handles everything an AST-based rule needs: gray-matter frontmatter parsing, `mdast-util-from-markdown` body parsing (per ADR-0002), single-pass visitor dispatch from listeners returned by `create()`, AJV-validated options, and per-rule error isolation (a buggy rule throws → captured as `core/internal-error` diagnostic, other rules continue).
 
-`tests/helpers/run-rule.ts` is a thin re-export of the runner. No helper changes are needed when adding a rule, regardless of shape.
+For **project rules (Shape D)**, the runner exposes `runRulesOnProject(rules, files, runtime)` and `buildProjectFile({ path, content })`. Tests construct file arrays inline (see `tests/rules/no-duplicate-numbering.test.ts`). The orchestrator in `src/core/lint.ts` partitions rules by kind via `isProjectRule` and dispatches to the right runner — no helper changes needed when adding a rule, regardless of shape.
 
 ### Step 7: Generate the benchmark stub
 
-`benchmarks/<kebab>/bench.ts`:
+For **per-file rules (Shape A/B/C)** — `benchmarks/<kebab>/bench.ts`:
 
 ```typescript
 import { execSync } from 'node:child_process';
@@ -268,6 +339,53 @@ writeFileSync(
 ```
 
 Plus minimal `benchmarks/<kebab>/fixtures/{tiny,typical}.md` corpora.
+
+For **project rules (Shape D)** — `benchmarks/<kebab>/bench.ts`:
+
+```typescript
+import { execSync } from 'node:child_process';
+import { writeFileSync } from 'node:fs';
+import { Bench } from 'tinybench';
+import { buildProjectFile, runRulesOnProject } from '../../src/core/runner.js';
+import rule from '../../src/rules/<kebab>/index.js';
+import type { ProjectFile } from '../../src/core/types.js';
+
+// Synthesize a ProjectFile[] corpus of N ADRs for the rule under test.
+// Adjust frontmatter/content per the rule's input dependencies (e.g.
+// supersedes graph, link content). See benchmarks/no-duplicate-numbering/
+// or benchmarks/supersedes-bidirectional/ for working examples.
+function makeCorpus(count: number): ProjectFile[] {
+  const files: ProjectFile[] = [];
+  for (let i = 1; i <= count; i++) {
+    const num = i.toString().padStart(4, '0');
+    files.push(buildProjectFile({ path: `${num}-bench.md`, content: '# x\n' }));
+  }
+  return files;
+}
+
+const tiny = makeCorpus(10);
+const typical = makeCorpus(100);
+
+const bench = new Bench({ time: 500 });
+bench
+  .add('madr/<kebab> — 10 files', () => {
+    runRulesOnProject([rule], tiny);
+  })
+  .add('madr/<kebab> — 100 files', () => {
+    runRulesOnProject([rule], typical);
+  });
+
+await bench.run();
+console.table(bench.table());
+
+const sha = execSync('git rev-parse --short HEAD').toString().trim();
+writeFileSync(
+  new URL(`./${sha}.json`, import.meta.url),
+  JSON.stringify(bench.table(), null, 2),
+);
+```
+
+Project rules don't need separate fixture files — the corpus is synthesized in code.
 
 ### Step 8: Update registry and recommended preset
 
