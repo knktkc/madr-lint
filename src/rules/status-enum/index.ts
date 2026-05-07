@@ -11,14 +11,14 @@ const rule: Rule<StatusEnumOptions> = {
   meta: {
     name: 'madr/status-enum',
     type: 'perFile',
-    versionCompat: ['v3', 'v4'],
+    versionCompat: ['v2', 'v3', 'v4'],
     docs: {
-      description: 'Validate that ADR frontmatter `status` is in the allowed enum',
+      description: 'Validate that ADR `status` (frontmatter or v2 bold-list) is in the allowed enum',
       url: 'https://github.com/knktkc/madr-lint/blob/main/docs/rules/status-enum.md',
       recommended: true,
     },
     messages: {
-      missingStatus: 'Frontmatter does not contain a "status" field',
+      missingStatus: 'Metadata does not contain a "status" field (checked frontmatter and v2 bold-list)',
       invalidStatus: 'Status "{{status}}" is not one of: {{allowed}}',
     },
     defaultOptions: {
@@ -29,14 +29,14 @@ const rule: Rule<StatusEnumOptions> = {
     schema,
   },
   create(context) {
-    const fm = context.frontmatter;
-    if (!fm || typeof fm.status !== 'string') {
+    const meta = context.metadata;
+    if (!meta || typeof meta.status !== 'string') {
       context.report({ messageId: 'missingStatus', data: {} });
       return;
     }
 
     const { values, prefixValues, caseSensitive } = context.options;
-    const status = fm.status;
+    const status = meta.status;
     const compareStatus = caseSensitive ? status : status.toLowerCase();
     const compareValues = caseSensitive
       ? values

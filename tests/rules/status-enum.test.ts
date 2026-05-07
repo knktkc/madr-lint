@@ -70,6 +70,19 @@ describe('madr/status-enum', () => {
       // The `allowed` data field should be a string array
       expect(diagnostics[0]?.data?.allowed).toBeInstanceOf(Array);
     });
+
+    it('unknown-v2.md (v2 bold-list "pending") produces invalidStatus', () => {
+      const content = readFileSync(
+        join(fixturesDir, 'invalid', 'unknown-v2.md'),
+        'utf8',
+      );
+      const diagnostics = runRule(rule, { content, path: 'unknown-v2.md' });
+      expect(diagnostics).toHaveLength(1);
+      expect(diagnostics[0]).toMatchObject({
+        messageId: 'invalidStatus',
+        data: { status: 'pending' },
+      });
+    });
   });
 
   describe('caseSensitive option', () => {

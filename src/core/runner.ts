@@ -128,6 +128,9 @@ export function runRulesOnFile(
       get frontmatter() {
         return ensureParsed().frontmatter;
       },
+      get metadata() {
+        return ensureParsed().metadata;
+      },
       options: mergedOptions,
       report(d) {
         diagnostics.push({
@@ -248,6 +251,7 @@ export function buildProjectFile(file: FileContext): ProjectFile {
     path: file.path,
     content: file.content,
     frontmatter: parsed.frontmatter,
+    metadata: parsed.metadata,
     ast: parsed.ast,
   };
 }

@@ -169,19 +169,19 @@ Two rules need to switch from `context.frontmatter` to `context.metadata`:
 
 The spec.md and docs/rules/*.md for both should be updated to reflect that v2 is now supported.
 
-## Implementation status (M4 in progress)
+## Implementation status (M4 complete)
 
 | Aspect | Status |
 |---|---|
-| `metadata` field on `RuleContext` and `ProjectFile` | **pending** |
-| Bold-list extractor in `parser.ts` | **pending** |
-| `parseFile` returning `ParsedFile.metadata` | **pending** |
-| Runner populates `context.metadata` | **pending** |
-| `madr/status-enum` migrated to `metadata` + v2 fixtures | **pending** |
-| `madr/date-iso8601` migrated to `metadata` + v2 fixtures | **pending** |
-| Tests: extractor unit tests + v2 fixture tests for both rules | **pending** |
-| `add-rule` skill template documents `metadata` for Shape B rules | **pending** |
-| Conflict-resolution test (mixed-mode ADR) | **pending** |
+| `metadata` field on `RuleContext` and `ProjectFile` | **wired** in `src/core/types.ts` |
+| Bold-list extractor in `parser.ts` | **wired** (`extractBoldListMetadata`) |
+| `parseFile` returning `ParsedFile.metadata` | **wired** with `boldListMetadata` + combined `metadata` |
+| Runner populates `context.metadata` | **wired** — lazy getter in per-file pass, eager in `buildProjectFile` |
+| `madr/status-enum` migrated to `metadata` + v2 fixtures | **wired** — `versionCompat: ['v2', 'v3', 'v4']`, `accepted-v2.md` + `unknown-v2.md` |
+| `madr/date-iso8601` migrated to `metadata` + v2 fixtures | **wired** — same versionCompat, `canonical-v2.md` + `month-13-v2.md` |
+| Tests: extractor unit tests + v2 fixture tests for both rules | **wired** — 14 parser tests + v2 fixtures pass through existing rule test loops |
+| `add-rule` skill template documents `metadata` for Shape B rules | **wired** |
+| Conflict-resolution test (mixed-mode ADR) | **wired** in `tests/core/parser.test.ts` ("both: frontmatter wins on conflict") |
 
 ## Out of scope
 

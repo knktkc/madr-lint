@@ -211,12 +211,17 @@ const rule: Rule<<Camel>Options> = {
 export default rule;
 ```
 
-**Shape B — frontmatter-only:**
+**Shape B — frontmatter / metadata-only:**
 
 ```typescript
 create(_context) {
-  // GREEN phase: read context.frontmatter (lazy-parsed), validate fields,
-  // call context.report().
+  // GREEN phase: read context.metadata (combined frontmatter + v2 bold-list,
+  // see ADR-0006), validate fields, call context.report().
+  //
+  // Use context.frontmatter ONLY when the rule must validate strict YAML
+  // shape (e.g. a hypothetical `frontmatter-shape` rule). For format-
+  // agnostic field reads (status, date, decision-makers) use metadata —
+  // it gives the rule v2 + v3 + v4 compatibility for free.
 }
 ```
 

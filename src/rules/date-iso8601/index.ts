@@ -31,14 +31,14 @@ const rule: Rule<DateIso8601Options> = {
   meta: {
     name: 'madr/date-iso8601',
     type: 'perFile',
-    versionCompat: ['v3', 'v4'],
+    versionCompat: ['v2', 'v3', 'v4'],
     docs: {
-      description: 'Validate that ADR frontmatter date is a valid ISO 8601 calendar date (YYYY-MM-DD)',
+      description: 'Validate that ADR `date` (frontmatter or v2 bold-list) is a valid ISO 8601 calendar date (YYYY-MM-DD)',
       url: 'https://github.com/knktkc/madr-lint/blob/main/docs/rules/date-iso8601.md',
       recommended: true,
     },
     messages: {
-      missingDate: 'Frontmatter does not contain a "{{field}}" field',
+      missingDate: 'Metadata does not contain a "{{field}}" field (checked frontmatter and v2 bold-list)',
       invalidDate: 'Date "{{date}}" is not a valid ISO 8601 calendar date (YYYY-MM-DD)',
     },
     defaultOptions: {
@@ -47,10 +47,10 @@ const rule: Rule<DateIso8601Options> = {
     schema,
   },
   create(context) {
-    const fm = context.frontmatter;
+    const meta = context.metadata;
     const fieldName = context.options.field;
 
-    if (!fm) {
+    if (!meta) {
       context.report({
         messageId: 'missingDate',
         data: { field: fieldName },
@@ -58,7 +58,7 @@ const rule: Rule<DateIso8601Options> = {
       return;
     }
 
-    const raw = fm[fieldName];
+    const raw = meta[fieldName];
     const dateStr = normalizeDate(raw);
     if (dateStr === null) {
       context.report({

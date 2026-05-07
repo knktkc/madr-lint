@@ -82,8 +82,17 @@ export interface Diagnostic {
 export interface RuleContext<TOptions = Record<string, unknown>> {
   /** The file being linted. */
   file: FileContext;
-  /** Parsed YAML frontmatter, or null if absent. */
+  /**
+   * Parsed YAML frontmatter (v3/v4 only), or null if absent.
+   * Use this when the rule must validate strict YAML frontmatter shape.
+   */
   frontmatter: Record<string, unknown> | null;
+  /**
+   * Combined metadata: YAML frontmatter merged with v2 bold-list extracted
+   * from the body. Frontmatter wins on key conflict. null only when both
+   * are absent. See ADR-0006. Use this for format-agnostic field reads.
+   */
+  metadata: Record<string, unknown> | null;
   /** User-merged options for this rule (validated against rule.meta.schema). */
   options: TOptions;
   /** Emit a diagnostic. */
@@ -126,8 +135,13 @@ export interface ProjectFile {
   path: string;
   /** Raw file content (unparsed). */
   content: string;
-  /** Parsed YAML frontmatter, or null if absent. */
+  /** Parsed YAML frontmatter (v3/v4 only), or null if absent. */
   frontmatter: Record<string, unknown> | null;
+  /**
+   * Combined metadata: frontmatter merged with v2 bold-list extracted
+   * from the body. Frontmatter wins on key conflict. See ADR-0006.
+   */
+  metadata: Record<string, unknown> | null;
   /** mdast root of the body (frontmatter stripped). */
   ast: Root;
 }

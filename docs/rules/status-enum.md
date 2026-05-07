@@ -86,9 +86,11 @@ export default defineConfig({
 
 | Version | Applies | Notes |
 |---|---|---|
-| v2 | **NO** | v2 uses `- **Status**: Proposed` (bold-list in body). Files without YAML frontmatter trigger `missingStatus`. v2 status checking needs AST traversal of the body — deferred to a separate rule or future v2 migration. |
+| v2 | yes | bold-list `- **Status**: Proposed` in body. Extracted via the metadata bridge — see [ADR-0006](../adr/0006-v2-bold-list-bridge.md). |
 | v3 | yes | frontmatter `status: ...` |
 | v4 | yes | frontmatter `status: ...` |
+
+The rule reads `context.metadata.status`, which combines frontmatter and bold-list. Frontmatter wins on conflict.
 
 ## When to disable
 

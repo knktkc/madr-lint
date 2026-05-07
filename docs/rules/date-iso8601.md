@@ -52,7 +52,7 @@ date: 2025-12-31
 
 | Option | Type | Default | Description |
 |---|---|---|---|
-| `field` | `string` | `'date'` | Frontmatter key to read. Override for projects using `created` or `updated`. |
+| `field` | `string` | `'date'` | Metadata key to read (frontmatter or v2 bold-list, with key normalization). Override for projects using `created` or `updated`. |
 
 ```typescript
 // madr-lint.config.ts
