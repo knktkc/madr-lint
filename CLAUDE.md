@@ -152,3 +152,4 @@ ADRs use **MADR v4 frontmatter** format (this project's recommended target).
 - ADR-0003: TDD discipline as project convention
 - ADR-0004: Tooling adjustments (pnpm 10, vitest 4)
 - ADR-0005: Project rule API design (M2)
+- ADR-0006: v2 bold-list metadata bridge (M4)
