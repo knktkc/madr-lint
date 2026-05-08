@@ -1,10 +1,11 @@
 import { readFileSync } from 'node:fs';
-import { relative, sep } from 'node:path';
+import { relative, resolve, sep } from 'node:path';
 import { defineCommand, runMain } from 'citty';
+import { computeConfigHash } from './core/cache.js';
 import { loadConfig, resolveExtends, type ResolvedConfig } from './core/config.js';
 import { findAdrFiles } from './core/discover.js';
 import { shouldIgnore } from './core/ignore.js';
-import { lintFiles } from './core/lint.js';
+import { lintFiles, type CacheConfig } from './core/lint.js';
 import { textReporter } from './core/reporter.js';
 import type { AnyRule } from './core/types.js';
 import * as builtinRules from './rules/index.js';
@@ -28,6 +29,17 @@ const main = defineCommand({
     path: {
       type: 'positional',
       description: 'Path to ADR directory (overrides config.adrDir)',
+      required: false,
+    },
+    cache: {
+      type: 'boolean',
+      description:
+        'Use per-file content-hash cache (use --no-cache to disable)',
+      default: true,
+    },
+    'cache-dir': {
+      type: 'string',
+      description: 'Cache directory (default: .madr-lint/cache)',
       required: false,
     },
   },
@@ -59,12 +71,29 @@ const main = defineCommand({
       process.exit(0);
     }
 
+    // CLI flag wins over config — `--no-cache` sets args.cache=false,
+    // overriding `cache: true` from .madrlintrc.json.
+    const cacheEnabled = (args.cache ?? config.cache) === true;
+    const cacheDir = (args['cache-dir'] ?? config.cacheLocation) as string;
+    const cacheConfig: CacheConfig | null = cacheEnabled
+      ? {
+          dir: resolve(cwd, cacheDir),
+          configHash: computeConfigHash({
+            rules: config.rules,
+            ignorePatterns: config.ignorePatterns,
+            madrVersion: config.madrVersion,
+          }),
+          pkgVersion: pkg.version,
+        }
+      : null;
+
     const allRulesArray: AnyRule[] = Object.values(builtinRules);
     const result = lintFiles({
       rules: allRulesArray,
       ruleSeverity: config.rules,
       files,
       cwd,
+      cache: cacheConfig,
     });
 
     const rulesByName = new Map<string, AnyRule>(

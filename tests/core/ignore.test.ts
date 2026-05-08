@@ -59,6 +59,21 @@ describe('core/ignore', () => {
     });
   });
 
+  describe('hyphen-vs-no-hyphen edge cases', () => {
+    it('exact pattern "9999.md" matches the no-hyphen file', () => {
+      expect(shouldIgnore('docs/adr/9999.md', ['9999.md'])).toBe(true);
+    });
+
+    it('wildcard "9999-*" requires the hyphen — does NOT match "9999.md"', () => {
+      expect(shouldIgnore('docs/adr/9999.md', ['9999-*'])).toBe(false);
+    });
+
+    it('wildcard "9999*" (no hyphen) matches both forms', () => {
+      expect(shouldIgnore('docs/adr/9999.md', ['9999*'])).toBe(true);
+      expect(shouldIgnore('docs/adr/9999-x.md', ['9999*'])).toBe(true);
+    });
+  });
+
   describe('multiple patterns (any match wins)', () => {
     it('returns true if any pattern matches', () => {
       const patterns = ['README.md', 'template.md', '9999-*'];

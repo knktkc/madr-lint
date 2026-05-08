@@ -31,8 +31,8 @@ These decisions are very expensive to retrofit. They are baked into the rule API
 4. **Pre-compile AJV schemas + regex at config load time**. ReDoS-guarded via `safe-regex2` at both runtime (per-rule, in `assertSafeRegex`) and CI (static scan over schemas + defaultOptions + source-literal regex). Per-file regex execution has a 5ms soft budget.
    - **Status (post-R11)**: AJV **wired** in `src/core/runner.ts` (per-rule WeakMap-cached validators, throws `RuleOptionsError` on invalid options); `safe-regex2` **wired** at runtime via `src/core/regex-safety.ts` (used by `madr/filename-format`) and at CI via `scripts/redos-scan.ts` (schemas + defaultOptions + literal regex in src/**/*.ts); per-file regex 5ms budget **pending**
 
-5. **Content-hash cache** at `.madr-lint/cache/`, key = `sha1(content + rule-version-vector + config-hash)`. Persistent across runs.
-   - **Status (M0)**: **pending**; targeted at M2+
+5. **Content-hash cache** at `.madr-lint/cache/manifest.json`. Per-file cache key = `sha1(content)`; manifest carries `pkgVersion` + `configHash` for global invalidation. Project (cross-file) rules always re-run.
+   - **Status (post-R11)**: **wired** in `src/core/cache.ts` + `src/core/lint.ts`. CLI exposes `--cache` (default true) / `--no-cache` and `--cache-dir`. Manifest invalidation on `pkgVersion` or `configHash` change. Verified ~38% lint speedup on warm self-dogfood.
 
 ## TDD discipline (ADR-0003)
 

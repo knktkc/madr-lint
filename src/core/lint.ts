@@ -1,6 +1,14 @@
 import { readFileSync } from 'node:fs';
 import { relative, sep } from 'node:path';
 import {
+  computeContentHash,
+  loadManifest,
+  manifestPath,
+  saveManifest,
+  type CacheEntry,
+  type CacheManifest,
+} from './cache.js';
+import {
   buildProjectFile,
   runRulesOnFile,
   runRulesOnProject,
@@ -27,6 +35,15 @@ import {
   type Severity,
 } from './types.js';
 
+export interface CacheConfig {
+  /** Directory under which manifest.json is read/written. */
+  dir: string;
+  /** Stable hash of the resolved config. Mismatch invalidates the cache. */
+  configHash: string;
+  /** madr-lint package version. Mismatch invalidates the cache. */
+  pkgVersion: string;
+}
+
 export interface LintOptions {
   /** All available rules (per-file or project). The orchestrator picks
    *  enabled ones via ruleSeverity and dispatches to the right runner. */
@@ -37,10 +54,17 @@ export interface LintOptions {
   files: readonly string[];
   /** Working directory. Diagnostics' `path` is reported relative to this. */
   cwd: string;
+  /**
+   * If set, persist per-file diagnostics keyed by content hash to enable
+   * fast re-runs of unchanged files. Project (cross-file) rules always
+   * re-run regardless of the cache. Pass `null` to disable.
+   */
+  cache?: CacheConfig | null;
 }
 
 export interface LintResult {
   filesChecked: number;
+  filesFromCache: number;
   diagnostics: Diagnostic[];
 }
 
@@ -72,30 +96,52 @@ export function lintFiles(opts: LintOptions): LintResult {
     else perFileRules.push(rule);
   }
 
+  // ── Cache setup ──────────────────────────────────────────────────
+  let manifest: CacheManifest | null = null;
+  let filesFromCache = 0;
+  if (opts.cache) {
+    const path = manifestPath(opts.cache.dir);
+    const loaded = loadManifest(path);
+    if (
+      loaded &&
+      loaded.version === opts.cache.pkgVersion &&
+      loaded.configHash === opts.cache.configHash
+    ) {
+      manifest = loaded;
+    } else {
+      manifest = {
+        version: opts.cache.pkgVersion,
+        configHash: opts.cache.configHash,
+        files: {},
+      };
+    }
+  }
+
   // ── Per-file pass ────────────────────────────────────────────────
   for (const file of fileEntries) {
-    const fileContext = {
-      content: file.content,
-      path: file.relativePath,
-    };
-
-    const errorRules: Rule[] = [];
-    const warnRules: Rule[] = [];
-    for (const rule of perFileRules) {
-      const sev = resolveSeverity(opts.ruleSeverity[rule.meta.name]);
-      if (sev === 'off') continue;
-      if (sev === 'error') errorRules.push(rule);
-      else warnRules.push(rule);
-    }
-
-    if (errorRules.length > 0) {
-      allDiagnostics.push(
-        ...runRulesOnFile(errorRules, fileContext, { severity: 'error' }),
+    if (manifest) {
+      const contentHash = computeContentHash(file.content);
+      const entry = manifest.files[file.relativePath];
+      if (entry && entry.contentHash === contentHash) {
+        allDiagnostics.push(...entry.perFileDiagnostics);
+        filesFromCache++;
+        continue;
+      }
+      // Cache miss — run rules and store result.
+      const fileDiagnostics = runPerFileRulesForFile(
+        perFileRules,
+        opts.ruleSeverity,
+        file,
       );
-    }
-    if (warnRules.length > 0) {
+      allDiagnostics.push(...fileDiagnostics);
+      const next: CacheEntry = {
+        contentHash,
+        perFileDiagnostics: fileDiagnostics,
+      };
+      manifest.files[file.relativePath] = next;
+    } else {
       allDiagnostics.push(
-        ...runRulesOnFile(warnRules, fileContext, { severity: 'warn' }),
+        ...runPerFileRulesForFile(perFileRules, opts.ruleSeverity, file),
       );
     }
   }
@@ -129,10 +175,49 @@ export function lintFiles(opts: LintOptions): LintResult {
     }
   }
 
+  // ── Persist cache ────────────────────────────────────────────────
+  if (manifest && opts.cache) {
+    saveManifest(manifestPath(opts.cache.dir), manifest);
+  }
+
   return {
     filesChecked: opts.files.length,
+    filesFromCache,
     diagnostics: allDiagnostics,
   };
+}
+
+function runPerFileRulesForFile(
+  perFileRules: readonly Rule[],
+  ruleSeverity: Record<string, RuleSeverity>,
+  file: { relativePath: string; content: string },
+): Diagnostic[] {
+  const fileContext = {
+    content: file.content,
+    path: file.relativePath,
+  };
+
+  const errorRules: Rule[] = [];
+  const warnRules: Rule[] = [];
+  for (const rule of perFileRules) {
+    const sev = resolveSeverity(ruleSeverity[rule.meta.name]);
+    if (sev === 'off') continue;
+    if (sev === 'error') errorRules.push(rule);
+    else warnRules.push(rule);
+  }
+
+  const diagnostics: Diagnostic[] = [];
+  if (errorRules.length > 0) {
+    diagnostics.push(
+      ...runRulesOnFile(errorRules, fileContext, { severity: 'error' }),
+    );
+  }
+  if (warnRules.length > 0) {
+    diagnostics.push(
+      ...runRulesOnFile(warnRules, fileContext, { severity: 'warn' }),
+    );
+  }
+  return diagnostics;
 }
 
 function resolveSeverity(config: RuleSeverity | undefined): Severity | 'off' {

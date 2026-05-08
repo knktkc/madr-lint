@@ -44,3 +44,6 @@ benchmarks/*/*.json
 
 # Profiles (0x / clinic flame graphs are dev-only)
 profiles/
+
+# madr-lint per-file cache (self-dogfood)
+.madr-lint/

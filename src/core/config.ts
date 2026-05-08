@@ -13,6 +13,10 @@ export interface ResolvedConfig {
   ignorePatterns: string[];
   /** MADR version target. Default: 'auto'. */
   madrVersion: MadrVersion | 'auto';
+  /** Whether to use per-file content-hash cache. Default: true. */
+  cache: boolean;
+  /** Cache directory (relative to cwd). Default: '.madr-lint/cache'. */
+  cacheLocation: string;
 }
 
 /** Config files searched in order. Phase 1: JSON only. */
@@ -51,5 +55,7 @@ export function resolveExtends(config: MadrLintConfig): ResolvedConfig {
     rules: { ...baseRules, ...config.rules },
     ignorePatterns: config.ignorePatterns ?? [],
     madrVersion: config.madrVersion ?? 'auto',
+    cache: config.cache ?? true,
+    cacheLocation: config.cacheLocation ?? '.madr-lint/cache',
   };
 }

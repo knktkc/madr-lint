@@ -59,6 +59,10 @@ export interface MadrLintConfig {
    * `9999-*`). Full glob support is on the roadmap.
    */
   ignorePatterns?: string[];
+  /** Enable per-file content-hash cache. Default: true. */
+  cache?: boolean;
+  /** Cache directory. Default: '.madr-lint/cache'. */
+  cacheLocation?: string;
 }
 
 /**
