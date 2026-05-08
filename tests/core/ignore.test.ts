@@ -74,6 +74,47 @@ describe('core/ignore', () => {
     });
   });
 
+  describe('full glob (picomatch)', () => {
+    it('matches **/draft-*.md anywhere in tree', () => {
+      expect(
+        shouldIgnore('docs/adr/draft-experiment.md', ['**/draft-*.md']),
+      ).toBe(true);
+      expect(
+        shouldIgnore('libs/x/adr/draft-001.md', ['**/draft-*.md']),
+      ).toBe(true);
+    });
+
+    it('matches a single ? wildcard for one character', () => {
+      expect(
+        shouldIgnore('docs/adr/000a-x.md', ['000?-*.md']),
+      ).toBe(true);
+      expect(
+        shouldIgnore('docs/adr/0001-x.md', ['000?-*.md']),
+      ).toBe(true);
+    });
+
+    it('matches character classes', () => {
+      expect(
+        shouldIgnore('docs/adr/9000-x.md', ['9[0-9][0-9][0-9]-*.md']),
+      ).toBe(true);
+      expect(
+        shouldIgnore('docs/adr/9abc-x.md', ['9[0-9][0-9][0-9]-*.md']),
+      ).toBe(false);
+    });
+
+    it('matches alternation { , }', () => {
+      expect(
+        shouldIgnore('docs/adr/template.md', ['{template,draft}.md']),
+      ).toBe(true);
+      expect(
+        shouldIgnore('docs/adr/draft.md', ['{template,draft}.md']),
+      ).toBe(true);
+      expect(
+        shouldIgnore('docs/adr/0001-x.md', ['{template,draft}.md']),
+      ).toBe(false);
+    });
+  });
+
   describe('multiple patterns (any match wins)', () => {
     it('returns true if any pattern matches', () => {
       const patterns = ['README.md', 'template.md', '9999-*'];

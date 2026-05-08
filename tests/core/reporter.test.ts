@@ -1,5 +1,10 @@
 import { beforeAll, describe, expect, it } from 'vitest';
-import { textReporter } from '../../src/core/reporter.js';
+import {
+  jsonReporter,
+  reporters,
+  sarifReporter,
+  textReporter,
+} from '../../src/core/reporter.js';
 import type { AnyRule, Diagnostic, Rule } from '../../src/core/types.js';
 
 beforeAll(() => {
@@ -97,5 +102,108 @@ describe('core/reporter — text', () => {
       { ruleName: 'test/r', messageId: 'x', severity: 'error', path: 'a.md', data: {} },
     ];
     expect(textReporter.format(diagnostics, rules)).toContain('{{notProvided}}');
+  });
+});
+
+describe('core/reporter — json', () => {
+  it('emits empty results array with zero counts when there are no diagnostics', () => {
+    const out = jsonReporter.format([], new Map());
+    const parsed = JSON.parse(out);
+    expect(parsed.version).toBe(1);
+    expect(parsed.summary).toEqual({ total: 0, errors: 0, warnings: 0 });
+    expect(parsed.results).toEqual([]);
+  });
+
+  it('renders messages and counts errors / warnings separately', () => {
+    const rules = new Map<string, AnyRule>([
+      ['test/r', makeRule('test/r', { x: 'value {{n}}' })],
+    ]);
+    const diagnostics: Diagnostic[] = [
+      {
+        ruleName: 'test/r',
+        messageId: 'x',
+        severity: 'error',
+        path: 'a.md',
+        data: { n: 1 },
+      },
+      {
+        ruleName: 'test/r',
+        messageId: 'x',
+        severity: 'warn',
+        path: 'b.md',
+        data: { n: 2 },
+      },
+    ];
+    const out = JSON.parse(jsonReporter.format(diagnostics, rules));
+    expect(out.summary).toEqual({ total: 2, errors: 1, warnings: 1 });
+    expect(out.results).toHaveLength(2);
+    expect(out.results[0]).toMatchObject({
+      path: 'a.md',
+      ruleName: 'test/r',
+      messageId: 'x',
+      severity: 'error',
+      message: 'value 1',
+      data: { n: 1 },
+    });
+  });
+
+  it('produces parseable JSON', () => {
+    const out = jsonReporter.format([], new Map());
+    expect(() => JSON.parse(out)).not.toThrow();
+  });
+});
+
+describe('core/reporter — sarif', () => {
+  it('emits a valid SARIF 2.1.0 envelope', () => {
+    const out = JSON.parse(sarifReporter.format([], new Map()));
+    expect(out.version).toBe('2.1.0');
+    expect(out.$schema).toContain('sarif');
+    expect(out.runs).toHaveLength(1);
+    expect(out.runs[0].tool.driver.name).toBe('madr-lint');
+    expect(out.runs[0].results).toEqual([]);
+  });
+
+  it('maps each unique ruleName into the rules array exactly once', () => {
+    const rules = new Map<string, AnyRule>([
+      ['test/a', makeRule('test/a', { x: 'msg-a' })],
+      ['test/b', makeRule('test/b', { x: 'msg-b' })],
+    ]);
+    const diagnostics: Diagnostic[] = [
+      { ruleName: 'test/a', messageId: 'x', severity: 'error', path: 'a.md' },
+      { ruleName: 'test/a', messageId: 'x', severity: 'error', path: 'b.md' },
+      { ruleName: 'test/b', messageId: 'x', severity: 'warn', path: 'b.md' },
+    ];
+    const out = JSON.parse(sarifReporter.format(diagnostics, rules));
+    expect(out.runs[0].tool.driver.rules).toHaveLength(2);
+    expect(out.runs[0].results).toHaveLength(3);
+    expect(out.runs[0].results[0].level).toBe('error');
+    expect(out.runs[0].results[2].level).toBe('warning');
+  });
+
+  it('attaches each result to its file path via physicalLocation', () => {
+    const rules = new Map<string, AnyRule>([
+      ['test/a', makeRule('test/a', { x: 'msg' })],
+    ]);
+    const diagnostics: Diagnostic[] = [
+      {
+        ruleName: 'test/a',
+        messageId: 'x',
+        severity: 'error',
+        path: 'docs/adr/0001.md',
+      },
+    ];
+    const out = JSON.parse(sarifReporter.format(diagnostics, rules));
+    expect(out.runs[0].results[0].locations[0].physicalLocation).toEqual({
+      artifactLocation: { uri: 'docs/adr/0001.md', uriBaseId: '%SRCROOT%' },
+      region: { startLine: 1 },
+    });
+  });
+});
+
+describe('core/reporter — registry', () => {
+  it('exposes text, json, and sarif via the reporters map', () => {
+    expect(reporters.text).toBe(textReporter);
+    expect(reporters.json).toBe(jsonReporter);
+    expect(reporters.sarif).toBe(sarifReporter);
   });
 });

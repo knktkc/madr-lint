@@ -6,7 +6,7 @@ import { loadConfig, resolveExtends, type ResolvedConfig } from './core/config.j
 import { findAdrFiles } from './core/discover.js';
 import { shouldIgnore } from './core/ignore.js';
 import { lintFiles, type CacheConfig } from './core/lint.js';
-import { textReporter } from './core/reporter.js';
+import { reporters, type ReporterFormat } from './core/reporter.js';
 import type { AnyRule } from './core/types.js';
 import * as builtinRules from './rules/index.js';
 
@@ -26,9 +26,10 @@ const main = defineCommand({
     description: 'A linter for MADR (Markdown Architectural Decision Records)',
   },
   args: {
-    path: {
+    paths: {
       type: 'positional',
-      description: 'Path to ADR directory (overrides config.adrDir)',
+      description:
+        'One or more paths (files or directories). Defaults to config.adrDir',
       required: false,
     },
     cache: {
@@ -42,6 +43,11 @@ const main = defineCommand({
       description: 'Cache directory (default: .madr-lint/cache)',
       required: false,
     },
+    format: {
+      type: 'string',
+      description: 'Reporter format: text (default), json, or sarif',
+      default: 'text',
+    },
   },
   run({ args }) {
     const cwd = process.cwd();
@@ -54,8 +60,21 @@ const main = defineCommand({
       config = resolveExtends({ extends: ['madr-lint:recommended'] });
     }
 
-    const adrDir = args.path ?? config.adrDir;
-    const allFiles = findAdrFiles(adrDir);
+    // citty: positionals collect into `args._` (array of strings). If
+    // empty, fall back to the config's adrDir.
+    const positionals = (args._ as string[] | undefined) ?? [];
+    const inputs = positionals.length > 0 ? positionals : [config.adrDir];
+
+    const seen = new Set<string>();
+    const allFiles: string[] = [];
+    for (const input of inputs) {
+      for (const file of findAdrFiles(input)) {
+        if (!seen.has(file)) {
+          seen.add(file);
+          allFiles.push(file);
+        }
+      }
+    }
 
     // Apply ignorePatterns from config (e.g. README.md, template.md, 9999-*).
     // POSIX-normalize so path-suffix patterns work cross-platform on Windows.
@@ -67,7 +86,8 @@ const main = defineCommand({
     if (files.length === 0) {
       const skipped = allFiles.length - files.length;
       const note = skipped > 0 ? ` (${skipped} ignored by config)` : '';
-      console.log(`No .md files to lint in ${adrDir}${note}`);
+      const where = inputs.length === 1 ? inputs[0] : inputs.join(', ');
+      console.log(`No .md files to lint in ${where}${note}`);
       process.exit(0);
     }
 
@@ -99,7 +119,15 @@ const main = defineCommand({
     const rulesByName = new Map<string, AnyRule>(
       allRulesArray.map((r) => [r.meta.name, r]),
     );
-    console.log(textReporter.format(result.diagnostics, rulesByName));
+    const format = (args.format ?? 'text') as ReporterFormat;
+    const reporter = reporters[format];
+    if (!reporter) {
+      console.error(
+        `Unknown --format "${format}". Available: ${Object.keys(reporters).join(', ')}`,
+      );
+      process.exit(2);
+    }
+    console.log(reporter.format(result.diagnostics, rulesByName));
 
     const errorCount = result.diagnostics.filter(
       (d) => d.severity === 'error',

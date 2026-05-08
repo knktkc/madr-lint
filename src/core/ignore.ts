@@ -1,17 +1,21 @@
 import { basename } from 'node:path';
+import picomatch from 'picomatch';
 
 /**
  * Should the given relative path be excluded from linting?
  *
- * Patterns supported in v0.1 (intentionally simple):
- * - Exact basename match: `README.md` matches `docs/adr/README.md`
- * - Exact relative-path match: `docs/adr/draft.md` matches itself
- * - Path suffix match: any pattern matches when relativePath endsWith `/<pattern>`
- * - Trailing wildcard: `9999-*` matches files whose basename starts with `9999-`
+ * Patterns are tested in three forms (any match wins):
+ * - **Full glob via picomatch** against the relative POSIX path:
+ *   `docs/**\/draft-*.md`, `**\/template.md`, `9999-*.md`
+ * - Full glob via picomatch against the file's basename, so patterns
+ *   like `README.md` or `9999-*` work without a `**\/` prefix.
+ * - Exact relative-path match (defensive — picomatch with default
+ *   options also handles this, but we keep the explicit branch for
+ *   clarity and to avoid surprises if picomatch ever changes default
+ *   `dot`/`bash` semantics).
  *
- * Full glob (`**`, `?`, character classes) is deferred to a future
- * minor release with a proper glob library. The Phase 1 form covers
- * the typical cases (README/template ignore, "draft" prefix, etc.).
+ * Picomatch is invoked with `{ dot: true }` so dotfiles (rare for ADRs
+ * but possible — e.g. `.archived/*.md`) are matched naturally.
  */
 export function shouldIgnore(
   relativePath: string,
@@ -30,12 +34,17 @@ function matchesPattern(
   base: string,
   pattern: string,
 ): boolean {
-  if (pattern.endsWith('*')) {
-    const prefix = pattern.slice(0, -1);
-    return base.startsWith(prefix);
-  }
-  if (base === pattern) return true;
   if (relativePath === pattern) return true;
-  if (relativePath.endsWith(`/${pattern}`)) return true;
+  const matcher = picomatch(pattern, { dot: true });
+  if (matcher(relativePath)) return true;
+  if (matcher(base)) return true;
+  // Back-compat shortcut: a pattern like `adr/template.md` (sub-path
+  // without leading `**/`) should match `docs/adr/template.md`. Also
+  // handles `adr/9999-*` against `docs/adr/9999-x.md` via picomatch
+  // applied to the suffix.
+  if (pattern.includes('/') && !pattern.startsWith('**/')) {
+    const suffixMatcher = picomatch(`**/${pattern}`, { dot: true });
+    if (suffixMatcher(relativePath)) return true;
+  }
   return false;
 }

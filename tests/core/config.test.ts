@@ -76,5 +76,55 @@ describe('core/config', () => {
       writeFileSync(join(dir, '.madrlintrc.json'), '{ not valid json');
       expect(() => loadConfig(dir)).toThrow();
     });
+
+    it('parses .madrlintrc.mjs (ESM)', () => {
+      writeFileSync(
+        join(dir, '.madrlintrc.mjs'),
+        `export default { adrDir: 'mjs-adr', extends: ['madr-lint:recommended'] };`,
+      );
+      const config = loadConfig(dir);
+      expect(config.adrDir).toBe('mjs-adr');
+      expect(config.rules['madr/filename-format']).toBe('error');
+    });
+
+    it('parses .madrlintrc.ts (TypeScript via jiti)', () => {
+      writeFileSync(
+        join(dir, '.madrlintrc.ts'),
+        [
+          'import type { MadrLintConfig } from "../../src/index.js";',
+          'const config: MadrLintConfig = {',
+          '  adrDir: "ts-adr",',
+          '  extends: ["madr-lint:recommended"],',
+          '  ignorePatterns: ["template.md"],',
+          '};',
+          'export default config;',
+        ].join('\n'),
+      );
+      const config = loadConfig(dir);
+      expect(config.adrDir).toBe('ts-adr');
+      expect(config.rules['madr/filename-format']).toBe('error');
+      expect(config.ignorePatterns).toEqual(['template.md']);
+    });
+
+    it('parses madr-lint.config.js (CommonJS-style export)', () => {
+      writeFileSync(
+        join(dir, 'madr-lint.config.js'),
+        `export default { adrDir: 'cfg-js' };`,
+      );
+      const config = loadConfig(dir);
+      expect(config.adrDir).toBe('cfg-js');
+    });
+
+    it('JSON wins over JS when both exist', () => {
+      writeFileSync(
+        join(dir, '.madrlintrc.json'),
+        JSON.stringify({ adrDir: 'from-json' }),
+      );
+      writeFileSync(
+        join(dir, '.madrlintrc.mjs'),
+        `export default { adrDir: 'from-mjs' };`,
+      );
+      expect(loadConfig(dir).adrDir).toBe('from-json');
+    });
   });
 });

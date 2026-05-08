@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { createJiti } from 'jiti';
 import { recommended } from '../configs/recommended.js';
 import type { MadrLintConfig } from '../index.js';
 import type { MadrVersion, RuleSeverity } from './types.js';
@@ -19,22 +20,52 @@ export interface ResolvedConfig {
   cacheLocation: string;
 }
 
-/** Config files searched in order. Phase 1: JSON only. */
-const CONFIG_FILES = ['.madrlintrc.json'];
+/**
+ * Config file resolution order. First match wins.
+ *
+ * `.json` is parsed directly (no module loader), so it stays the fastest
+ * and dependency-free path. The other extensions go through `jiti`,
+ * which transpiles TS/ESM/CJS on the fly.
+ */
+const CONFIG_FILES = [
+  '.madrlintrc.json',
+  '.madrlintrc.ts',
+  '.madrlintrc.mts',
+  '.madrlintrc.js',
+  '.madrlintrc.mjs',
+  '.madrlintrc.cjs',
+  'madr-lint.config.ts',
+  'madr-lint.config.mts',
+  'madr-lint.config.js',
+  'madr-lint.config.mjs',
+  'madr-lint.config.cjs',
+];
 
 /**
  * Loads and resolves a config from `cwd`. If no config file is found,
  * returns the defaults (no rules enabled — caller can opt into the
  * recommended preset by extending).
+ *
+ * `.json` is read synchronously and parsed inline. All other extensions
+ * are loaded via `jiti`, supporting TypeScript and both module systems.
  */
 export function loadConfig(cwd: string): ResolvedConfig {
   for (const name of CONFIG_FILES) {
     const path = resolve(cwd, name);
-    if (existsSync(path)) {
-      const raw = readFileSync(path, 'utf8');
-      const parsed = JSON.parse(raw) as MadrLintConfig;
+    if (!existsSync(path)) continue;
+
+    if (name.endsWith('.json')) {
+      const parsed = JSON.parse(readFileSync(path, 'utf8')) as MadrLintConfig;
       return resolveExtends(parsed);
     }
+
+    const jiti = createJiti(import.meta.url, { interopDefault: true });
+    const loaded = jiti(path) as MadrLintConfig | { default: MadrLintConfig };
+    const config: MadrLintConfig =
+      typeof loaded === 'object' && loaded !== null && 'default' in loaded
+        ? (loaded.default as MadrLintConfig)
+        : (loaded as MadrLintConfig);
+    return resolveExtends(config);
   }
   return resolveExtends({});
 }

@@ -8,6 +8,8 @@ export interface Reporter {
   ): string;
 }
 
+export type ReporterFormat = 'text' | 'json' | 'sarif';
+
 /**
  * Human-readable reporter for terminal output. Groups diagnostics by file,
  * interpolates {{placeholders}} from `data` against the rule's message
@@ -77,3 +79,96 @@ function formatSummary(errors: number, warnings: number): string {
   if (warnings > 0) parts.push(`${warnings} ${warnings === 1 ? 'warning' : 'warnings'}`);
   return parts.join(', ');
 }
+
+/**
+ * Machine-readable JSON reporter. Stable shape — additive changes only,
+ * tagged via `version`. Tools can `JSON.parse` stdout and consume `results`
+ * directly without scraping the human-readable formatter.
+ */
+export const jsonReporter: Reporter = {
+  format(diagnostics, rulesByName) {
+    const errors = diagnostics.filter((d) => d.severity === 'error').length;
+    const warnings = diagnostics.filter((d) => d.severity === 'warn').length;
+    const payload = {
+      version: 1,
+      summary: {
+        total: diagnostics.length,
+        errors,
+        warnings,
+      },
+      results: diagnostics.map((d) => ({
+        path: d.path,
+        ruleName: d.ruleName,
+        messageId: d.messageId,
+        severity: d.severity,
+        message: renderMessage(d, rulesByName),
+        data: d.data ?? {},
+      })),
+    };
+    return JSON.stringify(payload, null, 2);
+  },
+};
+
+/**
+ * SARIF 2.1.0 reporter. Emits a minimal-but-valid Static Analysis Results
+ * Interchange Format document so GitHub Code Scanning, VS Code SARIF
+ * Viewer, and other consumers can ingest madr-lint results.
+ *
+ * Spec: https://docs.oasis-open.org/sarif/sarif/v2.1.0/sarif-v2.1.0.html
+ */
+export const sarifReporter: Reporter = {
+  format(diagnostics, rulesByName) {
+    const ruleNames = [...new Set(diagnostics.map((d) => d.ruleName))];
+    const ruleIndex = new Map(ruleNames.map((name, i) => [name, i]));
+
+    const sarifRules = ruleNames.map((name) => {
+      const rule = rulesByName.get(name);
+      return {
+        id: name,
+        name: name.replace(/[^A-Za-z0-9]/g, '_'),
+        shortDescription: { text: rule?.meta.docs.description ?? name },
+        helpUri: rule?.meta.docs.url,
+      };
+    });
+
+    const sarifResults = diagnostics.map((d) => ({
+      ruleId: d.ruleName,
+      ruleIndex: ruleIndex.get(d.ruleName) ?? 0,
+      level: d.severity === 'error' ? 'error' : 'warning',
+      message: { text: renderMessage(d, rulesByName) },
+      locations: [
+        {
+          physicalLocation: {
+            artifactLocation: { uri: d.path, uriBaseId: '%SRCROOT%' },
+            region: { startLine: 1 },
+          },
+        },
+      ],
+    }));
+
+    const sarif = {
+      $schema:
+        'https://schemastore.azurewebsites.net/schemas/json/sarif-2.1.0.json',
+      version: '2.1.0',
+      runs: [
+        {
+          tool: {
+            driver: {
+              name: 'madr-lint',
+              informationUri: 'https://github.com/knktkc/madr-lint',
+              rules: sarifRules,
+            },
+          },
+          results: sarifResults,
+        },
+      ],
+    };
+    return JSON.stringify(sarif, null, 2);
+  },
+};
+
+export const reporters: Record<ReporterFormat, Reporter> = {
+  text: textReporter,
+  json: jsonReporter,
+  sarif: sarifReporter,
+};
