@@ -1,7 +1,7 @@
 {
   "name": "madr-lint",
   "version": "0.1.0-alpha.0",
-  "description": "A linter for MADR (Markdown Architectural Decision Records) — structure, numbering, status, supersedes integrity",
+  "description": "Linter for MADR (Markdown Architectural Decision Records) — supports v2 bold-list and v3/v4 frontmatter. Validates filename pattern, required sections, status enum, ISO 8601 dates, numbering uniqueness/gaps, supersedes bidirectionality, and inter-ADR link integrity.",
   "type": "module",
   "private": true,
   "bin": {
@@ -18,7 +18,8 @@
   "files": [
     "dist",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "CHANGELOG.md"
   ],
   "engines": {
     "node": ">=22.0.0"
@@ -38,11 +39,19 @@
   },
   "keywords": [
     "madr",
+    "madr-v2",
+    "madr-v3",
+    "madr-v4",
     "adr",
+    "architecture",
+    "architecture-decision-records",
+    "decision-records",
     "lint",
     "linter",
-    "architecture-decision-records",
-    "markdown"
+    "markdown",
+    "markdown-lint",
+    "cli",
+    "typescript"
   ],
   "license": "MIT",
   "author": "t.kaneko",

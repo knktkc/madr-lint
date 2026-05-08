@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { relative } from 'node:path';
+import { relative, sep } from 'node:path';
 import { defineCommand, runMain } from 'citty';
 import { loadConfig, resolveExtends, type ResolvedConfig } from './core/config.js';
 import { findAdrFiles } from './core/discover.js';
@@ -8,6 +8,11 @@ import { lintFiles } from './core/lint.js';
 import { textReporter } from './core/reporter.js';
 import type { AnyRule } from './core/types.js';
 import * as builtinRules from './rules/index.js';
+
+function toPosix(p: string): string {
+  if (sep === '/') return p;
+  return p.split(sep).join('/');
+}
 
 const pkg = JSON.parse(
   readFileSync(new URL('../package.json', import.meta.url), 'utf8'),
@@ -40,9 +45,11 @@ const main = defineCommand({
     const adrDir = args.path ?? config.adrDir;
     const allFiles = findAdrFiles(adrDir);
 
-    // Apply ignorePatterns from config (e.g. README.md, template.md, 9999-*)
+    // Apply ignorePatterns from config (e.g. README.md, template.md, 9999-*).
+    // POSIX-normalize so path-suffix patterns work cross-platform on Windows.
     const files = allFiles.filter(
-      (absPath) => !shouldIgnore(relative(cwd, absPath), config.ignorePatterns),
+      (absPath) =>
+        !shouldIgnore(toPosix(relative(cwd, absPath)), config.ignorePatterns),
     );
 
     if (files.length === 0) {

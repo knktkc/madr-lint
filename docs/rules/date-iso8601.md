@@ -69,7 +69,7 @@ export default defineConfig({
 
 | Version | Applies | Notes |
 |---|---|---|
-| v2 | **NO** | bold-list `- **Date**: 2026-05-01` is body content; this rule reads YAML frontmatter only. |
+| v2 | yes | bold-list `- **Date**: 2026-05-01` in body. Extracted via the metadata bridge — see [ADR-0006](../adr/0006-v2-bold-list-bridge.md). |
 | v3 | yes | frontmatter `date: ...` |
 | v4 | yes | frontmatter `date: ...` |
 

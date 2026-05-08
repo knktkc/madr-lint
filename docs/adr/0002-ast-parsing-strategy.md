@@ -72,8 +72,8 @@ This ADR was adopted on 2026-05-01. Implementation lands incrementally:
 | Pre-compiled AJV options validation | **wired** in `src/core/runner.ts` (per-rule WeakMap-cached validators, throws `RuleOptionsError` on invalid options) |
 | Rule error isolation (per-rule try/catch around `create()` + handlers) | **wired** in `src/core/runner.ts` — buggy rules emit `core/internal-error` diagnostics (severity hardcoded `error`), other rules continue |
 | Public API (`runRule` / `runRulesOnFile` / `parseFile` / `RuleOptionsError`) | **wired** — exported from `src/index.ts` and `dist/index.d.ts` |
-| `safe-regex2` ReDoS guard in CI | dependency **installed**, CI integration **pending** (planned via `bootstrap-ci` skill `redos` job) |
-| Content-hash cache | **pending** (M2+) |
+| `safe-regex2` ReDoS guard in CI | dependency **installed**; `redos` job **stub-wired** in CI (`.github/workflows/ci.yml`); `scripts/redos-scan.mjs` body **pending** |
+| Content-hash cache | **pending** (M3+) |
 
 The runner is now ready for the first AST-using rule (`madr/required-sections`). Adding it should require only the rule file + fixtures + test — no further runner work. The `tests/helpers/run-rule.ts` helper is now a thin re-export of `src/core/runner.ts`.
 

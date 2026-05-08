@@ -34,7 +34,14 @@ export function parseFile(content: string): ParsedFile {
 
   let metadata: Record<string, unknown> | null = null;
   if (frontmatter && boldListMetadata) {
-    metadata = { ...boldListMetadata, ...frontmatter };
+    // Frontmatter wins on conflict, BUT explicit null/undefined are
+    // skipped so that `status: ~` in YAML doesn't blank a present
+    // bold-list value (counterintuitive UX otherwise).
+    const frontmatterDefined: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(frontmatter)) {
+      if (v !== null && v !== undefined) frontmatterDefined[k] = v;
+    }
+    metadata = { ...boldListMetadata, ...frontmatterDefined };
   } else if (frontmatter) {
     metadata = frontmatter;
   } else if (boldListMetadata) {

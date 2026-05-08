@@ -10,11 +10,7 @@ the allowed enum.
 ## MADR version compatibility
 
 - **v3, v4**: frontmatter form `status: proposed` → **supported**
-- **v2**: bold-list form `- **Status**: Proposed` → **NOT supported in
-  this rule** (deferred to a future v2 migration; v2 status checking
-  needs AST traversal of the body, separate from this rule's frontmatter
-  scope). Files in v2 format will trigger `missingStatus` because no
-  YAML frontmatter exists.
+- **v2**: bold-list form `- **Status**: Proposed` → **supported** via the metadata bridge (ADR-0006). The rule reads `context.metadata.status`, which combines frontmatter and bold-list with key normalization (frontmatter wins on conflict; explicit null/undefined frontmatter values are skipped to preserve bold-list values).
 
 ## Diagnostic
 

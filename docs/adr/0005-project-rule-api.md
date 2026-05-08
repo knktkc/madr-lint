@@ -121,6 +121,7 @@ export function isProjectRule(rule: AnyRule): rule is ProjectRule { ... }
 ## Links
 
 - [ADR-0002](./0002-ast-parsing-strategy.md): AST parsing strategy (the original two-tier promise)
+- [ADR-0006](./0006-v2-bold-list-bridge.md): v2 bold-list metadata bridge (added `metadata` to `ProjectFile`)
 - `src/core/types.ts` — type definitions
 - `src/core/runner.ts` — `runRulesOnProject`, `buildProjectFile`, `RuleOptionsError`
 - `src/core/lint.ts` — orchestrator partitions per-file vs project rules

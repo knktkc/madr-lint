@@ -38,52 +38,85 @@ A linter for [MADR](https://adr.github.io/madr/) (Markdown Architectural Decisio
   - [x] `madr/no-broken-links`
   - [x] `madr/no-numbering-gap` (opt-in)
   - [x] Project rule API (ADR-0005)
-- [ ] M3: GitHub Action distribution
-- [ ] M4: Frontmatter v3/v4 full support + v2 bold-list compatibility
-- [ ] M5: Production use in `frontend-implementation-boilerplate`
+- [x] **M3: GitHub Actions CI/CD** (lint+typecheck+test+build matrix, npm OIDC trusted publishing, dependabot)
+- [x] **M4: Frontmatter v3/v4 + v2 bold-list compatibility** (metadata bridge — ADR-0006)
+- [x] **M5: Production use in `frontend-implementation-boilerplate`** (real v2 ADRs lint clean)
 - [ ] M6: v1.0.0 stable release
 
-> **What works today** (M0 + M1 + post-review fixes through R8):
-> - **4 lint rules** (all in the `recommended` preset, severity `error`):
->   `madr/filename-format`, `madr/required-sections`, `madr/status-enum`,
->   `madr/date-iso8601`
-> - **CLI runtime** — `madr-lint <dir-or-file>` produces text reports
->   with file grouping and {{placeholder}}-rendered messages. Loads
->   `.madrlintrc.json` config; falls back to `recommended` preset.
->   Exit 0/1 for clean/errors.
-> - **Single-pass AST runner** (`src/core/runner.ts`) — gray-matter +
->   `mdast-util-from-markdown` direct, lazy `context.frontmatter`,
->   `RuleListeners` enter/exit dispatch including `root`
-> - **AJV-validated options** (`strict: true`, WeakMap-cached, typed
->   `RuleOptionsError` on failure)
-> - **Per-rule error isolation** — buggy rules captured as
->   `core/internal-error` diagnostics, other rules continue
-> - **Property-based testing** — `fast-check` exercises `madr/date-iso8601`
->   against random Dates and malformed strings (200 runs each)
-> - **Public API** — `runRule`, `runRulesOnFile`, `parseFile`,
->   `RuleOptionsError`, `MdastNode` exported from the package entry
+> **What works today** (M0 → M5, post-review fixes through R10):
+>
+> **8 lint rules** (4 per-file + 4 project, 7 enabled in `recommended`,
+> 1 opt-in):
+> - **Per-file**: `madr/filename-format`, `madr/required-sections`,
+>   `madr/status-enum`, `madr/date-iso8601`
+> - **Project (cross-file)**: `madr/no-duplicate-numbering`,
+>   `madr/supersedes-bidirectional`, `madr/no-broken-links`,
+>   `madr/no-numbering-gap` (opt-in)
+>
+> **MADR format coverage**:
+> - **v3 / v4** — YAML frontmatter (`status:`, `date:`, etc.)
+> - **v2** — bold-list (`- **Status**: …`, `- **Date**: …`) via the
+>   metadata bridge ([ADR-0006](docs/adr/0006-v2-bold-list-bridge.md))
+>
+> **Runtime / CLI**:
+> - `madr-lint <dir-or-file>` text reports with file grouping +
+>   `{{placeholder}}`-rendered messages, exit 0/1
+> - `.madrlintrc.json` config: `extends`, `adrDir`, `rules`,
+>   `ignorePatterns`. Falls back to `recommended` preset
+> - Cross-platform POSIX path normalization
+>
+> **Engine**:
+> - Single-pass AST runner with `RuleListeners` enter/exit dispatch
+> - Project rule runner (`runRulesOnProject`) with eager-parsed
+>   `ProjectFile[]`, per-rule error isolation
+> - AJV-validated options (`strict: true`, WeakMap-cached, typed
+>   `RuleOptionsError`)
+> - Property-based testing (`fast-check` against `madr/date-iso8601`)
+>
+> **Public API**: `runRule`, `runRulesOnFile`, `runRulesOnProject`,
+> `buildProjectFile`, `parseFile`, `extractBoldListMetadata`,
+> `RuleOptionsError`, `INTERNAL_ERROR_RULE_NAME`, plus types
+> (`Rule`, `ProjectRule`, `RuleContext`, `ProjectRuleContext`,
+> `ProjectFile`, `MdastNode`, `RuleSeverity`, `MadrLintConfig`).
+
+## Installation
+
+```bash
+pnpm add -D madr-lint
+# or:
+npm i -D madr-lint
+```
+
+Requires Node.js 22+. ESM-only.
 
 ### Quick start
 
 ```bash
-# Lint a directory
-madr-lint docs/adr
+# Lint a directory (defaults to docs/adr)
+npx madr-lint docs/adr
 
 # Lint a single file
-madr-lint docs/adr/0001-example.md
+npx madr-lint docs/adr/0001-example.md
+```
 
-# Custom config (`.madrlintrc.json`)
+### Configuration (`.madrlintrc.json`)
+
+```json
 {
   "extends": ["madr-lint:recommended"],
-  "adrDir": "docs/decisions",
+  "adrDir": "docs/adr",
+  "ignorePatterns": ["README.md", "template.md", "9999-*"],
   "rules": {
     "madr/required-sections": ["error", {
       "sections": ["Context", "Decision", "Consequences"],
       "matchMode": "startsWith"
-    }]
+    }],
+    "madr/no-numbering-gap": "error"
   }
 }
 ```
+
+`ignorePatterns` supports exact basename, full relative path, path suffix, and trailing wildcard (`9999-*`). Full glob support is on the roadmap.
 
 ## Requirements
 

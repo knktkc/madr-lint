@@ -1,0 +1,66 @@
+# Contributing to madr-lint
+
+Thanks for considering a contribution. `madr-lint` is small but opinionated — please read this before opening a substantive PR.
+
+## Development setup
+
+```bash
+# Tools (Node 22 + pnpm 10) are pinned in mise.toml
+mise install
+pnpm install
+
+# Verify the local checkout
+pnpm test          # 193+ vitest tests
+pnpm typecheck
+pnpm lint
+pnpm build
+```
+
+The project uses [TDD discipline (ADR-0003)](docs/adr/0003-tdd-discipline.md). New rules MUST start with a failing test. The `add-rule` skill (under `.claude/skills/`) automates the scaffold for both per-file and project rules.
+
+## Adding a new rule
+
+Pick a shape:
+- **A. Filename / metadata-only** (e.g. `madr/filename-format`)
+- **B. Frontmatter / metadata-only** (reads `context.metadata`; works for v2/v3/v4)
+- **C. AST traversal** (returns `RuleListeners`)
+- **D. Project (cross-file)** — `ProjectRule.check()` over `context.files`
+
+See `CLAUDE.md` "Rule authoring conventions" for shape details, and `docs/adr/0005-project-rule-api.md` + `docs/adr/0006-v2-bold-list-bridge.md` for the API contracts.
+
+Per-rule deliverables:
+- `src/rules/<name>/{index.ts, schema.json, spec.md}`
+- `tests/rules/<name>.test.ts` with hard assertions on diagnostic data shape (NEVER bare `toMatchInlineSnapshot()`)
+- `tests/fixtures/<name>/{valid,invalid}/*.md` (per-file rules) or inline files (project rules)
+- `benchmarks/<name>/bench.ts`
+- `docs/rules/<name>.md`
+- Registry entry in `src/rules/index.ts`
+- Severity entry in `src/configs/recommended.ts`
+
+## Pull requests
+
+- One concept per PR. Mixed feature + cleanup PRs get split.
+- Conventional Commits: `feat:`, `fix:`, `chore:`, `docs:`, `test:`, `refactor:`, `perf:`. Scope is encouraged: `feat(rules):` or `fix(core):`.
+- Add a [changeset](https://github.com/changesets/changesets) for any user-visible change: `pnpm changeset` — choose `patch`/`minor`/`major` and write a one-line summary.
+- All CI jobs (Node 22 + 24 matrix, lint, typecheck, test, build) must pass.
+
+## Architectural decisions
+
+Substantive design changes go through an **ADR** under `docs/adr/`. The format is MADR v4 frontmatter (this project dogfoods its own linter against its own ADRs). Look at `docs/adr/0001-typescript-node22-runtime.md` for a worked example.
+
+Existing ADRs:
+
+- ADR-0001: TypeScript + Node 22 + pnpm
+- ADR-0002: AST parsing strategy (`mdast-util-from-markdown` direct + single-pass visitor)
+- ADR-0003: TDD discipline as project convention
+- ADR-0004: pnpm 10 + vitest 4 tooling baseline
+- ADR-0005: Project rule API design (cross-file rules)
+- ADR-0006: v2 bold-list metadata bridge (combined `context.metadata` field)
+
+## Sign-off (DCO)
+
+PRs are accepted under the [Developer Certificate of Origin](https://developercertificate.org/). Add `Signed-off-by: Your Name <email>` to your commits (`git commit -s`). No CLA, no separate paperwork.
+
+## Questions
+
+Open an issue with the `question` label, or for security-sensitive topics see [SECURITY.md](SECURITY.md).

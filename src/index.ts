@@ -4,11 +4,15 @@ import type { MadrVersion, RuleSeverity } from './core/types.js';
 
 // Types
 export type {
+  AnyRule,
   Diagnostic,
   FileContext,
   MadrVersion,
   MdastNode,
   MdastNodeType,
+  ProjectFile,
+  ProjectRule,
+  ProjectRuleContext,
   Rule,
   RuleContext,
   RuleListeners,
@@ -17,17 +21,23 @@ export type {
   Severity,
 } from './core/types.js';
 
-// Runner — programmatic linting API
+// Per-file runner + project runner (programmatic linting API)
 export {
+  buildProjectFile,
   runRule,
   runRulesOnFile,
+  runRulesOnProject,
   RuleOptionsError,
   INTERNAL_ERROR_RULE_NAME,
 } from './core/runner.js';
 export type { RunRuleOptions } from './core/runner.js';
 
-// Parser — exposed for tools that want to parse without linting
-export { parseFile } from './core/parser.js';
+// Type guard for distinguishing project rules from per-file rules
+export { isProjectRule } from './core/types.js';
+
+// Parser — exposed for tools that want to parse without linting,
+// including the v2 bold-list extractor (ADR-0006).
+export { parseFile, extractBoldListMetadata } from './core/parser.js';
 export type { ParsedFile } from './core/parser.js';
 
 // Built-in rules and presets
@@ -43,7 +53,11 @@ export interface MadrLintConfig {
   adrDir?: string;
   /** Per-rule severity / options overrides. */
   rules?: Record<string, RuleSeverity>;
-  /** Glob patterns to skip. */
+  /**
+   * Filename / path patterns to skip. Phase 1 supports exact basename,
+   * full relative path, path suffix, and trailing wildcard (e.g.
+   * `9999-*`). Full glob support is on the roadmap.
+   */
   ignorePatterns?: string[];
 }
 
@@ -58,6 +72,7 @@ export interface MadrLintConfig {
  *   extends: ['madr-lint:recommended'],
  *   madrVersion: 'auto',
  *   adrDir: 'docs/adr',
+ *   ignorePatterns: ['README.md', 'template.md'],
  *   rules: {
  *     'madr/filename-format': ['error', { pattern: '^[0-9]{4}-.+\\.md$' }],
  *   },
