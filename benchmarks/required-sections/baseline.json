@@ -1,0 +1,26 @@
+[
+  {
+    "Task name": "madr/required-sections — tiny (all sections)",
+    "Latency avg (ns)": "92364 ± 1.75%",
+    "Latency med (ns)": "79167 ± 2833.0",
+    "Throughput avg (ops/s)": "11977 ± 0.46%",
+    "Throughput med (ops/s)": "12632 ± 455",
+    "Samples": 5414
+  },
+  {
+    "Task name": "madr/required-sections — typical (all sections + extras)",
+    "Latency avg (ns)": "388284 ± 2.07%",
+    "Latency med (ns)": "337980 ± 15833",
+    "Throughput avg (ops/s)": "2747 ± 1.03%",
+    "Throughput med (ops/s)": "2959 ± 141",
+    "Samples": 1288
+  },
+  {
+    "Task name": "madr/required-sections — typical (one missing)",
+    "Latency avg (ns)": "418926 ± 3.35%",
+    "Latency med (ns)": "338646 ± 19083",
+    "Throughput avg (ops/s)": "2695 ± 1.31%",
+    "Throughput med (ops/s)": "2953 ± 172",
+    "Samples": 1194
+  }
+]

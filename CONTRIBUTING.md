@@ -37,6 +37,21 @@ Per-rule deliverables:
 - Registry entry in `src/rules/index.ts`
 - Severity entry in `src/configs/recommended.ts`
 
+## Performance baselines
+
+Each rule has a `benchmarks/<name>/bench.ts` driven by `tinybench`. Running it produces a per-commit `<sha>.json` (gitignored) plus a long-lived `benchmarks/<name>/baseline.json` that CI compares against.
+
+- `pnpm perf:check` runs every bench and fails on a ≥10% throughput regression vs `baseline.json` (warns at 5–10%).
+- After an intentional perf change, regenerate the baseline:
+
+  ```bash
+  pnpm exec tsx benchmarks/<rule>/bench.ts
+  cp benchmarks/<rule>/$(git rev-parse --short HEAD).json benchmarks/<rule>/baseline.json
+  git add -f benchmarks/<rule>/baseline.json
+  ```
+
+Justify the new numbers in the PR description so the reviewer can rubber-stamp the baseline change rather than re-running the bench themselves.
+
 ## Pull requests
 
 - One concept per PR. Mixed feature + cleanup PRs get split.

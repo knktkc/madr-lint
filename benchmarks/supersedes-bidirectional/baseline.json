@@ -1,0 +1,18 @@
+[
+  {
+    "Task name": "madr/supersedes-bidirectional — 10 files",
+    "Latency avg (ns)": "2064.0 ± 0.69%",
+    "Latency med (ns)": "1917.0 ± 42.00",
+    "Throughput avg (ops/s)": "514269 ± 0.03%",
+    "Throughput med (ops/s)": "521648 ± 11685",
+    "Samples": 242247
+  },
+  {
+    "Task name": "madr/supersedes-bidirectional — 100 files",
+    "Latency avg (ns)": "22162 ± 4.99%",
+    "Latency med (ns)": "18667 ± 458.00",
+    "Throughput avg (ops/s)": "52349 ± 0.15%",
+    "Throughput med (ops/s)": "53570 ± 1347",
+    "Samples": 22561
+  }
+]

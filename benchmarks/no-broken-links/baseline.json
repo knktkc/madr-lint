@@ -1,0 +1,18 @@
+[
+  {
+    "Task name": "madr/no-broken-links — 10 files",
+    "Latency avg (ns)": "3379.0 ± 0.62%",
+    "Latency med (ns)": "3208.0 ± 83.00",
+    "Throughput avg (ops/s)": "308467 ± 0.04%",
+    "Throughput med (ops/s)": "311721 ± 7954",
+    "Samples": 147974
+  },
+  {
+    "Task name": "madr/no-broken-links — 100 files",
+    "Latency avg (ns)": "39942 ± 4.08%",
+    "Latency med (ns)": "35750 ± 792.00",
+    "Throughput avg (ops/s)": "27281 ± 0.19%",
+    "Throughput med (ops/s)": "27972 ± 633",
+    "Samples": 12519
+  }
+]

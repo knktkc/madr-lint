@@ -1,0 +1,26 @@
+[
+  {
+    "Task name": "madr/filename-format — tiny (valid path)",
+    "Latency avg (ns)": "552.57 ± 4.03%",
+    "Latency med (ns)": "417.00 ± 41.00",
+    "Throughput avg (ops/s)": "2396381 ± 0.03%",
+    "Throughput med (ops/s)": "2398082 ± 214675",
+    "Samples": 904884
+  },
+  {
+    "Task name": "madr/filename-format — typical (valid path)",
+    "Latency avg (ns)": "592.00 ± 4.69%",
+    "Latency med (ns)": "417.00 ± 41.00",
+    "Throughput avg (ops/s)": "2368743 ± 0.03%",
+    "Throughput med (ops/s)": "2398082 ± 214675",
+    "Samples": 845296
+  },
+  {
+    "Task name": "madr/filename-format — invalid path (snake_case)",
+    "Latency avg (ns)": "756.43 ± 6.43%",
+    "Latency med (ns)": "458.00 ± 41.00",
+    "Throughput avg (ops/s)": "2133277 ± 0.03%",
+    "Throughput med (ops/s)": "2183406 ± 183406",
+    "Samples": 661000
+  }
+]

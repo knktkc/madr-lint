@@ -1,0 +1,26 @@
+[
+  {
+    "Task name": "madr/date-iso8601 — tiny (valid)",
+    "Latency avg (ns)": "21955 ± 2.39%",
+    "Latency med (ns)": "17583 ± 542.00",
+    "Throughput avg (ops/s)": "54610 ± 0.20%",
+    "Throughput med (ops/s)": "56873 ± 1805",
+    "Samples": 22774
+  },
+  {
+    "Task name": "madr/date-iso8601 — typical (valid)",
+    "Latency avg (ns)": "61840 ± 1.63%",
+    "Latency med (ns)": "53375 ± 1791.0",
+    "Throughput avg (ops/s)": "17927 ± 0.34%",
+    "Throughput med (ops/s)": "18735 ± 629",
+    "Samples": 8086
+  },
+  {
+    "Task name": "madr/date-iso8601 — invalid date",
+    "Latency avg (ns)": "23020 ± 5.56%",
+    "Latency med (ns)": "18334 ± 584.00",
+    "Throughput avg (ops/s)": "52610 ± 0.19%",
+    "Throughput med (ops/s)": "54543 ± 1795",
+    "Samples": 21721
+  }
+]

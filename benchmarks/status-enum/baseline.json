@@ -1,0 +1,26 @@
+[
+  {
+    "Task name": "madr/status-enum — tiny (valid)",
+    "Latency avg (ns)": "28535 ± 2.02%",
+    "Latency med (ns)": "23458 ± 666.00",
+    "Throughput avg (ops/s)": "41008 ± 0.22%",
+    "Throughput med (ops/s)": "42629 ± 1246",
+    "Samples": 17533
+  },
+  {
+    "Task name": "madr/status-enum — typical (valid)",
+    "Latency avg (ns)": "223544 ± 2.07%",
+    "Latency med (ns)": "189125 ± 8959.0",
+    "Throughput avg (ops/s)": "4909 ± 0.83%",
+    "Throughput med (ops/s)": "5288 ± 256",
+    "Samples": 2237
+  },
+  {
+    "Task name": "madr/status-enum — invalid status",
+    "Latency avg (ns)": "62098 ± 1.71%",
+    "Latency med (ns)": "53125 ± 1750.0",
+    "Throughput avg (ops/s)": "17964 ± 0.35%",
+    "Throughput med (ops/s)": "18824 ± 628",
+    "Samples": 8052
+  }
+]

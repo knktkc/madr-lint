@@ -1,4 +1,5 @@
 import { basename } from 'node:path';
+import { assertSafeRegex } from '../../core/regex-safety.js';
 import type { Rule } from '../../core/types.js';
 import schema from './schema.json' with { type: 'json' };
 
@@ -27,7 +28,7 @@ const rule: Rule<FilenameFormatOptions> = {
   },
   create(context) {
     const { pattern } = context.options;
-    const regex = new RegExp(pattern);
+    const regex = assertSafeRegex(pattern, 'madr/filename-format', 'pattern');
     const filename = basename(context.file.path);
     if (!regex.test(filename)) {
       context.report({

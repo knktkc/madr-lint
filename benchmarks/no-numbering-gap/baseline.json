@@ -1,0 +1,26 @@
+[
+  {
+    "Task name": "madr/no-numbering-gap — 10 files (contiguous)",
+    "Latency avg (ns)": "1157.1 ± 0.69%",
+    "Latency med (ns)": "1083.0 ± 41.00",
+    "Throughput avg (ops/s)": "912546 ± 0.02%",
+    "Throughput med (ops/s)": "923361 ± 34472",
+    "Samples": 432113
+  },
+  {
+    "Task name": "madr/no-numbering-gap — 100 files (contiguous)",
+    "Latency avg (ns)": "11526 ± 1.29%",
+    "Latency med (ns)": "10417 ± 292.00",
+    "Throughput avg (ops/s)": "93772 ± 0.11%",
+    "Throughput med (ops/s)": "95997 ± 2769",
+    "Samples": 43380
+  },
+  {
+    "Task name": "madr/no-numbering-gap — 100 files (~20 gaps)",
+    "Latency avg (ns)": "12382 ± 0.73%",
+    "Latency med (ns)": "11584 ± 292.00",
+    "Throughput avg (ops/s)": "84698 ± 0.09%",
+    "Throughput med (ops/s)": "86326 ± 2232",
+    "Samples": 40381
+  }
+]

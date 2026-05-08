@@ -28,8 +28,8 @@ These decisions are very expensive to retrofit. They are baked into the rule API
 3. **Two-tier rule API**: `perFile` rules are pure (file content + AST → diagnostics, parallelizable). `project` rules (numbering uniqueness, supersedes graph, link rot) consume eager-parsed files in a single `check()` call. See ADR-0005.
    - **Status (M2)**: BOTH wired — perFile via `runRulesOnFile`, project via `runRulesOnProject` in `src/core/runner.ts`. First project rule `madr/no-duplicate-numbering` shipped.
 
-4. **Pre-compile AJV schemas + regex at config load time**. ReDoS-guarded via `safe-regex2` in CI. Per-file regex execution has a 5ms soft budget.
-   - **Status (M0)**: AJV **wired** in `src/core/runner.ts` (per-rule WeakMap-cached validators, throws `RuleOptionsError` on invalid options); `safe-regex2` **installed**, ReDoS check **pending** CI integration; per-file regex 5ms budget **pending**
+4. **Pre-compile AJV schemas + regex at config load time**. ReDoS-guarded via `safe-regex2` at both runtime (per-rule, in `assertSafeRegex`) and CI (static scan over schemas + defaultOptions + source-literal regex). Per-file regex execution has a 5ms soft budget.
+   - **Status (post-R11)**: AJV **wired** in `src/core/runner.ts` (per-rule WeakMap-cached validators, throws `RuleOptionsError` on invalid options); `safe-regex2` **wired** at runtime via `src/core/regex-safety.ts` (used by `madr/filename-format`) and at CI via `scripts/redos-scan.ts` (schemas + defaultOptions + literal regex in src/**/*.ts); per-file regex 5ms budget **pending**
 
 5. **Content-hash cache** at `.madr-lint/cache/`, key = `sha1(content + rule-version-vector + config-hash)`. Persistent across runs.
    - **Status (M0)**: **pending**; targeted at M2+

@@ -14,7 +14,7 @@ We aim to acknowledge reports within 48 hours and to coordinate a fix + disclosu
 ## What is in scope
 
 - Code execution via crafted ADR file content
-- ReDoS triggered by user-supplied regex options (`madr/filename-format` `pattern`, etc.)
+- ReDoS triggered by user-supplied regex options (`madr/filename-format` `pattern`, etc.) — **runtime-guarded** via `safe-regex2` in `src/core/regex-safety.ts` and **CI-scanned** by `scripts/redos-scan.ts`. Bypasses are in scope.
 - Symlink traversal or path injection via the CLI's directory walk
 - Information disclosure from `core/internal-error` diagnostics
 

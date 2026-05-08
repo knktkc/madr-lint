@@ -146,6 +146,11 @@ export function runRulesOnFile(
     try {
       listeners = rule.create(context);
     } catch (err) {
+      // RuleOptionsError signals the user's config is wrong (e.g. unsafe
+      // regex). Propagate it so the CLI can render a clear "fix your
+      // .madrlintrc" message rather than burying it as a per-file
+      // internal-error diagnostic.
+      if (err instanceof RuleOptionsError) throw err;
       diagnostics.push(
         internalErrorDiagnostic(rule.meta.name, 'create', err, file.path),
       );

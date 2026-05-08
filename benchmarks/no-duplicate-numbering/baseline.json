@@ -1,0 +1,26 @@
+[
+  {
+    "Task name": "madr/no-duplicate-numbering — 10 files",
+    "Latency avg (ns)": "1199.5 ± 1.49%",
+    "Latency med (ns)": "1041.0 ± 41.00",
+    "Throughput avg (ops/s)": "950707 ± 0.03%",
+    "Throughput med (ops/s)": "960615 ± 39385",
+    "Samples": 416824
+  },
+  {
+    "Task name": "madr/no-duplicate-numbering — 100 files",
+    "Latency avg (ns)": "10689 ± 0.78%",
+    "Latency med (ns)": "10000.0 ± 292.00",
+    "Throughput avg (ops/s)": "98754 ± 0.08%",
+    "Throughput med (ops/s)": "100000 ± 2837",
+    "Samples": 46778
+  },
+  {
+    "Task name": "madr/no-duplicate-numbering — 1000 files",
+    "Latency avg (ns)": "115142 ± 1.48%",
+    "Latency med (ns)": "102667 ± 3125.0",
+    "Throughput avg (ops/s)": "9302 ± 0.48%",
+    "Throughput med (ops/s)": "9740 ± 297",
+    "Samples": 4343
+  }
+]
