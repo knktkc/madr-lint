@@ -76,6 +76,10 @@ Existing ADRs:
 
 PRs are accepted under the [Developer Certificate of Origin](https://developercertificate.org/). Add `Signed-off-by: Your Name <email>` to your commits (`git commit -s`). No CLA, no separate paperwork.
 
+## Code of Conduct
+
+This project follows the [Contributor Covenant 2.1](CODE_OF_CONDUCT.md). By participating, you agree to abide by it.
+
 ## Questions
 
 Open an issue with the `question` label, or for security-sensitive topics see [SECURITY.md](SECURITY.md).

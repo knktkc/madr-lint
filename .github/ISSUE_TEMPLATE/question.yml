@@ -1,0 +1,24 @@
+name: Question
+description: How do I use madr-lint to do X?
+labels: ["question"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before asking, please skim the [README](../../README.md) and the per-rule docs under `docs/rules/`.
+        If you found a bug, use the "Bug report" template instead.
+  - type: textarea
+    id: question
+    attributes:
+      label: Your question
+      description: Describe what you're trying to accomplish and what you've already tried.
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Relevant context
+      description: Config snippet, sample ADR, CLI invocation. Whatever helps narrow down the answer.
+      render: markdown
+    validations:
+      required: false

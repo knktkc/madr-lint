@@ -1,0 +1,52 @@
+name: Feature request
+description: Suggest a new rule, configuration option, or behavior
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this template for new lint rules, new CLI flags, new reporter formats, or other behavior changes.
+        For questions about how to USE the linter, prefer the "Question" template.
+  - type: textarea
+    id: motivation
+    attributes:
+      label: What problem does this solve?
+      description: Describe the user-facing pain. What goes wrong today, and how often?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: |
+        For a new rule: rule ID, what it checks, what messageId(s) it would emit, how it's configured.
+        For a CLI flag: flag name, expected behavior, interaction with config.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Existing tools, prior art (e.g. ESLint analogues), why they're insufficient.
+    validations:
+      required: false
+  - type: dropdown
+    id: madr_versions
+    attributes:
+      label: Which MADR versions does this apply to?
+      multiple: true
+      options:
+        - v2 (bold-list)
+        - v3 (frontmatter)
+        - v4 (frontmatter + extras)
+        - All / not version-specific
+    validations:
+      required: false
+  - type: checkboxes
+    id: contribution
+    attributes:
+      label: Are you willing to send a PR?
+      options:
+        - label: Yes, I can implement this
+        - label: I'd like guidance, then I'll PR
+        - label: Just filing — someone else can take it

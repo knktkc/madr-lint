@@ -1,0 +1,75 @@
+name: Bug report
+description: Something is broken or producing unexpected output
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a bug. The more concrete the repro, the faster the fix.
+        Security-sensitive issues should be reported via [SECURITY.md](../../SECURITY.md), not here.
+  - type: input
+    id: version
+    attributes:
+      label: madr-lint version
+      description: Output of `npx madr-lint --version`
+      placeholder: 0.1.0-alpha.0
+    validations:
+      required: true
+  - type: input
+    id: node
+    attributes:
+      label: Node.js version
+      description: Output of `node -v`
+      placeholder: v22.11.0
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: Operating system
+      placeholder: macOS 14.5 (Apple silicon)
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Minimal reproduction
+      description: |
+        Paste the smallest possible ADR file (or a tiny diff against a stock template) and the exact CLI invocation.
+      render: markdown
+      placeholder: |
+        File: `docs/adr/0001-example.md`
+        ```
+        ---
+        status: accepted
+        date: 2026-04-01
+        ---
+        # Example
+        ## Context
+        ...
+        ```
+        Command: `npx madr-lint docs/adr`
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: Include the full stdout/stderr if relevant.
+      render: shell
+    validations:
+      required: true
+  - type: textarea
+    id: config
+    attributes:
+      label: Relevant config
+      description: Contents of `.madrlintrc.json` (or other config file). Redact secrets if any.
+      render: json
+    validations:
+      required: false
