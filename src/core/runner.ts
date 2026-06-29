@@ -55,10 +55,23 @@ export class RuleOptionsError extends Error {
 export interface RunRuleOptions {
   /** Per-rule options to merge over rule.meta.defaultOptions. */
   options?: Record<string, unknown>;
+  /**
+   * Options keyed by rule name, for multi-rule calls where each rule needs
+   * its own options (e.g. config tuples `['error', {...}]`). For a given rule,
+   * an entry here takes precedence over `options`; rules absent from the map
+   * fall back to `options` (if any), then `meta.defaultOptions`.
+   */
+  optionsByRule?: Record<string, Record<string, unknown>>;
   /** Severity to attach to emitted diagnostics. Defaults to 'error'. */
   severity?: Severity;
   /** Skip AJV options validation. Default false. */
   skipValidation?: boolean;
+  /**
+   * Filesystem-existence predicate exposed to project rules as
+   * `context.fileExists`. Per-file runs ignore this. See
+   * ProjectRuleContext.fileExists.
+   */
+  fileExists?: (resolvedPath: string) => boolean;
 }
 
 /**
@@ -111,9 +124,11 @@ export function runRulesOnFile(
   let hasASTRule = false;
 
   for (const rule of rules) {
+    const perRuleOptions =
+      runtime.optionsByRule?.[rule.meta.name] ?? runtime.options;
     const mergedOptions = {
       ...rule.meta.defaultOptions,
-      ...runtime.options,
+      ...perRuleOptions,
     };
 
     if (rule.meta.schema && !runtime.skipValidation) {
@@ -278,9 +293,11 @@ export function runRulesOnProject(
   const severity = runtime.severity ?? 'error';
 
   for (const rule of rules) {
+    const perRuleOptions =
+      runtime.optionsByRule?.[rule.meta.name] ?? runtime.options;
     const mergedOptions = {
       ...rule.meta.defaultOptions,
-      ...runtime.options,
+      ...perRuleOptions,
     };
 
     if (rule.meta.schema && !runtime.skipValidation) {
@@ -296,6 +313,7 @@ export function runRulesOnProject(
     const context: ProjectRuleContext = {
       files,
       options: mergedOptions,
+      fileExists: runtime.fileExists,
       report(d) {
         diagnostics.push({
           ruleName: rule.meta.name,

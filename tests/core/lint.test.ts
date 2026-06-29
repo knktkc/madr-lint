@@ -1,11 +1,35 @@
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { lintFiles } from '../../src/core/lint.js';
+import { RuleOptionsError } from '../../src/core/runner.js';
+import type { ProjectRule } from '../../src/core/types.js';
 import filenameFormat from '../../src/rules/filename-format/index.js';
+import noBrokenLinks from '../../src/rules/no-broken-links/index.js';
 import noDuplicateNumbering from '../../src/rules/no-duplicate-numbering/index.js';
 import requiredSections from '../../src/rules/required-sections/index.js';
+
+// A custom project rule with an option, used to prove lintFiles threads
+// per-rule options through the PROJECT pass (no built-in project rule has
+// options today).
+const tagProjectRule: ProjectRule<{ tag: string }> = {
+  meta: {
+    name: 'test/tag-project',
+    type: 'project',
+    versionCompat: ['v2', 'v3', 'v4'],
+    docs: { description: 'echo tag', recommended: false },
+    messages: { echo: '{{tag}}' },
+    defaultOptions: { tag: 'default' },
+  },
+  check(ctx) {
+    ctx.report({
+      messageId: 'echo',
+      path: '<project>',
+      data: { tag: ctx.options.tag },
+    });
+  },
+};
 
 describe('core/lint', () => {
   let dir: string;
@@ -137,6 +161,68 @@ describe('core/lint', () => {
     expect(result.diagnostics.every((d) => d.path === '0002-b.md')).toBe(true);
   });
 
+  describe('per-rule options from config tuples', () => {
+    it('applies a tuple option (filename-format pattern) so a custom-named file passes', () => {
+      const file = join(dir, 'ADR-001.md');
+      writeFileSync(file, '# x');
+      const result = lintFiles({
+        rules: [filenameFormat],
+        ruleSeverity: {
+          'madr/filename-format': ['error', { pattern: '^ADR-[0-9]+\\.md$' }],
+        },
+        files: [file],
+        cwd: dir,
+      });
+      // ADR-001.md matches the custom pattern → no diagnostics. (With the bug,
+      // the default NNNN pattern applied and this produced 1 diagnostic.)
+      expect(result.diagnostics).toEqual([]);
+    });
+
+    it('a tuple option that tightens the rule yields a diagnostic echoing that option', () => {
+      const file = join(dir, '0001-a.md');
+      writeFileSync(file, '# x');
+      const result = lintFiles({
+        rules: [filenameFormat],
+        ruleSeverity: {
+          'madr/filename-format': ['error', { pattern: '^ADR-[0-9]+\\.md$' }],
+        },
+        files: [file],
+        cwd: dir,
+      });
+      // 0001-a.md does NOT match the custom ADR- pattern → 1 diagnostic whose
+      // reported `expected` is the configured pattern, not the default.
+      expect(result.diagnostics).toHaveLength(1);
+      expect(result.diagnostics[0]?.data?.expected).toBe('^ADR-[0-9]+\\.md$');
+    });
+
+    it('threads per-rule options to PROJECT rules via lintFiles', () => {
+      const file = join(dir, '0001-a.md');
+      writeFileSync(file, '# x');
+      const result = lintFiles({
+        rules: [tagProjectRule],
+        ruleSeverity: { 'test/tag-project': ['error', { tag: 'CONFIGURED' }] },
+        files: [file],
+        cwd: dir,
+      });
+      const d = result.diagnostics.find((x) => x.ruleName === 'test/tag-project');
+      expect(d?.data?.tag).toBe('CONFIGURED');
+    });
+
+    it('propagates RuleOptionsError for an invalid config option (CLI surfaces it)', () => {
+      const file = join(dir, '0001-a.md');
+      writeFileSync(file, '# x');
+      expect(() =>
+        lintFiles({
+          rules: [filenameFormat],
+          // pattern must be a string per schema → AJV rejects 123.
+          ruleSeverity: { 'madr/filename-format': ['error', { pattern: 123 }] },
+          files: [file],
+          cwd: dir,
+        }),
+      ).toThrow(RuleOptionsError);
+    });
+  });
+
   describe('project rule integration', () => {
     it('dispatches project rules alongside per-file rules in one call', () => {
       const file1 = join(dir, '0001-a.md');
@@ -177,6 +263,117 @@ describe('core/lint', () => {
         cwd: dir,
       });
       expect(result.diagnostics).toEqual([]);
+    });
+
+    it('no-broken-links: link to an existing non-md sibling is not broken', () => {
+      const adr = join(dir, '0001-a.md');
+      writeFileSync(adr, '# ADR-0001\n\nSee [requirements](./requirements.json).\n');
+      writeFileSync(join(dir, 'requirements.json'), '{}\n');
+
+      const result = lintFiles({
+        rules: [noBrokenLinks],
+        ruleSeverity: { 'madr/no-broken-links': 'error' },
+        files: [adr],
+        cwd: dir,
+      });
+      expect(
+        result.diagnostics.filter((d) => d.ruleName === 'madr/no-broken-links'),
+      ).toEqual([]);
+    });
+
+    it('no-broken-links: link to a genuinely missing file is broken', () => {
+      const adr = join(dir, '0001-a.md');
+      writeFileSync(adr, '# ADR-0001\n\nSee [gone](./nope.json).\n');
+
+      const result = lintFiles({
+        rules: [noBrokenLinks],
+        ruleSeverity: { 'madr/no-broken-links': 'error' },
+        files: [adr],
+        cwd: dir,
+      });
+      const broken = result.diagnostics.filter(
+        (d) => d.ruleName === 'madr/no-broken-links',
+      );
+      expect(broken).toHaveLength(1);
+      expect(broken[0]?.data).toMatchObject({ url: './nope.json' });
+    });
+
+    it('no-broken-links: a link escaping the project root is broken even if the target exists', () => {
+      const project = join(dir, 'project');
+      mkdirSync(project);
+      const adr = join(project, '0001-a.md');
+      writeFileSync(adr, '# ADR\n\n[outside](../outside.md)\n');
+      // Real file, but ABOVE the project root (cwd = project) → not "in the project".
+      writeFileSync(join(dir, 'outside.md'), '# outside\n');
+
+      const result = lintFiles({
+        rules: [noBrokenLinks],
+        ruleSeverity: { 'madr/no-broken-links': 'error' },
+        files: [adr],
+        cwd: project,
+      });
+      const broken = result.diagnostics.filter(
+        (d) => d.ruleName === 'madr/no-broken-links',
+      );
+      expect(broken).toHaveLength(1);
+      expect(broken[0]?.data?.resolvedPath).toBe('../outside.md');
+    });
+
+    it('no-broken-links: an absolute (/-rooted) link with interior .. that escapes the root is broken', () => {
+      const project = join(dir, 'project');
+      mkdirSync(project);
+      const adr = join(project, '0001-a.md');
+      // `/`-rooted link resolves project-relative; the interior `..` walks
+      // above the project root to a real file that must NOT be accepted.
+      writeFileSync(adr, '# ADR\n\n[x](/foo/../../outside.md)\n');
+      writeFileSync(join(dir, 'outside.md'), '# outside\n');
+
+      const result = lintFiles({
+        rules: [noBrokenLinks],
+        ruleSeverity: { 'madr/no-broken-links': 'error' },
+        files: [adr],
+        cwd: project,
+      });
+      const broken = result.diagnostics.filter(
+        (d) => d.ruleName === 'madr/no-broken-links',
+      );
+      expect(broken).toHaveLength(1);
+    });
+
+    it('no-broken-links: an in-root file literally named "..foo.md" is not a false positive', () => {
+      // The containment check must distinguish an escaping `../` segment from
+      // an ordinary filename that merely starts with two dots.
+      const adr = join(dir, '0001-a.md');
+      writeFileSync(adr, '# ADR\n\n[x](./..foo.md)\n');
+      writeFileSync(join(dir, '..foo.md'), '# weird but valid name\n');
+
+      const result = lintFiles({
+        rules: [noBrokenLinks],
+        ruleSeverity: { 'madr/no-broken-links': 'error' },
+        files: [adr],
+        cwd: dir,
+      });
+      expect(
+        result.diagnostics.filter((d) => d.ruleName === 'madr/no-broken-links'),
+      ).toEqual([]);
+    });
+
+    it('no-broken-links: a link to a directory is broken (must be a file)', () => {
+      const adr = join(dir, '0001-a.md');
+      writeFileSync(adr, '# ADR\n\n[assets](./assets)\n');
+      mkdirSync(join(dir, 'assets'));
+
+      const result = lintFiles({
+        rules: [noBrokenLinks],
+        ruleSeverity: { 'madr/no-broken-links': 'error' },
+        files: [adr],
+        cwd: dir,
+      });
+      const broken = result.diagnostics.filter(
+        (d) => d.ruleName === 'madr/no-broken-links',
+      );
+      expect(broken).toHaveLength(1);
+      expect(broken[0]?.data?.resolvedPath).toBe('assets');
     });
 
     it('reports project rule diagnostics with relative POSIX paths', () => {

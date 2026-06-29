@@ -7,6 +7,7 @@ import { findAdrFiles } from './core/discover.js';
 import { shouldIgnore } from './core/ignore.js';
 import { lintFiles, type CacheConfig } from './core/lint.js';
 import { reporters, type ReporterFormat } from './core/reporter.js';
+import { RuleOptionsError } from './core/runner.js';
 import type { AnyRule } from './core/types.js';
 import * as builtinRules from './rules/index.js';
 
@@ -108,13 +109,25 @@ const main = defineCommand({
       : null;
 
     const allRulesArray: AnyRule[] = Object.values(builtinRules);
-    const result = lintFiles({
-      rules: allRulesArray,
-      ruleSeverity: config.rules,
-      files,
-      cwd,
-      cache: cacheConfig,
-    });
+    let result: ReturnType<typeof lintFiles>;
+    try {
+      result = lintFiles({
+        rules: allRulesArray,
+        ruleSeverity: config.rules,
+        files,
+        cwd,
+        cache: cacheConfig,
+      });
+    } catch (err) {
+      // Invalid rule options in the user's config fail AJV validation now that
+      // options actually reach the rules. Surface a clear message instead of a
+      // stack trace, and exit 2 (config error, distinct from lint failures).
+      if (err instanceof RuleOptionsError) {
+        console.error(`Invalid rule options in config: ${err.message}`);
+        process.exit(2);
+      }
+      throw err;
+    }
 
     const rulesByName = new Map<string, AnyRule>(
       allRulesArray.map((r) => [r.meta.name, r]),
