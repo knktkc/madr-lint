@@ -47,6 +47,8 @@ describe('madr/date-iso8601', () => {
       ['not-a-date.md', 'today'],
       // v2 bold-list — same bad calendar date, extracted via metadata bridge
       ['month-13-v2.md', '2026-13-01'],
+      // canonical MADR v2 plain (non-bold, asterisk) key — same bad date
+      ['month-13-plain-v2.md', '2026-13-01'],
     ];
 
     for (const [file, expectedRaw] of invalidDateCases) {

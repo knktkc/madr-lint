@@ -169,7 +169,7 @@ import {
   runRulesOnFile,
   runRulesOnProject,
   parseFile,
-  extractBoldListMetadata,
+  extractListMetadata,
   buildProjectFile,
   RuleOptionsError,
   INTERNAL_ERROR_RULE_NAME,

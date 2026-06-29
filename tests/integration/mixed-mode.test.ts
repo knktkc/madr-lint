@@ -83,7 +83,7 @@ describe('integration: mixed-mode (frontmatter + bold-list)', () => {
     ].join('\n');
 
     const parsed = parseFile(content);
-    expect(parsed.boldListMetadata).toBeNull();
+    expect(parsed.listMetadata).toBeNull();
     // gray-matter parses ISO dates into JS Date objects; date-iso8601
     // normalizes that back to a string in normalizeDate(). The rule
     // accepts either form — we only assert the bridge passes the
