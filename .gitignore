@@ -42,6 +42,9 @@ Thumbs.db
 benchmarks/*/*.json
 !benchmarks/*/baseline.json
 
+# Throwaway git worktree used by perf-regression-check to measure the base ref
+.perf-base/
+
 # Profiles (0x / clinic flame graphs are dev-only)
 profiles/
 
