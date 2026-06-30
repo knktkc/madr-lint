@@ -41,7 +41,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 2
+          # Full history so the base ref can be materialized in a worktree and
+          # benchmarked on the same runner (relative, machine-independent check).
+          fetch-depth: 0
       - uses: pnpm/action-setup@v4
         with:
           version: 10
@@ -53,6 +55,8 @@ jobs:
       - run: pnpm perf:check
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # PRs compare against the PR base; pushes fall back to HEAD~1.
+          PERF_BASE_REF: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || '' }}
 
   redos:
     name: ReDoS scan
