@@ -81,11 +81,11 @@
     "@types/node": "^26.0.1",
     "@types/picomatch": "^4.0.3",
     "fast-check": "^4.8.0",
-    "oxlint": "^1.62.0",
+    "oxlint": "^1.72.0",
     "tinybench": "^6.0.2",
     "tsup": "^8.5.1",
-    "tsx": "^4.21.0",
+    "tsx": "^4.22.4",
     "typescript": "^6.0.3",
-    "vitest": "^4.1.5"
+    "vitest": "^4.1.9"
   }
 }
