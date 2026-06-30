@@ -6,6 +6,14 @@ function f(path: string, body: string): ReturnType<typeof buildProjectFile> {
   return buildProjectFile({ path, content: body });
 }
 
+// fileExists predicates for the filesystem-fallback tests, hoisted to module
+// scope so they aren't recreated per test (oxlint consistent-function-scoping).
+const existsAt =
+  (target: string) =>
+  (p: string): boolean =>
+    p === target;
+const neverExists = (): boolean => false;
+
 describe('madr/no-broken-links', () => {
   describe('valid links', () => {
     it('relative link to an existing file in the same dir', () => {
@@ -133,6 +141,84 @@ describe('madr/no-broken-links', () => {
     it('plain prose only', () => {
       const files = [
         f('docs/adr/0001-a.md', '# ADR-0001\n\nJust some prose without links.\n'),
+      ];
+      expect(runRulesOnProject([rule], files)).toEqual([]);
+    });
+  });
+
+  // Links to assets that are not in the linted .md set (non-Markdown files
+  // like JSON/YAML, or Markdown files outside the scanned paths) must NOT be
+  // flagged broken when they actually exist on disk. The orchestrator injects
+  // a `fileExists` predicate; the rule consults it as a fallback to knownPaths.
+  describe('filesystem fallback (fileExists)', () => {
+    it('non-md asset link that exists on disk is not broken', () => {
+      const files = [
+        f('docs/adr/0001-a.md', '[data](./data.json)\n'),
+      ];
+      expect(
+        runRulesOnProject([rule], files, {
+          fileExists: existsAt('docs/adr/data.json'),
+        }),
+      ).toEqual([]);
+    });
+
+    it('out-of-scope md link that exists on disk is not broken', () => {
+      const files = [
+        f('docs/adr/0001-a.md', '[readme](../README.md)\n'),
+      ];
+      expect(
+        runRulesOnProject([rule], files, {
+          fileExists: existsAt('docs/README.md'),
+        }),
+      ).toEqual([]);
+    });
+
+    it('still reports broken when fileExists returns false', () => {
+      const files = [
+        f('docs/adr/0001-a.md', '[gone](./gone.json)\n'),
+      ];
+      const diagnostics = runRulesOnProject([rule], files, {
+        fileExists: neverExists,
+      });
+      expect(diagnostics).toHaveLength(1);
+      expect(diagnostics[0]?.data).toMatchObject({
+        url: './gone.json',
+        resolvedPath: 'docs/adr/gone.json',
+      });
+    });
+
+    it('knownPaths still resolves links even when fileExists says no', () => {
+      const files = [
+        f('docs/adr/0001-a.md', '[b](./0002-b.md)\n'),
+        f('docs/adr/0002-b.md', '# B\n'),
+      ];
+      expect(
+        runRulesOnProject([rule], files, { fileExists: neverExists }),
+      ).toEqual([]);
+    });
+  });
+
+  describe('URL query strings and percent-encoding', () => {
+    it('strips a ?query before resolving the target', () => {
+      const files = [
+        f('docs/adr/0001-a.md', '[b](./0002-b.md?v=2)\n'),
+        f('docs/adr/0002-b.md', '# B\n'),
+      ];
+      expect(runRulesOnProject([rule], files)).toEqual([]);
+    });
+
+    it('percent-decodes the path so spaces resolve to the real file', () => {
+      const files = [
+        f('docs/adr/0001-a.md', '[b](./my%20file.md)\n'),
+        f('docs/adr/my file.md', '# B\n'),
+      ];
+      expect(runRulesOnProject([rule], files)).toEqual([]);
+    });
+
+    it('leaves malformed percent-encoding untouched (no throw)', () => {
+      const files = [
+        f('docs/adr/0001-a.md', '[bad](./100%.md)\n'),
+        f('docs/adr/100%.md', '# B\n'),
       ];
       expect(runRulesOnProject([rule], files)).toEqual([]);
     });

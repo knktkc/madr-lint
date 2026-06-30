@@ -36,8 +36,8 @@ export type { RunRuleOptions } from './core/runner.js';
 export { isProjectRule } from './core/types.js';
 
 // Parser — exposed for tools that want to parse without linting,
-// including the v2 bold-list extractor (ADR-0006).
-export { parseFile, extractBoldListMetadata } from './core/parser.js';
+// including the v2 list-metadata extractor (ADR-0006).
+export { parseFile, extractListMetadata } from './core/parser.js';
 export type { ParsedFile } from './core/parser.js';
 
 // Built-in rules and presets

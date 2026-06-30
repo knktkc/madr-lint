@@ -1,8 +1,8 @@
-# ADR-0001: No frontmatter at all
+# ADR-0001: No frontmatter and no body metadata
 
-- Status: Proposed (this is bold-list, not frontmatter)
-- Date: 2026-05-01
+This ADR has neither YAML frontmatter nor a leading metadata list, so the
+combined metadata view is null and status-enum must report missingStatus.
 
 ## Context and Problem Statement
 
-Body text.
+Body text only.

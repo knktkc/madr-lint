@@ -183,6 +183,23 @@ The spec.md and docs/rules/*.md for both should be updated to reflect that v2 is
 | `add-rule` skill template documents `metadata` for Shape B rules | **wired** |
 | Conflict-resolution test (mixed-mode ADR) | **wired** in `tests/core/parser.test.ts` ("both: frontmatter wins on conflict") |
 
+## Post-0.1.0 refinements (dogfooding on xtone/ai-delivery)
+
+Running the linter against a real corpus surfaced two corrections to the M4 design:
+
+1. **Plain (non-emphasized) keys are now read.** The original extractor required
+   bold keys (`- **Status**:`). But the canonical MADR v2.1.2 template uses
+   **plain** keys with asterisk bullets (`* Status: accepted`) — MADR even has
+   `ADR-0007 do-not-emphasize-line-headings` and `ADR-0011 use-asterisk-as-list-marker`.
+   The bold-only premise above was wrong; the extractor now reads both shapes.
+2. **Precision guards** keep the (now plain-compatible) extractor from mistaking
+   ordinary prose lists for metadata: the metadata list must be the leading block
+   after the H1 (only headings may precede it), and the list must carry at least
+   one recognized MADR key (`status`/`date`/`deciders`/`decision-makers`/`consulted`/`informed`).
+3. **Rename.** `ParsedFile.boldListMetadata` → `listMetadata` and
+   `extractBoldListMetadata` → `extractListMetadata` (the API-surface code blocks
+   above show the original names). The combined `metadata` field is unchanged.
+
 ## Out of scope
 
 - v2-style `Status: superseded by ADR-NNNN` parsing in `madr/supersedes-bidirectional` (separate concern, would require parsing the value text)

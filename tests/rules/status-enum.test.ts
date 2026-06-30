@@ -83,6 +83,44 @@ describe('madr/status-enum', () => {
         data: { status: 'pending' },
       });
     });
+
+    it('unknown-plain-v2.md (canonical v2 plain "pending") produces invalidStatus', () => {
+      const content = readFileSync(
+        join(fixturesDir, 'invalid', 'unknown-plain-v2.md'),
+        'utf8',
+      );
+      const diagnostics = runRule(rule, { content, path: 'unknown-plain-v2.md' });
+      expect(diagnostics).toHaveLength(1);
+      expect(diagnostics[0]).toMatchObject({
+        messageId: 'invalidStatus',
+        data: { status: 'pending' },
+      });
+    });
+  });
+
+  describe('precision: prose lists are not misread as metadata', () => {
+    it('a "Status:"-keyed bullet after intro prose does not yield invalidStatus', () => {
+      const content = [
+        '# Some note',
+        '',
+        'Introductory prose before any metadata block.',
+        '',
+        '- Status: still under discussion',
+        '',
+        '## Context',
+      ].join('\n');
+      const diagnostics = runRule(rule, { content, path: 'n.md' });
+      // The leading list is not metadata (it follows prose), so the rule
+      // reports a genuinely missing status — never a spurious invalidStatus.
+      expect(diagnostics).toHaveLength(1);
+      expect(diagnostics[0]?.messageId).toBe('missingStatus');
+    });
+
+    it('a prose list with no recognized key yields no invalidStatus', () => {
+      const content = '# T\n\n- Option A: fast\n- Option B: cheap\n\n## Context\n';
+      const diagnostics = runRule(rule, { content, path: 'n.md' });
+      expect(diagnostics.every((d) => d.messageId !== 'invalidStatus')).toBe(true);
+    });
   });
 
   describe('caseSensitive option', () => {

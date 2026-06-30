@@ -152,6 +152,17 @@ export interface ProjectRuleContext<TOptions = Record<string, unknown>> {
   /** User-merged options for this rule. */
   options: TOptions;
   /**
+   * Predicate: does a project-root-relative POSIX path exist as a regular
+   * file WITHIN the project root? Injected by the orchestrator so rules (e.g.
+   * no-broken-links) can verify link targets that are NOT in the linted `.md`
+   * set — non-Markdown assets or files outside the scanned paths. Returns
+   * false for directories and for any target that resolves at or above the
+   * project root (i.e. escapes it). Undefined when no filesystem is available
+   * (e.g. in-memory unit tests), in which case rules fall back to the `files`
+   * set alone.
+   */
+  fileExists?: (resolvedPath: string) => boolean;
+  /**
    * Emit a diagnostic. Unlike per-file rules, project rules MUST set
    * `path` explicitly — the runner cannot infer which file the
    * diagnostic relates to.

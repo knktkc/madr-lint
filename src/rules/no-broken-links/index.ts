@@ -25,9 +25,26 @@ function isExternalOrAnchor(url: string): boolean {
   return PROTOCOL_REGEX.test(url);
 }
 
-function stripAnchor(url: string): string {
-  const hashIdx = url.indexOf('#');
-  return hashIdx === -1 ? url : url.slice(0, hashIdx);
+function stripAnchorAndQuery(url: string): string {
+  const hash = url.indexOf('#');
+  const query = url.indexOf('?');
+  let cut = hash;
+  if (query !== -1 && (cut === -1 || query < cut)) cut = query;
+  return cut === -1 ? url : url.slice(0, cut);
+}
+
+// Markdown link destinations may be percent-encoded (e.g. `my%20file.md`).
+// Decode to the real on-disk path for resolution; leave malformed encoding
+// (e.g. a bare `%`) untouched rather than throwing. Fast-path the common case
+// of no percent-encoding to keep per-link cost minimal (decodeURIComponent is
+// comparatively expensive).
+function safeDecode(path: string): string {
+  if (!path.includes('%')) return path;
+  try {
+    return decodeURIComponent(path);
+  } catch {
+    return path;
+  }
 }
 
 function resolveRelative(fromDir: string, url: string): string {
@@ -78,13 +95,23 @@ const rule: ProjectRule<NoBrokenLinksOptions> = {
         const url = link.url;
         if (isExternalOrAnchor(url)) continue;
 
-        const pathOnly = stripAnchor(url);
+        const pathOnly = safeDecode(stripAnchorAndQuery(url));
         if (pathOnly === '') continue;
 
         const fileDir = dirname(file.path);
         const resolvedPath = resolveRelative(fileDir, pathOnly);
 
-        if (!knownPaths.has(resolvedPath)) {
+        // A target counts as present if it is one of the linted .md files
+        // OR exists on disk (covers non-Markdown assets and files outside
+        // the scanned paths). fileExists is undefined in pure in-memory
+        // runs, where knownPaths is the only source of truth. NOTE: the
+        // on-disk check inherits the host filesystem's case-sensitivity —
+        // a wrong-case link may pass on macOS/Windows yet fail on Linux/CI.
+        const exists =
+          knownPaths.has(resolvedPath) ||
+          (context.fileExists?.(resolvedPath) ?? false);
+
+        if (!exists) {
           context.report({
             messageId: 'brokenLink',
             path: file.path,

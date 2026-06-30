@@ -1,5 +1,5 @@
-import { readFileSync } from 'node:fs';
-import { relative, sep } from 'node:path';
+import { readFileSync, statSync } from 'node:fs';
+import { isAbsolute, relative, resolve, sep } from 'node:path';
 import {
   computeContentHash,
   loadManifest,
@@ -96,6 +96,10 @@ export function lintFiles(opts: LintOptions): LintResult {
     else perFileRules.push(rule);
   }
 
+  // Per-rule options from config tuples (`['error', {...}]`), threaded into
+  // both passes so rule options actually take effect (not just defaults).
+  const optionsByRule = extractOptionsByRule(opts.ruleSeverity);
+
   // ── Cache setup ──────────────────────────────────────────────────
   let manifest: CacheManifest | null = null;
   let filesFromCache = 0;
@@ -131,6 +135,7 @@ export function lintFiles(opts: LintOptions): LintResult {
       const fileDiagnostics = runPerFileRulesForFile(
         perFileRules,
         opts.ruleSeverity,
+        optionsByRule,
         file,
       );
       allDiagnostics.push(...fileDiagnostics);
@@ -141,7 +146,12 @@ export function lintFiles(opts: LintOptions): LintResult {
       manifest.files[file.relativePath] = next;
     } else {
       allDiagnostics.push(
-        ...runPerFileRulesForFile(perFileRules, opts.ruleSeverity, file),
+        ...runPerFileRulesForFile(
+          perFileRules,
+          opts.ruleSeverity,
+          optionsByRule,
+          file,
+        ),
       );
     }
   }
@@ -155,6 +165,44 @@ export function lintFiles(opts: LintOptions): LintResult {
       buildProjectFile({ path: f.relativePath, content: f.content }),
     );
 
+    // Does a path exist as a regular file WITHIN the project root? Lets
+    // project rules verify link targets that are not in the linted .md set
+    // (non-Markdown assets, files outside the scanned paths). Contract:
+    //   - a target that resolves at or above the root escapes the project →
+    //     false (path traversal cannot reach above the root);
+    //   - directories are not files → false (a link must point at a file);
+    //   - results are memoized per lint run (repeated targets cost one stat).
+    // The containment test compares the resolved absolute path to the root
+    // rather than a lexical prefix on `resolvedPath`, which may be
+    // un-normalized (e.g. a `/`-rooted link resolving to `foo/../../x`).
+    // NOTE: statSync follows symlinks, so a symlink that lives inside the root
+    // but points outside it is accepted — it is a real entry in the project
+    // tree. `resolvedPath` is POSIX; node's path.resolve accepts forward
+    // slashes on all platforms.
+    const projectRoot = resolve(opts.cwd);
+    const existsCache = new Map<string, boolean>();
+    const fileExists = (resolvedPath: string): boolean => {
+      const cached = existsCache.get(resolvedPath);
+      if (cached !== undefined) return cached;
+      const abs = resolve(projectRoot, resolvedPath);
+      const rel = relative(projectRoot, abs);
+      const escapesRoot =
+        rel === '' || rel === '..' || rel.startsWith(`..${sep}`) || isAbsolute(rel);
+      let result: boolean;
+      if (escapesRoot) {
+        result = false;
+      } else {
+        try {
+          result = statSync(abs, { throwIfNoEntry: false })?.isFile() ?? false;
+        } catch {
+          // ELOOP / EACCES / invalid path → cannot confirm a regular file.
+          result = false;
+        }
+      }
+      existsCache.set(resolvedPath, result);
+      return result;
+    };
+
     const errorRules: ProjectRule[] = [];
     const warnRules: ProjectRule[] = [];
     for (const rule of enabledProjectRules) {
@@ -165,12 +213,20 @@ export function lintFiles(opts: LintOptions): LintResult {
 
     if (errorRules.length > 0) {
       allDiagnostics.push(
-        ...runRulesOnProject(errorRules, projectFiles, { severity: 'error' }),
+        ...runRulesOnProject(errorRules, projectFiles, {
+          severity: 'error',
+          fileExists,
+          optionsByRule,
+        }),
       );
     }
     if (warnRules.length > 0) {
       allDiagnostics.push(
-        ...runRulesOnProject(warnRules, projectFiles, { severity: 'warn' }),
+        ...runRulesOnProject(warnRules, projectFiles, {
+          severity: 'warn',
+          fileExists,
+          optionsByRule,
+        }),
       );
     }
   }
@@ -190,6 +246,7 @@ export function lintFiles(opts: LintOptions): LintResult {
 function runPerFileRulesForFile(
   perFileRules: readonly Rule[],
   ruleSeverity: Record<string, RuleSeverity>,
+  optionsByRule: Record<string, Record<string, unknown>>,
   file: { relativePath: string; content: string },
 ): Diagnostic[] {
   const fileContext = {
@@ -209,12 +266,18 @@ function runPerFileRulesForFile(
   const diagnostics: Diagnostic[] = [];
   if (errorRules.length > 0) {
     diagnostics.push(
-      ...runRulesOnFile(errorRules, fileContext, { severity: 'error' }),
+      ...runRulesOnFile(errorRules, fileContext, {
+        severity: 'error',
+        optionsByRule,
+      }),
     );
   }
   if (warnRules.length > 0) {
     diagnostics.push(
-      ...runRulesOnFile(warnRules, fileContext, { severity: 'warn' }),
+      ...runRulesOnFile(warnRules, fileContext, {
+        severity: 'warn',
+        optionsByRule,
+      }),
     );
   }
   return diagnostics;
@@ -224,4 +287,21 @@ function resolveSeverity(config: RuleSeverity | undefined): Severity | 'off' {
   if (config === undefined) return 'off';
   if (typeof config === 'string') return config;
   return config[0];
+}
+
+/**
+ * Build a ruleName → options map from config tuples (`['error', {...}]`).
+ * Bare-string severities carry no options and are omitted, so rules without
+ * configured options fall back to their `meta.defaultOptions` in the runner.
+ */
+function extractOptionsByRule(
+  ruleSeverity: Record<string, RuleSeverity>,
+): Record<string, Record<string, unknown>> {
+  const map: Record<string, Record<string, unknown>> = {};
+  for (const [name, config] of Object.entries(ruleSeverity)) {
+    // Only tuples carry options; guard config[1] so a malformed 1-element
+    // `['error']` doesn't put `undefined` into the map.
+    if (Array.isArray(config) && config[1]) map[name] = config[1];
+  }
+  return map;
 }

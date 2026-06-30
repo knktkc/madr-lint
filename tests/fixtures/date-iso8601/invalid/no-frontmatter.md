@@ -1,3 +1,4 @@
-# ADR-0001: No frontmatter
+# ADR-0001: No frontmatter and no body metadata
 
-- Date: 2026-05-01 (bold-list, not frontmatter)
+No YAML frontmatter and no leading metadata list, so date-iso8601 must
+report missingDate.
