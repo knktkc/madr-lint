@@ -18,7 +18,7 @@ jobs:
       matrix:
         node: [22, 24]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v4
         with:
           version: 10
@@ -39,7 +39,7 @@ jobs:
       contents: read
       pull-requests: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           # Full history so the base ref can be materialized in a worktree and
           # benchmarked on the same runner (relative, machine-independent check).
@@ -62,7 +62,7 @@ jobs:
     name: ReDoS scan
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v4
         with:
           version: 10
