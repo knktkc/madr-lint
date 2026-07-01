@@ -1,0 +1,74 @@
+---
+title: madr-lint
+description: MADR（Markdown Architectural Decision Records）向けの高速で設定可能なリンター。構造・ステータス・日付・ファイル名・ファイル間の整合性を検証します。
+template: splash
+hero:
+  tagline: MADR（Markdown Architectural Decision Records）向けの高速で設定可能なリンターです。
+  actions:
+    - text: はじめる
+      link: guides/getting-started/
+      icon: right-arrow
+      variant: primary
+    - text: GitHub で見る
+      link: https://github.com/knktkc/madr-lint
+      icon: external
+      variant: minimal
+---
+
+import { Card, CardGrid } from '@astrojs/starlight/components';
+
+`madr-lint` は、あなたの [MADR](https://adr.github.io/madr/) ファイルがチームの
+拠り所とする規約に従っているかをチェックします。必須セクション、有効なステータス、
+ISO‑8601 の日付、ファイル名フォーマット、そして番号の一意性やリンク切れがないことといった
+ファイル間の整合性まで検証します。
+
+<CardGrid stagger>
+  <Card title="MADR v2 / v3 / v4 対応" icon="document">
+    YAML frontmatter（v3/v4）**と** v2 の本文リストメタデータの両方を読み取ります。
+    太字（`- **Status**:`）と正規のプレーン形式（`* Status:`）の両方の書き方に対応しています。
+    バージョンを明示的に指定することも、自動検出に任せることもできます。
+  </Card>
+  <Card title="ESLint 風のルール" icon="setting">
+    名前付きルール（`madr/required-sections` など）を `error` / `warn` / `off` の
+    重大度で指定でき、ルールごとのオプションは JSON Schema で検証されます。
+  </Card>
+  <Card title="ファイル単位とファイル間" icon="approve-check">
+    高速なファイル単位のチェック（セクション、ステータス、日付、ファイル名）に加え、
+    番号の一意性、supersedes グラフ、リンク切れを検査するプロジェクトルールを備えています。
+  </Card>
+  <Card title="CLI・ライブラリ・Action" icon="rocket">
+    コマンドラインから実行したり、プログラムから呼び出したり、GitHub Action として
+    CI に組み込んだりできます。text・JSON・SARIF のレポーターに対応しています。
+  </Card>
+</CardGrid>
+
+## クイックルック
+
+```bash
+# lint the ADRs in your configured adrDir (default: docs/adr)
+npx madr-lint
+
+# or point it at explicit paths
+npx madr-lint docs/adr
+
+# machine-readable output for CI
+npx madr-lint --format sarif
+```
+
+```typescript
+// madr-lint.config.ts
+import { defineConfig } from 'madr-lint';
+
+export default defineConfig({
+  extends: ['madr-lint:recommended'],
+  madrVersion: 'auto',
+  adrDir: 'docs/adr',
+  rules: {
+    'madr/filename-format': ['error', { pattern: '^[0-9]{4}-.+\\.md$' }],
+    'madr/no-numbering-gap': 'off',
+  },
+});
+```
+
+インストールして最初の lint を実行するには [はじめる](/ja/guides/getting-started/) へ、
+オプションの全体像を知るには [設定](/ja/guides/configuration/) へ進んでください。

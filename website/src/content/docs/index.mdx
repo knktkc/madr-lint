@@ -1,0 +1,75 @@
+---
+title: madr-lint
+description: A fast, configurable linter for MADR (Markdown Architectural Decision Records) — validate structure, status, dates, filenames and cross-file integrity.
+template: splash
+hero:
+  tagline: A fast, configurable linter for MADR — Markdown Architectural Decision Records.
+  actions:
+    - text: Get started
+      link: guides/getting-started/
+      icon: right-arrow
+      variant: primary
+    - text: View on GitHub
+      link: https://github.com/knktkc/madr-lint
+      icon: external
+      variant: minimal
+---
+
+import { Card, CardGrid } from '@astrojs/starlight/components';
+
+`madr-lint` checks that your [MADR](https://adr.github.io/madr/) files follow the
+conventions your team relies on — required sections, a valid status, ISO‑8601
+dates, filename format, and cross‑file integrity like unique numbering and
+non‑broken links.
+
+<CardGrid stagger>
+  <Card title="MADR v2 / v3 / v4 aware" icon="document">
+    Reads YAML frontmatter (v3/v4) **and** v2 body-list metadata — both bold
+    (`- **Status**:`) and the canonical plain (`* Status:`) shapes. Target a
+    version explicitly or let it auto-detect.
+  </Card>
+  <Card title="ESLint-style rules" icon="setting">
+    Named rules (`madr/required-sections`, …) with `error` / `warn` / `off`
+    severities and per-rule options validated by a JSON Schema.
+  </Card>
+  <Card title="Per-file & cross-file" icon="approve-check">
+    Fast per-file checks (sections, status, dates, filename) plus project rules
+    for unique numbering, the supersedes graph, and link rot.
+  </Card>
+  <Card title="CLI, library & Action" icon="rocket">
+    Run it from the command line, call it programmatically, or drop it into CI
+    as a GitHub Action. Text, JSON and SARIF reporters.
+  </Card>
+</CardGrid>
+
+## Quick look
+
+```bash
+# lint the ADRs in your configured adrDir (default: docs/adr)
+npx madr-lint
+
+# or point it at explicit paths
+npx madr-lint docs/adr
+
+# machine-readable output for CI
+npx madr-lint --format sarif
+```
+
+```typescript
+// madr-lint.config.ts
+import { defineConfig } from 'madr-lint';
+
+export default defineConfig({
+  extends: ['madr-lint:recommended'],
+  madrVersion: 'auto',
+  adrDir: 'docs/adr',
+  rules: {
+    'madr/filename-format': ['error', { pattern: '^[0-9]{4}-.+\\.md$' }],
+    'madr/no-numbering-gap': 'off',
+  },
+});
+```
+
+Head to [Getting started](/guides/getting-started/) to install and run your
+first lint, or jump to [Configuration](/guides/configuration/) for the full set
+of options.
