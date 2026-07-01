@@ -7,6 +7,8 @@
 
 A linter for [MADR](https://adr.github.io/madr/) (Markdown Architectural Decision Records).
 
+📖 **Documentation: <https://knktkc.github.io/madr-lint/>** ([日本語](https://knktkc.github.io/madr-lint/ja/))
+
 > **Status**: Alpha. Self-dogfood and one external repo (private) lint clean. The 1.0 stability gate is adoption feedback — until then, treat each minor bump as potentially breaking.
 
 ## Why
