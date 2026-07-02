@@ -34,7 +34,7 @@
     "redos": "tsx scripts/redos-scan.ts",
     "changeset": "changeset",
     "changeset:version": "changeset version",
-    "publish-ci": "pnpm publish --access public --provenance --no-git-checks"
+    "publish-ci": "changeset publish"
   },
   "keywords": [
     "madr",
