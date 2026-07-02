@@ -36,4 +36,9 @@ jobs:
           version: pnpm changeset:version
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # npm auth for the initial publish (the package does not exist yet, so a
+          # trusted publisher cannot be pre-registered). Provenance is still
+          # generated via the OIDC id-token above. Once v0.1.0 exists, configure a
+          # Trusted Publisher on the package and drop this token for tokenless CI.
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           NPM_CONFIG_PROVENANCE: 'true'
