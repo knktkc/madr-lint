@@ -7,10 +7,10 @@
 # and unaffected.
 minimumReleaseAge: 4320
 
-# Security floors for transitive/peer deps that `pnpm update` cannot reach
-# (vite is a vitest peer; esbuild comes via tsup/vite). Ranges track the
-# Dependabot-advised first patched versions — drop once the parents require
-# them on their own.
+# Security floor for a transitive dep that `pnpm update` cannot reach
+# (esbuild comes via tsup/vite). The range tracks the Dependabot-advised
+# first patched version — drop once the parents require it on their own.
+# (vite gets its floor as an explicit devDependency instead: an override on
+# a direct dep makes frozen-lockfile installs fail on specifier mismatch.)
 overrides:
-  vite: '>=7.3.5 <8'
   esbuild: '>=0.28.1 <0.29'
