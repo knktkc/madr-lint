@@ -1,0 +1,9 @@
+# Marks the docs site as its own pnpm project. Without this file pnpm walks
+# up, finds the repo-root pnpm-workspace.yaml, and silently operates on the
+# ROOT project when run from website/ — installs here become no-ops.
+# Mirrors the root supply-chain guard (see /pnpm-workspace.yaml).
+minimumReleaseAge: 4320
+
+# Security floor for esbuild (transitive via vite) — same as the root guard.
+overrides:
+  esbuild: '>=0.28.1 <0.29'
