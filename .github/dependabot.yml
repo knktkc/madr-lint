@@ -1,4 +1,8 @@
 version: 2
+
+# Cooldown mirrors the pnpm `minimumReleaseAge` guard (3 days): Dependabot
+# resolves versions itself and would otherwise bypass it. Majors wait a week.
+# Cooldown applies to VERSION updates only — SECURITY updates land immediately.
 updates:
   - package-ecosystem: npm
     directory: /
@@ -6,6 +10,9 @@ updates:
       interval: weekly
       day: monday
     open-pull-requests-limit: 5
+    cooldown:
+      default-days: 3
+      semver-major-days: 7
     groups:
       types:
         patterns:
@@ -29,6 +36,9 @@ updates:
       interval: weekly
       day: monday
     open-pull-requests-limit: 5
+    cooldown:
+      default-days: 3
+      semver-major-days: 7
     groups:
       astro:
         patterns:
@@ -38,3 +48,6 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 3
+      semver-major-days: 7
