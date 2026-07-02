@@ -183,7 +183,7 @@ The spec.md and docs/rules/*.md for both should be updated to reflect that v2 is
 | `add-rule` skill template documents `metadata` for Shape B rules | **wired** |
 | Conflict-resolution test (mixed-mode ADR) | **wired** in `tests/core/parser.test.ts` ("both: frontmatter wins on conflict") |
 
-## Post-0.1.0 refinements (dogfooding on xtone/ai-delivery)
+## Post-0.1.0 refinements (dogfooding on a real-world corpus)
 
 Running the linter against a real corpus surfaced two corrections to the M4 design:
 
@@ -213,4 +213,4 @@ Running the linter against a real corpus surfaced two corrections to the M4 desi
 - [ADR-0005](./0005-project-rule-api.md): project rule API
 - MADR v2 template: `https://github.com/adr/madr/tree/v2.1.2`
 - MADR v3+ template: `https://github.com/adr/madr/blob/develop/template/adr-template.md`
-- Parent project (v2 ADRs): `https://github.com/xtone/frontend-implementation-boilerplate`
+- Parent project (v2 ADRs): a private in-house repository
