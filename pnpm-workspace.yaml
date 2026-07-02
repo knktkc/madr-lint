@@ -6,3 +6,11 @@
 # `pnpm add`/`pnpm update` can pick them up. CI installs are frozen-lockfile
 # and unaffected.
 minimumReleaseAge: 4320
+
+# Security floors for transitive/peer deps that `pnpm update` cannot reach
+# (vite is a vitest peer; esbuild comes via tsup/vite). Ranges track the
+# Dependabot-advised first patched versions — drop once the parents require
+# them on their own.
+overrides:
+  vite: '>=7.3.5 <8'
+  esbuild: '>=0.28.1 <0.29'
