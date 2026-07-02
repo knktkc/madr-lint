@@ -93,7 +93,7 @@ describe('parser/extractListMetadata', () => {
 // Canonical MADR v2.1.2 declares metadata with PLAIN (non-emphasized) keys
 // and asterisk bullets: `* Status: accepted`. MADR even has ADRs rejecting
 // emphasis (0007) and mandating asterisks (0011). The extractor must read
-// these, not only the bold variant. See dogfooding on xtone/ai-delivery.
+// these, not only the bold variant. See the dogfooding notes in ADR-0006.
 describe('parser/extractListMetadata — plain (non-bold) v2 keys', () => {
   it('extracts a plain asterisk-bullet key/value pair', () => {
     const md = '# T\n\n* Status: accepted\n';
@@ -172,7 +172,7 @@ describe('parser/extractListMetadata — plain (non-bold) v2 keys', () => {
 // The plain-key shape (`Foo: bar`) is syntactically identical to prose
 // bullets, so the extractor must NOT promote ordinary leading lists to
 // metadata. Two guards: (1) only headings may precede the metadata list;
-// (2) the list must carry a recognized MADR key. See ai-delivery dogfooding.
+// (2) the list must carry a recognized MADR key. See ADR-0006.
 describe('parser/extractListMetadata — precision guards', () => {
   it('does not treat a prose list (no recognized key) as metadata', () => {
     const md = [

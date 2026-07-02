@@ -62,8 +62,7 @@ export function parseFile(content: string): ParsedFile {
 // identical to prose bullets, so we only promote a list to metadata when it
 // carries at least one of these keys. The set is deliberately the canonical
 // fields — a list keyed only by non-standard fields (e.g. `Tags`, `Author`)
-// is treated as prose, not metadata. See ADR-0006 and the xtone/ai-delivery
-// dogfooding.
+// is treated as prose, not metadata. See the dogfooding notes in ADR-0006.
 const RECOGNIZED_METADATA_KEYS = new Set([
   'status',
   'date',
