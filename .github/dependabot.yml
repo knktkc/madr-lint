@@ -21,6 +21,19 @@ updates:
         patterns:
           - mdast-util-*
           - "@types/mdast"
+  # The docs site keeps its own lockfile — without this entry its Astro/
+  # Starlight dependencies would never receive update PRs.
+  - package-ecosystem: npm
+    directory: /website
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      astro:
+        patterns:
+          - astro
+          - "@astrojs/*"
   - package-ecosystem: github-actions
     directory: /
     schedule:
