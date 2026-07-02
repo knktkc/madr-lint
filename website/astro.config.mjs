@@ -50,9 +50,9 @@ export default defineConfig({
         replacesTitle: true,
       },
       customCss: ['./src/styles/custom.css'],
-      social: {
-        github: 'https://github.com/knktkc/madr-lint',
-      },
+      social: [
+        { icon: 'github', label: 'GitHub', href: 'https://github.com/knktkc/madr-lint' },
+      ],
       // English is served at the root (no /en/ prefix); Japanese under /ja/.
       defaultLocale: 'root',
       locales: {
