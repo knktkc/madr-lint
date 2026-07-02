@@ -1,0 +1,8 @@
+# pnpm settings (single-package repo; no `packages` list on purpose).
+
+# Supply-chain guard: never resolve a dependency version published less than
+# 3 days ago (minutes). Freshly compromised releases (worm-style npm attacks)
+# are usually yanked within hours-to-days; the delay lets them age out before
+# `pnpm add`/`pnpm update` can pick them up. CI installs are frozen-lockfile
+# and unaffected.
+minimumReleaseAge: 4320
