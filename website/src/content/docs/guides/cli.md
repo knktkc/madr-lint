@@ -31,6 +31,8 @@ madr-lint docs/adr docs/decisions/0007-use-x.md
 | `--format <format>` | `text` | Reporter: `text`, `json`, or `sarif`. |
 | `--cache` / `--no-cache` | `--cache` | Use the per-file content-hash cache. |
 | `--cache-dir <dir>` | `.madr-lint/cache` | Cache directory. |
+| `--baseline` / `--no-baseline` | `--baseline` | Subtract `.madr-lint/baseline.json` when present. |
+| `--update-baseline` | | Rewrite `.madr-lint/baseline.json` from a full lint, then exit `0`. |
 | `--help` | | Show help. |
 | `--version` | | Print the version. |
 
@@ -105,3 +107,24 @@ madr-lint --no-cache
 # use a custom cache directory
 madr-lint --cache-dir .cache/madr-lint
 ```
+
+## Baseline
+
+Adopting `madr-lint` on a repo that already has violations? Snapshot them into
+`.madr-lint/baseline.json` so only *new* violations fail the build:
+
+```bash
+# snapshot today's violations and commit the file
+madr-lint --update-baseline
+
+# subsequent runs subtract the baseline automatically
+madr-lint
+
+# audit everything, ignoring the baseline
+madr-lint --no-baseline
+```
+
+Subtraction runs after the cache and after inline suppression, and never touches
+the cache — so editing or deleting the baseline takes effect immediately. See the
+[Adopting on an existing repo](/guides/adopting-existing-repo/) guide for the full
+workflow.

@@ -31,6 +31,8 @@ madr-lint docs/adr docs/decisions/0007-use-x.md
 | `--format <format>` | `text` | レポーター: `text`、`json`、または `sarif`。 |
 | `--cache` / `--no-cache` | `--cache` | ファイル単位のコンテンツハッシュキャッシュを使用します。 |
 | `--cache-dir <dir>` | `.madr-lint/cache` | キャッシュディレクトリ。 |
+| `--baseline` / `--no-baseline` | `--baseline` | 存在する場合に `.madr-lint/baseline.json` を差し引きます。 |
+| `--update-baseline` | | 完全な lint から `.madr-lint/baseline.json` を書き直し、`0` で終了します。 |
 | `--help` | | ヘルプを表示します。 |
 | `--version` | | バージョンを出力します。 |
 
@@ -104,3 +106,24 @@ madr-lint --no-cache
 # use a custom cache directory
 madr-lint --cache-dir .cache/madr-lint
 ```
+
+## ベースライン
+
+すでに違反があるリポジトリに `madr-lint` を導入しますか？ それらを
+`.madr-lint/baseline.json` にスナップショットすれば、*新しい*違反だけがビルドを
+失敗させるようになります。
+
+```bash
+# 現在の違反をスナップショットしてファイルをコミットする
+madr-lint --update-baseline
+
+# 以降の実行では自動的にベースラインを差し引く
+madr-lint
+
+# ベースラインを無視してすべてを確認する
+madr-lint --no-baseline
+```
+
+差し引きはキャッシュの後、インライン抑制の後に実行され、キャッシュには一切触れません。
+そのためベースラインの編集や削除は即座に反映されます。詳しいワークフローは
+[既存リポジトリへの導入](/ja/guides/adopting-existing-repo/)ガイドを参照してください。
