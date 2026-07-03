@@ -18,7 +18,7 @@ export interface Reporter {
   ): string;
 }
 
-export type ReporterFormat = 'text' | 'json' | 'sarif';
+export type ReporterFormat = 'text' | 'json' | 'sarif' | 'github';
 
 /**
  * Human-readable reporter for terminal output. Groups diagnostics by file,
@@ -182,8 +182,57 @@ export const sarifReporter: Reporter = {
   },
 };
 
+/** Escape a workflow-command message value (data after `::`). */
+function escapeGhMessage(s: string): string {
+  return s.replace(/%/g, '%25').replace(/\r/g, '%0D').replace(/\n/g, '%0A');
+}
+
+/** Escape a workflow-command property value (e.g. file=, title=). */
+function escapeGhProperty(s: string): string {
+  return escapeGhMessage(s)
+    .replace(/,/g, '%2C')
+    .replace(/:/g, '%3A');
+}
+
+/**
+ * GitHub Actions annotation reporter. Emits one `::error` / `::warning`
+ * workflow command per diagnostic so GitHub renders them as PR diff annotations,
+ * then a one-line human summary on stdout.
+ *
+ * Escape rules from https://docs.github.com/en/actions/writing-workflows/choosing-what-your-workflow-does/workflow-commands-for-github-actions
+ */
+export const githubReporter: Reporter = {
+  format(diagnostics, rulesByName, meta) {
+    const lines: string[] = [];
+
+    for (const d of diagnostics) {
+      const level = d.severity === 'error' ? 'error' : 'warning';
+      const file = escapeGhProperty(d.path);
+      const title = escapeGhProperty(d.ruleName);
+      const message = escapeGhMessage(renderMessage(d, rulesByName));
+
+      const linePart = d.loc ? `,line=${d.loc.line}` : '';
+      lines.push(`::${level} file=${file}${linePart},title=${title}::${message}`);
+    }
+
+    const errors = diagnostics.filter((d) => d.severity === 'error').length;
+    const warnings = diagnostics.filter((d) => d.severity === 'warn').length;
+    const summaryParts: string[] = [];
+    if (errors > 0) summaryParts.push(`${errors} ${errors === 1 ? 'error' : 'errors'}`);
+    if (warnings > 0) summaryParts.push(`${warnings} ${warnings === 1 ? 'warning' : 'warnings'}`);
+    // A clean run still prints counts — a silent log line reads as a broken CI step.
+    if (summaryParts.length === 0) summaryParts.push('0 errors, 0 warnings');
+    const baselineHidden = meta?.baselineHidden ?? 0;
+    if (baselineHidden > 0) summaryParts.push(`${baselineHidden} hidden by baseline`);
+    lines.push(summaryParts.join(', '));
+
+    return lines.join('\n');
+  },
+};
+
 export const reporters: Record<ReporterFormat, Reporter> = {
   text: textReporter,
   json: jsonReporter,
   sarif: sarifReporter,
+  github: githubReporter,
 };
