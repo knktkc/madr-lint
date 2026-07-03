@@ -1,6 +1,15 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { relative, resolve, sep } from 'node:path';
 import { defineCommand, runMain } from 'citty';
+import {
+  baselineHiddenSummary,
+  baselineMalformedWarning,
+  baselinePath,
+  baselineWriteSummary,
+  buildBaseline,
+  loadBaseline,
+  writeBaseline,
+} from './core/baseline.js';
 import { computeConfigHash } from './core/cache.js';
 import { loadConfig, resolveExtends, type ResolvedConfig } from './core/config.js';
 import { findAdrFiles } from './core/discover.js';
@@ -48,6 +57,18 @@ const main = defineCommand({
       type: 'string',
       description: 'Reporter format: text (default), json, or sarif',
       default: 'text',
+    },
+    baseline: {
+      type: 'boolean',
+      description:
+        'Subtract .madr-lint/baseline.json when present (use --no-baseline to ignore it)',
+      default: true,
+    },
+    'update-baseline': {
+      type: 'boolean',
+      description:
+        'Rewrite .madr-lint/baseline.json from a full lint, then exit 0',
+      default: false,
     },
   },
   run({ args }) {
@@ -108,6 +129,18 @@ const main = defineCommand({
         }
       : null;
 
+    // --update-baseline runs a full lint IGNORING any existing baseline, so we
+    // subtract nothing here and (below) rebuild the file from the raw output.
+    const baselineFile = baselinePath(cwd);
+    const updateBaseline = args['update-baseline'] === true;
+    const useBaseline = !updateBaseline && args.baseline !== false;
+    const baseline = useBaseline ? loadBaseline(baselineFile) : null;
+    // Absent → silent no-op. Present but unusable → warn: silently ignoring a
+    // corrupt baseline would flip CI red with zero explanation.
+    if (useBaseline && baseline === null && existsSync(baselineFile)) {
+      console.error(baselineMalformedWarning());
+    }
+
     const allRulesArray: AnyRule[] = Object.values(builtinRules);
     let result: ReturnType<typeof lintFiles>;
     try {
@@ -117,6 +150,7 @@ const main = defineCommand({
         files,
         cwd,
         cache: cacheConfig,
+        baseline,
       });
     } catch (err) {
       // Invalid rule options in the user's config fail AJV validation now that
@@ -127,6 +161,14 @@ const main = defineCommand({
         process.exit(2);
       }
       throw err;
+    }
+
+    // Rebuild the baseline from the full (pre-baseline) diagnostics and exit.
+    if (updateBaseline) {
+      const built = buildBaseline(result.diagnostics);
+      writeBaseline(baselineFile, built);
+      console.log(baselineWriteSummary(built));
+      process.exit(0);
     }
 
     const rulesByName = new Map<string, AnyRule>(
@@ -140,7 +182,16 @@ const main = defineCommand({
       );
       process.exit(2);
     }
-    console.log(reporter.format(result.diagnostics, rulesByName));
+    console.log(
+      reporter.format(result.diagnostics, rulesByName, {
+        baselineHidden: result.baselineHidden,
+      }),
+    );
+    // Text-only footer: JSON carries the count in its summary; SARIF stays
+    // schema-clean.
+    if (format === 'text' && result.baselineHidden > 0) {
+      console.log(baselineHiddenSummary(result.baselineHidden));
+    }
 
     const errorCount = result.diagnostics.filter(
       (d) => d.severity === 'error',

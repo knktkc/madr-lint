@@ -1,10 +1,20 @@
 import pc from 'picocolors';
 import type { AnyRule, Diagnostic } from './types.js';
 
+/**
+ * Run-level facts a reporter cannot derive from the diagnostics themselves.
+ * Optional third argument so existing two-arg callers keep working.
+ */
+export interface ReporterMeta {
+  /** Diagnostics absorbed by .madr-lint/baseline.json. Absent ⇒ 0. */
+  baselineHidden?: number;
+}
+
 export interface Reporter {
   format(
     diagnostics: readonly Diagnostic[],
     rulesByName: Map<string, AnyRule>,
+    meta?: ReporterMeta,
   ): string;
 }
 
@@ -86,7 +96,7 @@ function formatSummary(errors: number, warnings: number): string {
  * directly without scraping the human-readable formatter.
  */
 export const jsonReporter: Reporter = {
-  format(diagnostics, rulesByName) {
+  format(diagnostics, rulesByName, meta) {
     const errors = diagnostics.filter((d) => d.severity === 'error').length;
     const warnings = diagnostics.filter((d) => d.severity === 'warn').length;
     const payload = {
@@ -95,6 +105,9 @@ export const jsonReporter: Reporter = {
         total: diagnostics.length,
         errors,
         warnings,
+        // Always present (0 when no baseline) so CI consumers can detect an
+        // active baseline without probing for the key. SARIF stays untouched.
+        baselineHidden: meta?.baselineHidden ?? 0,
       },
       results: diagnostics.map((d) => ({
         path: d.path,

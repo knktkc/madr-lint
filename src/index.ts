@@ -44,6 +44,18 @@ export type { ParsedFile } from './core/parser.js';
 export * as rules from './rules/index.js';
 export { recommended } from './configs/recommended.js';
 
+// Baseline for gradual adoption (issue #24 / ADR-0007)
+export {
+  applyBaseline,
+  buildBaseline,
+  baselinePath,
+  loadBaseline,
+  serializeBaseline,
+  writeBaseline,
+  BASELINE_VERSION,
+} from './core/baseline.js';
+export type { Baseline, BaselineApplyResult } from './core/baseline.js';
+
 export interface MadrLintConfig {
   /** Preset configurations to extend (e.g. 'madr-lint:recommended'). */
   extends?: string[];
