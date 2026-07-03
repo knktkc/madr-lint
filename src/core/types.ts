@@ -23,6 +23,14 @@ export type MdastNode = Root | Nodes;
 export type Severity = 'error' | 'warn';
 
 /**
+ * The reserved rule name used for internal-error diagnostics. A real rule
+ * cannot register with this name (the registry should reject collisions).
+ * Lives here (not in runner.ts) so leaf modules like the suppression layer
+ * can reference it without importing the runner.
+ */
+export const INTERNAL_ERROR_RULE_NAME = 'core/internal-error';
+
+/**
  * User-facing severity declaration in config files.
  * - bare string: enable/disable with default options
  * - tuple: enable with explicit options

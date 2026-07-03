@@ -12,7 +12,6 @@ import {
   buildProjectFile,
   runRulesOnFile,
   runRulesOnProject,
-  INTERNAL_ERROR_RULE_NAME,
 } from './runner.js';
 import {
   collectDirectives,
@@ -32,6 +31,7 @@ function toPosix(p: string): string {
   return p.split(sep).join('/');
 }
 import {
+  INTERNAL_ERROR_RULE_NAME,
   isProjectRule,
   type AnyRule,
   type Diagnostic,

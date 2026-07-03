@@ -13,8 +13,11 @@
 // coordinates and silently mis-align them with diagnostic lines.
 
 import type { Root } from 'mdast';
-import type { Diagnostic, MdastNode } from './types.js';
-import { INTERNAL_ERROR_RULE_NAME } from './runner.js';
+import {
+  INTERNAL_ERROR_RULE_NAME,
+  type Diagnostic,
+  type MdastNode,
+} from './types.js';
 
 type DirectiveKind = 'disable-file' | 'disable' | 'enable' | 'disable-next-line';
 

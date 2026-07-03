@@ -1,15 +1,16 @@
 import Ajv, { type AnySchemaObject, type ValidateFunction } from 'ajv';
-import type {
-  Diagnostic,
-  FileContext,
-  MdastNode,
-  ProjectFile,
-  ProjectRule,
-  ProjectRuleContext,
-  Rule,
-  RuleContext,
-  RuleListeners,
-  Severity,
+import {
+  INTERNAL_ERROR_RULE_NAME,
+  type Diagnostic,
+  type FileContext,
+  type MdastNode,
+  type ProjectFile,
+  type ProjectRule,
+  type ProjectRuleContext,
+  type Rule,
+  type RuleContext,
+  type RuleListeners,
+  type Severity,
 } from './types.js';
 import { parseFile, type ParsedFile } from './parser.js';
 import { collectDirectives, filterSuppressed } from './suppression.js';
@@ -32,11 +33,9 @@ function getValidator(schema: AnySchemaObject): ValidateFunction {
   return validator;
 }
 
-/**
- * The reserved rule name used for internal-error diagnostics. A real rule
- * cannot register with this name (the registry should reject collisions).
- */
-export const INTERNAL_ERROR_RULE_NAME = 'core/internal-error';
+// Defined in types.ts (leaf module) so the suppression layer can reference
+// it without a runner import cycle; re-exported here for API stability.
+export { INTERNAL_ERROR_RULE_NAME };
 
 /**
  * Thrown when a rule's merged options fail AJV validation against
@@ -78,6 +77,9 @@ export interface RunRuleOptions {
 /**
  * Run a single rule against a single file. Sugar over runRulesOnFile
  * for the common one-rule case (used heavily by tests).
+ *
+ * Note: inline suppression directives (`<!-- madr-lint-disable... -->`)
+ * present in `file.content` ARE honored — matching diagnostics are filtered.
  */
 export function runRule<TOptions extends Record<string, unknown>>(
   rule: Rule<TOptions>,
@@ -105,6 +107,10 @@ export function runRule<TOptions extends Record<string, unknown>>(
  * Frontmatter is exposed lazily via context.frontmatter — the getter
  * triggers parseFile() on first access. Filename-style rules that never
  * touch frontmatter and return void from create() pay zero parse cost.
+ *
+ * Note: inline suppression directives (`<!-- madr-lint-disable... -->`)
+ * present in `file.content` ARE honored — matching diagnostics are filtered
+ * centrally after all rules have reported (see suppression.ts).
  */
 export function runRulesOnFile(
   rules: readonly Rule[],
