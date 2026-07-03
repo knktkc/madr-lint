@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, readFileSync, statSync, type Stats } from 'node:fs';
 import { resolve } from 'node:path';
 import { createJiti } from 'jiti';
 import { recommended } from '../configs/recommended.js';
@@ -54,12 +54,17 @@ export class ConfigFileNotFoundError extends Error {
  * Throws `SyntaxError` or other load errors if the file is malformed.
  */
 export function loadConfigFromPath(filePath: string): ResolvedConfig {
-  if (!existsSync(filePath)) {
+  // Single statSync instead of existsSync→statSync: the redundant pre-check
+  // opens a check-then-use window CodeQL flags as js/file-system-race (TOCTOU).
+  let st: Stats;
+  try {
+    st = statSync(filePath);
+  } catch {
     throw new ConfigFileNotFoundError(`Config file not found: ${filePath}`);
   }
-  // A directory passes existsSync but jiti's failure reads like a missing
+  // A directory exists on disk but jiti's failure reads like a missing
   // npm package ("Cannot find module") — fail with an honest message instead.
-  if (statSync(filePath).isDirectory()) {
+  if (st.isDirectory()) {
     throw new ConfigFileNotFoundError(
       `Config path is a directory, not a file: ${filePath}`,
     );
