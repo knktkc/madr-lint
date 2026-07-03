@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, statSync, type Stats } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { createJiti } from 'jiti';
 import { recommended } from '../configs/recommended.js';
@@ -54,23 +54,29 @@ export class ConfigFileNotFoundError extends Error {
  * Throws `SyntaxError` or other load errors if the file is malformed.
  */
 export function loadConfigFromPath(filePath: string): ResolvedConfig {
-  // Single statSync instead of existsSync→statSync: the redundant pre-check
-  // opens a check-then-use window CodeQL flags as js/file-system-race (TOCTOU).
-  let st: Stats;
+  // Race-free error classification: fs check-APIs (existsSync/statSync) before
+  // a use are TOCTOU by construction (CodeQL js/file-system-race). Reading IS
+  // the use, so classify its errors instead: ENOENT/EISDIR carry exactly the
+  // two cases we distinguish, with no check-then-use window.
+  let raw: string;
   try {
-    st = statSync(filePath);
-  } catch {
-    throw new ConfigFileNotFoundError(`Config file not found: ${filePath}`);
-  }
-  // A directory exists on disk but jiti's failure reads like a missing
-  // npm package ("Cannot find module") — fail with an honest message instead.
-  if (st.isDirectory()) {
-    throw new ConfigFileNotFoundError(
-      `Config path is a directory, not a file: ${filePath}`,
-    );
+    raw = readFileSync(filePath, 'utf8');
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === 'ENOENT') {
+      throw new ConfigFileNotFoundError(`Config file not found: ${filePath}`);
+    }
+    // A directory exists on disk but jiti's failure reads like a missing
+    // npm package ("Cannot find module") — fail with an honest message instead.
+    if (code === 'EISDIR') {
+      throw new ConfigFileNotFoundError(
+        `Config path is a directory, not a file: ${filePath}`,
+      );
+    }
+    throw err;
   }
   if (filePath.endsWith('.json')) {
-    const parsed = JSON.parse(readFileSync(filePath, 'utf8')) as MadrLintConfig;
+    const parsed = JSON.parse(raw) as MadrLintConfig;
     return resolveExtends(parsed);
   }
   const jiti = createJiti(import.meta.url, { interopDefault: true });
