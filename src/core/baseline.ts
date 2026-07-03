@@ -41,17 +41,28 @@ export function baselinePath(cwd: string): string {
 }
 
 /**
+ * Null-prototype map. Fingerprint keys derive from on-disk filenames and
+ * rule metadata, so a key like '__proto__' must behave as ordinary data —
+ * on a plain object it would read/write THROUGH Object.prototype instead
+ * (prototype pollution + silently dropped entries). With no prototype there
+ * is nothing to pollute. JSON.stringify output is identical.
+ */
+function nullProtoMap<T>(): Record<string, T> {
+  return Object.create(null) as Record<string, T>;
+}
+
+/**
  * Aggregate diagnostics into a baseline by counting each
  * `(path, ruleName, messageId)`. `core/internal-error` is never recorded —
  * it signals a rule bug and must never be silenced (same contract as inline
  * suppression).
  */
 export function buildBaseline(diagnostics: readonly Diagnostic[]): Baseline {
-  const entries: Baseline['entries'] = {};
+  const entries = nullProtoMap<Record<string, Record<string, number>>>();
   for (const d of diagnostics) {
     if (d.ruleName === INTERNAL_ERROR_RULE_NAME) continue;
-    const byRule = (entries[d.path] ??= {});
-    const byMessage = (byRule[d.ruleName] ??= {});
+    const byRule = (entries[d.path] ??= nullProtoMap());
+    const byMessage = (byRule[d.ruleName] ??= nullProtoMap());
     byMessage[d.messageId] = (byMessage[d.messageId] ?? 0) + 1;
   }
   return { version: BASELINE_VERSION, entries };
@@ -63,13 +74,16 @@ export function buildBaseline(diagnostics: readonly Diagnostic[]): Baseline {
  * always produces byte-identical output → minimal git diffs.
  */
 export function serializeBaseline(baseline: Baseline): string {
-  const sortedEntries: Baseline['entries'] = {};
+  // Null-proto targets: on a plain object, assigning a '__proto__' key goes
+  // through the inherited setter and the entry silently vanishes from the
+  // JSON output.
+  const sortedEntries = nullProtoMap<Record<string, Record<string, number>>>();
   for (const path of Object.keys(baseline.entries).toSorted()) {
     const byRule = baseline.entries[path] ?? {};
-    const sortedByRule: Record<string, Record<string, number>> = {};
+    const sortedByRule = nullProtoMap<Record<string, number>>();
     for (const rule of Object.keys(byRule).toSorted()) {
       const byMessage = byRule[rule] ?? {};
-      const sortedByMessage: Record<string, number> = {};
+      const sortedByMessage = nullProtoMap<number>();
       for (const messageId of Object.keys(byMessage).toSorted()) {
         sortedByMessage[messageId] = byMessage[messageId] ?? 0;
       }
@@ -93,11 +107,38 @@ export function loadBaseline(path: string): Baseline | null {
     if (typeof data.entries !== 'object' || data.entries === null) return null;
     return {
       version: typeof data.version === 'number' ? data.version : BASELINE_VERSION,
-      entries: data.entries as Baseline['entries'],
+      entries: rebuildEntries(data.entries as Record<string, unknown>),
     };
   } catch {
     return null;
   }
+}
+
+/**
+ * Copy parsed JSON into null-proto maps, keeping only well-shaped levels
+ * (objects) and leaves (numbers). JSON.parse itself creates '__proto__' as
+ * a safe own property, but handing proto-ful objects downstream would
+ * re-expose every consumer write to the pollution hazard — and a malformed
+ * inner level (e.g. `"a.md": null`) would crash applyBaseline.
+ */
+function rebuildEntries(raw: Record<string, unknown>): Baseline['entries'] {
+  const entries = nullProtoMap<Record<string, Record<string, number>>>();
+  for (const [path, rawByRule] of Object.entries(raw)) {
+    if (typeof rawByRule !== 'object' || rawByRule === null) continue;
+    const byRule = nullProtoMap<Record<string, number>>();
+    for (const [rule, rawByMessage] of Object.entries(rawByRule)) {
+      if (typeof rawByMessage !== 'object' || rawByMessage === null) continue;
+      const byMessage = nullProtoMap<number>();
+      for (const [messageId, count] of Object.entries(
+        rawByMessage as Record<string, unknown>,
+      )) {
+        if (typeof count === 'number') byMessage[messageId] = count;
+      }
+      byRule[rule] = byMessage;
+    }
+    entries[path] = byRule;
+  }
+  return entries;
 }
 
 /** Write the baseline deterministically, creating `.madr-lint/` if needed. */
