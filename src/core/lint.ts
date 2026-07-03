@@ -1,5 +1,6 @@
 import { readFileSync, statSync } from 'node:fs';
 import { isAbsolute, relative, resolve, sep } from 'node:path';
+import { applyBaseline, type Baseline } from './baseline.js';
 import {
   computeContentHash,
   loadManifest,
@@ -68,12 +69,21 @@ export interface LintOptions {
    * re-run regardless of the cache. Pass `null` to disable.
    */
   cache?: CacheConfig | null;
+  /**
+   * Parsed baseline to subtract, or null/undefined to disable. Subtraction
+   * runs AFTER inline-suppression filtering and is NEVER written to the cache
+   * (the cache keeps pre-baseline diagnostics, so editing or deleting the
+   * baseline file takes effect without cache invalidation). See ADR-0007.
+   */
+  baseline?: Baseline | null;
 }
 
 export interface LintResult {
   filesChecked: number;
   filesFromCache: number;
   diagnostics: Diagnostic[];
+  /** How many diagnostics the baseline absorbed (0 when no baseline). */
+  baselineHidden: number;
 }
 
 /**
@@ -250,14 +260,28 @@ export function lintFiles(opts: LintOptions): LintResult {
   }
 
   // ── Persist cache ────────────────────────────────────────────────
+  // Cache the PRE-baseline diagnostics: subtraction happens below, after the
+  // save, so the on-disk cache is independent of the baseline file.
   if (manifest && opts.cache) {
     saveManifest(manifestPath(opts.cache.dir), manifest);
   }
 
+  // ── Baseline subtraction ─────────────────────────────────────────
+  // Zero work when no baseline is provided (the common hot path).
+  if (!opts.baseline) {
+    return {
+      filesChecked: opts.files.length,
+      filesFromCache,
+      diagnostics: allDiagnostics,
+      baselineHidden: 0,
+    };
+  }
+  const applied = applyBaseline(allDiagnostics, opts.baseline);
   return {
     filesChecked: opts.files.length,
     filesFromCache,
-    diagnostics: allDiagnostics,
+    diagnostics: applied.kept,
+    baselineHidden: applied.hidden,
   };
 }
 
