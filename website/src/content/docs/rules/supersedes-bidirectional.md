@@ -91,6 +91,8 @@ This rule reads frontmatter only, so it does not apply to MADR v2 body-list meta
 
 Disable for repos that track supersession outside ADR frontmatter — e.g. via Git tags, an external registry, or only a `status: superseded by ...` line without explicit `supersedes` / `superseded-by` fields.
 
+Like all rules, this rule can be suppressed inline — see [Suppressing rules](/guides/suppressing-rules/).
+
 ## Source
 
 - Rule source: <https://github.com/knktkc/madr-lint/blob/main/src/rules/supersedes-bidirectional/index.ts>

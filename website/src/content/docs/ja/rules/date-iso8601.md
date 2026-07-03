@@ -72,6 +72,8 @@ export default defineConfig({
 
 異なる日付形式を使用するシステムから移行する場合は、`madr/date-iso8601` を `off` にしてください。カスタムのメタデータキーを読み取るには、`field` を上書きすることを優先してください。
 
+他のルールと同様、インラインコメントで抑制できます — [ルールの抑制](/ja/guides/suppressing-rules/)を参照してください。
+
 ## ソース
 
 - Rule source: <https://github.com/knktkc/madr-lint/blob/main/src/rules/date-iso8601/index.ts>

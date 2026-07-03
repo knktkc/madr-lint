@@ -93,6 +93,9 @@ attributed to a file; a directive in that file suppresses them:
   another comment on the same line (`<!-- … --><!-- … -->`) is rejected as a
   directive. Unknown keywords (e.g. `madr-lint-disable-line`) and ordinary
   HTML comments are ignored silently.
+- **Stacked `disable-next-line` comments do not chain.** The first one
+  targets the second comment's line, not your content — put all rules in a
+  single comma-separated list in one comment instead.
 - **`core/internal-error` cannot be suppressed.** It signals a rule bug, not
   a finding about your ADR.
 - **The cache stays correct.** Directives are part of the file content, so

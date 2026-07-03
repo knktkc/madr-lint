@@ -91,6 +91,8 @@ export default defineConfig({
 
 supersession を ADR frontmatter の外部で追跡しているリポジトリでは無効化してください — 例: Git タグ、外部レジストリ、または明示的な `supersedes` / `superseded-by` フィールドなしで `status: superseded by ...` の行のみを使う場合です。
 
+他のルールと同様、インラインコメントで抑制できます — [ルールの抑制](/ja/guides/suppressing-rules/)を参照してください。
+
 ## ソース
 
 - Rule source: <https://github.com/knktkc/madr-lint/blob/main/src/rules/supersedes-bidirectional/index.ts>

@@ -75,6 +75,8 @@ export default defineConfig({
 
 このルールを無効化する理由は基本的にありません。2 つの ADR が番号を共有している場合、定義上どちらか一方が誤っています。
 
+他のルールと同様、インラインコメントで抑制できます — [ルールの抑制](/ja/guides/suppressing-rules/)を参照してください。
+
 ## ソース
 
 - Rule source: <https://github.com/knktkc/madr-lint/blob/main/src/rules/no-duplicate-numbering/index.ts>

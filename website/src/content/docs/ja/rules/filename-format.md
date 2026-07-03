@@ -73,6 +73,8 @@ export default defineConfig({
 
 `madr/filename-format` を `off` にするのは、異なる規約を使用する既存の ADR コレクションを移行する場合のみにしてください。ある程度の検証を維持するために、`pattern` を上書きすることを優先してください。
 
+他のルールと同様、インラインコメントで抑制できます — [ルールの抑制](/ja/guides/suppressing-rules/)を参照してください。
+
 ## ソース
 
 - Rule source: <https://github.com/knktkc/madr-lint/blob/main/src/rules/filename-format/index.ts>
