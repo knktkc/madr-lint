@@ -61,7 +61,7 @@ const main = defineCommand({
     },
     format: {
       type: 'string',
-      description: 'Reporter format: text (default), json, or sarif',
+      description: 'Reporter format: text (default), json, sarif, or github',
       default: 'text',
     },
     baseline: {
