@@ -56,6 +56,8 @@ madr-lint: 3 warning(s) found, exceeds --max-warnings 0
 madr-lint --quiet --max-warnings 0
 ```
 
+[ベースライン](/ja/guides/adopting-existing-repo/)に吸収された警告は `--max-warnings` に**カウントされません**。ベースラインはしきい値チェックの前に減算されるため、引き継いだ負債が CI を失敗させることはなく、新規の警告のみがカウントされます。`--update-baseline` は `--quiet` や `--max-warnings` に関係なく常に終了コード 0 で終了します。
+
 ## レポーター
 
 ### `text`（デフォルト）

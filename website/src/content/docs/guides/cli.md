@@ -60,6 +60,11 @@ madr-lint: 3 warning(s) found, exceeds --max-warnings 0
 madr-lint --quiet --max-warnings 0
 ```
 
+Warnings absorbed by the [baseline](/guides/adopting-existing-repo/) do **not**
+count toward `--max-warnings` — the baseline is subtracted before the threshold
+is checked, so inherited debt never fails CI. Only fresh warnings count.
+`--update-baseline` always exits 0, regardless of `--quiet` or `--max-warnings`.
+
 ## Reporters
 
 ### `text` (default)
