@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { runRulesOnFile } from '../../src/core/runner.js';
 import { lintFiles } from '../../src/core/lint.js';
+import filenameFormat from '../../src/rules/filename-format/index.js';
 import noBrokenLinks from '../../src/rules/no-broken-links/index.js';
 import noDuplicateNumbering from '../../src/rules/no-duplicate-numbering/index.js';
 import type { Diagnostic, Rule, RuleListeners } from '../../src/core/types.js';
@@ -297,6 +298,45 @@ describe('core/suppression — per-file directives', () => {
       });
       expect(dA).toEqual([]);
       expect(reportedLines(dB)).toEqual([1, 2]);
+    });
+  });
+
+  describe('zero-parse fast path for directive-free files (perf tripwire)', () => {
+    // Malformed YAML makes gray-matter THROW, so this content is a tripwire:
+    // if the suppression layer forces a parse for a file whose rules never
+    // parsed it (Shape-A filename rules), the test blows up. This pins the
+    // fix for the -99% filename-format bench regression: directive
+    // collection must be gated on a raw-content substring check, not just
+    // on diagnostics being present.
+    const UNPARSEABLE = '---\na: [unclosed\n---\n# x\n';
+
+    it('a filename diagnostic on a directive-free file does not force a parse', () => {
+      const diags = runRulesOnFile([filenameFormat as Rule], {
+        content: UNPARSEABLE,
+        path: 'BAD_NAME.md',
+      });
+      expect(diags).toHaveLength(1);
+      expect(diags[0]?.ruleName).toBe('madr/filename-format');
+    });
+
+    it('disable-file still suppresses a filename diagnostic (directive literal legitimately triggers the parse)', () => {
+      const content = '<!-- madr-lint-disable-file -->\n# x\n';
+      expect(
+        runRulesOnFile([filenameFormat as Rule], {
+          content,
+          path: 'BAD_NAME.md',
+        }),
+      ).toEqual([]);
+    });
+
+    it('a rule-scoped disable-file still suppresses the filename diagnostic', () => {
+      const content = '<!-- madr-lint-disable-file madr/filename-format -->\n# x\n';
+      expect(
+        runRulesOnFile([filenameFormat as Rule], {
+          content,
+          path: 'BAD_NAME.md',
+        }),
+      ).toEqual([]);
     });
   });
 
