@@ -12,7 +12,13 @@ import {
   buildProjectFile,
   runRulesOnFile,
   runRulesOnProject,
+  INTERNAL_ERROR_RULE_NAME,
 } from './runner.js';
+import {
+  collectDirectives,
+  isSuppressed,
+  type DirectiveIndex,
+} from './suppression.js';
 
 /**
  * Normalize a relative path to POSIX form (forward-slashes). On Windows,
@@ -29,6 +35,7 @@ import {
   isProjectRule,
   type AnyRule,
   type Diagnostic,
+  type ProjectFile,
   type ProjectRule,
   type Rule,
   type RuleSeverity,
@@ -211,8 +218,9 @@ export function lintFiles(opts: LintOptions): LintResult {
       else if (sev === 'warn') warnRules.push(rule);
     }
 
+    const projectDiagnostics: Diagnostic[] = [];
     if (errorRules.length > 0) {
-      allDiagnostics.push(
+      projectDiagnostics.push(
         ...runRulesOnProject(errorRules, projectFiles, {
           severity: 'error',
           fileExists,
@@ -221,7 +229,7 @@ export function lintFiles(opts: LintOptions): LintResult {
       );
     }
     if (warnRules.length > 0) {
-      allDiagnostics.push(
+      projectDiagnostics.push(
         ...runRulesOnProject(warnRules, projectFiles, {
           severity: 'warn',
           fileExists,
@@ -229,6 +237,15 @@ export function lintFiles(opts: LintOptions): LintResult {
         }),
       );
     }
+
+    // Inline suppression for project diagnostics (issue #23): a directive
+    // lives in the file the diagnostic is attributed to (project rules report
+    // an explicit `path`). File-scoped directives (disable-file, or an
+    // open-ended disable) suppress line-less project diagnostics; line-scoped
+    // directives apply when the diagnostic carries a line.
+    allDiagnostics.push(
+      ...filterSuppressedProjectDiagnostics(projectDiagnostics, projectFiles),
+    );
   }
 
   // ── Persist cache ────────────────────────────────────────────────
@@ -281,6 +298,39 @@ function runPerFileRulesForFile(
     );
   }
   return diagnostics;
+}
+
+/**
+ * Filter suppressed project-rule diagnostics. Each diagnostic is matched
+ * against the directives of the file it is attributed to (by `path`).
+ * Directive indexes are collected lazily and memoized so a file with no
+ * suppressed diagnostics is walked at most once. `core/internal-error`
+ * diagnostics (and any diagnostic whose path has no source file, e.g. the
+ * `<project>` sentinel) are never suppressed.
+ */
+function filterSuppressedProjectDiagnostics(
+  diagnostics: readonly Diagnostic[],
+  projectFiles: readonly ProjectFile[],
+): Diagnostic[] {
+  if (diagnostics.length === 0) return [];
+
+  const fileByPath = new Map(projectFiles.map((f) => [f.path, f]));
+  const indexByPath = new Map<string, DirectiveIndex | null>();
+  const indexFor = (path: string): DirectiveIndex | null => {
+    const cached = indexByPath.get(path);
+    if (cached !== undefined) return cached;
+    const file = fileByPath.get(path);
+    const index = file ? collectDirectives(file.ast) : null;
+    indexByPath.set(path, index);
+    return index;
+  };
+
+  return diagnostics.filter((d) => {
+    if (d.ruleName === INTERNAL_ERROR_RULE_NAME) return true;
+    const index = indexFor(d.path);
+    if (!index) return true;
+    return !isSuppressed(index, d.ruleName, d.loc?.line);
+  });
 }
 
 function resolveSeverity(config: RuleSeverity | undefined): Severity | 'off' {

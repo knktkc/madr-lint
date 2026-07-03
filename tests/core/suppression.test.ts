@@ -57,7 +57,7 @@ function loclessRule(name: string): Rule {
 }
 
 function reportedLines(diags: readonly Diagnostic[]): number[] {
-  return diags.map((d) => d.loc?.line ?? -1).sort((a, b) => a - b);
+  return diags.map((d) => d.loc?.line ?? -1).toSorted((a, b) => a - b);
 }
 
 function run(rules: Rule[], content: string): Diagnostic[] {
@@ -128,10 +128,11 @@ describe('core/suppression — per-file directives', () => {
     });
 
     it('scoped disable-file only affects the named rule', () => {
+      // Directive occupies body line 1, so the headings fall on lines 2 and 3.
       const content = ['<!-- madr-lint-disable-file test/line-a -->', '# A', '## B'].join('\n');
       const diags = run([lineRule('test/line-a'), lineRule('test/line-b')], content);
       expect(diags.filter((d) => d.ruleName === 'test/line-a')).toEqual([]);
-      expect(reportedLines(diags.filter((d) => d.ruleName === 'test/line-b'))).toEqual([1, 2]);
+      expect(reportedLines(diags.filter((d) => d.ruleName === 'test/line-b'))).toEqual([2, 3]);
     });
   });
 
@@ -300,11 +301,11 @@ describe('core/suppression — project rules (file-scoped)', () => {
       '# a\n\n<!-- madr-lint-disable madr/no-duplicate-numbering -->\n\n<!-- madr-lint-enable madr/no-duplicate-numbering -->\n',
       '# b\n',
     );
-    expect(diags.map((d) => d.path).sort()).toEqual(['0001-a.md', '0001-b.md']);
+    expect(diags.map((d) => d.path).toSorted()).toEqual(['0001-a.md', '0001-b.md']);
   });
 
   it('a disable-file scoped to a different rule does not suppress', () => {
     const diags = dupNumbering('# a\n\n<!-- madr-lint-disable-file madr/other-rule -->\n', '# b\n');
-    expect(diags.map((d) => d.path).sort()).toEqual(['0001-a.md', '0001-b.md']);
+    expect(diags.map((d) => d.path).toSorted()).toEqual(['0001-a.md', '0001-b.md']);
   });
 });

@@ -12,6 +12,7 @@ import type {
   Severity,
 } from './types.js';
 import { parseFile, type ParsedFile } from './parser.js';
+import { collectDirectives, filterSuppressed } from './suppression.js';
 
 // strict: true catches typo'd schema keywords at compile time.
 // allErrors: true so RuleOptionsError surfaces every issue at once.
@@ -182,7 +183,14 @@ export function runRulesOnFile(
     walk(ensureParsed().ast, enterMap, exitMap);
   }
 
-  return diagnostics;
+  // Central, post-report suppression (issue #23). Rules stay unaware; the
+  // runner filters here using directives collected from the file's `html`
+  // comment nodes. We only pay the parse + directive walk when there is
+  // something to potentially suppress — a clean file short-circuits, so
+  // filename-only rules on passing files keep their zero-parse fast path.
+  if (diagnostics.length === 0) return diagnostics;
+  const directives = collectDirectives(ensureParsed().ast);
+  return directives ? filterSuppressed(diagnostics, directives) : diagnostics;
 }
 
 // Internal-error diagnostics are ALWAYS severity 'error' regardless of the
