@@ -1,12 +1,12 @@
 ---
 title: GitHub Action
-description: GitHub Actions を使って CI で madr-lint を実行する（code scanning への SARIF アップロードを含む）。
+description: GitHub Actions を使って CI で madr-lint を実行する（PR アノテーションと code scanning への SARIF アップロードを含む）。
 ---
 
-`madr-lint` は通常の npm CLI なので、GitHub Actions での実行は 1 ステップで済みます。
-`error` 重大度の診断があると非ゼロで終了するため、lint の失敗はジョブの失敗になります。
+`madr-lint` は複合 GitHub Action を提供しており、違反ごとに **PR diff アノテーション** を
+出力します。エラーと警告がプルリクエストの diff にインラインで表示されます。
 
-## 最小限のワークフロー
+## クイックスタート
 
 ```yaml
 # .github/workflows/adr-lint.yml
@@ -22,27 +22,69 @@ on:
 jobs:
   madr-lint:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
-      - run: npx madr-lint
+          node-version: 22   # madr-lint は Node ≥22 が必要です
+      - uses: knktkc/madr-lint@v0
+        with:
+          path: docs/adr
 ```
 
-`madr-lint` がプロジェクトの開発依存である場合は、まずインストールしてからローカルの
-バイナリを実行してください。
+> **`v0` タグが付く（最初の npm リリース）まで** は `@main` を指定してください：
+> `uses: knktkc/madr-lint@main`
+
+`error` 重大度の診断があると action は非ゼロで終了し、ジョブを自動的に失敗させます。
+
+## 入力
+
+| 入力 | デフォルト | 説明 |
+|---|---|---|
+| `path` | _（config / `docs/adr`）_ | lint するパス（ファイルまたはディレクトリ） |
+| `version` | `latest` | インストールする `madr-lint` の npm バージョンまたは dist-tag |
+| `working-directory` | `.` | action を実行するディレクトリ |
+| `args` | _（なし）_ | `madr-lint` にそのまま渡す追加 CLI 引数 |
+
+### 例
+
+**特定のバージョンを固定する:**
 
 ```yaml
-      - run: npm ci
-      - run: npx madr-lint
+      - uses: knktkc/madr-lint@v0
+        with:
+          version: '0.1.0'
+          path: docs/adr
 ```
 
-## SARIF を code scanning にアップロードする
+**警告をエラーとして扱う（警告があれば失敗）:**
 
-`sarif` レポーターは GitHub code scanning と連携するため、検出結果が PR 上にインラインで
-表示されます。lint が失敗しても SARIF がアップロードされるよう `if: always()` を使い、
-lint ステップがアップロードを中断させないようにします。
+```yaml
+      - uses: knktkc/madr-lint@v0
+        with:
+          path: docs/adr
+          args: '--max-warnings 0'
+```
+
+**モノレポ — 複数ディレクトリを lint する:**
+
+```yaml
+      - uses: knktkc/madr-lint@v0
+        with:
+          path: 'services/api/docs/adr services/web/docs/adr'
+```
+
+## 前提条件
+
+この action は Node 自体をインストールしません。事前に `actions/setup-node` を追加し、
+`node-version: 22`（以上）を設定してください（上記の例を参照）。
+
+## SARIF を code scanning にアップロードする（上級者向け）
+
+検出結果を **Security → Code scanning** タブに表示し、PR を超えて永続化したい場合は、
+`--format sarif` フラグで SARIF レポートをアップロードしてください：
 
 ```yaml
 jobs:
@@ -56,8 +98,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Lint ADRs
-        run: npx madr-lint --format sarif > madr-lint.sarif
+      - name: Lint ADRs (SARIF)
+        run: npx madr-lint --format sarif docs/adr > madr-lint.sarif
         continue-on-error: true
       - name: Upload SARIF
         if: always()

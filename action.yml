@@ -1,0 +1,62 @@
+name: madr-lint
+description: >
+  Lint MADR (Markdown Architectural Decision Records) files and emit
+  GitHub Actions annotations for violations.
+branding:
+  icon: check-square
+  color: purple
+
+inputs:
+  path:
+    description: >
+      Path(s) to lint (file or directory). Defaults to the adrDir from your
+      madr-lint config, or docs/adr when no config is present.
+    required: false
+    default: ''
+  version:
+    description: >
+      npm version or dist-tag of madr-lint to install (e.g. "latest", "0.1.0").
+      Set to "local" to run the locally-built CLI at dist/cli.js instead of
+      fetching from npm — used by the action-smoke.yml dogfood workflow.
+    required: false
+    default: latest
+  working-directory:
+    description: Directory to run the action in (default is the repository root).
+    required: false
+    default: '.'
+  args:
+    description: Extra CLI arguments passed verbatim to madr-lint.
+    required: false
+    default: ''
+
+runs:
+  using: composite
+  steps:
+    - name: Run madr-lint
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      # User inputs go through env vars, never inline ${{ }} in the script:
+      # a consumer passing e.g. `args: ${{ github.event.pull_request.title }}`
+      # would otherwise turn attacker-controlled text into shell code.
+      env:
+        INPUT_VERSION: ${{ inputs.version }}
+        INPUT_PATH: ${{ inputs.path }}
+        INPUT_ARGS: ${{ inputs.args }}
+      run: |
+        # Callers must provide Node >= 22 (our engines requirement) via
+        # actions/setup-node before this step — fail fast with a clear message.
+        if ! command -v node >/dev/null 2>&1 || [ "$(node -p 'process.versions.node.split(".")[0]')" -lt 22 ]; then
+          echo "::error::madr-lint requires Node >= 22 — add actions/setup-node before this step."
+          exit 1
+        fi
+        # $INPUT_PATH / $INPUT_ARGS are deliberately UNQUOTED: they are
+        # space-delimited lists (multiple paths, multiple flags) that must
+        # word-split into separate CLI arguments.
+        if [ "$INPUT_VERSION" = "local" ]; then
+          # Escape hatch: run the locally-built CLI so the smoke workflow can
+          # test action.yml against source changes before publishing to npm.
+          # github.action_path is runner-controlled, safe to interpolate.
+          node "${{ github.action_path }}/dist/cli.js" $INPUT_PATH --format github $INPUT_ARGS
+        else
+          npx --yes "madr-lint@$INPUT_VERSION" $INPUT_PATH --format github $INPUT_ARGS
+        fi
