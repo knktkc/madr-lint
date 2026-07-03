@@ -59,6 +59,12 @@ function parseDirective(value: string, line: number): Directive | null {
   if (!trimmed.startsWith('<!--') || !trimmed.endsWith('-->')) return null;
 
   const inner = trimmed.slice(4, -3).trim();
+  // Two comments coalesced into one html node (e.g. `<!-- a --><!-- b -->`
+  // on one line) pass the startsWith/endsWith guard but would sweep
+  // `--><!--` garbage into the rule list. A directive comment must stand
+  // alone: reject any candidate whose interior still carries comment
+  // delimiters.
+  if (inner.includes('<!--') || inner.includes('-->')) return null;
   if (!inner.startsWith(PREFIX)) return null;
 
   const afterPrefix = inner.slice(PREFIX.length);
@@ -101,11 +107,31 @@ function walkHtml(node: MdastNode, out: Directive[]): void {
  * Returns null when the file carries no directives, so callers can skip
  * filtering entirely (fast path). Both block and inline `html` comment nodes
  * are inspected.
+ *
+ * `body` is the frontmatter-stripped body text — the SAME coordinate space
+ * as the mdast positions. It is only consulted (and only split into lines)
+ * when a `disable-next-line` directive needs to resolve its target.
  */
-export function collectDirectives(ast: Root): DirectiveIndex | null {
+export function collectDirectives(
+  ast: Root,
+  body: string,
+): DirectiveIndex | null {
   const all: Directive[] = [];
   walkHtml(ast as MdastNode, all);
   if (all.length === 0) return null;
+
+  // disable-next-line targets the next NON-BLANK line, not the literal next
+  // line. This deviates from ESLint deliberately: Markdown authors
+  // idiomatically leave a blank line after a comment block, and a directive
+  // that silently misses across it would be a footgun.
+  let lines: string[] | null = null;
+  const nextNonBlankLine = (after: number): number | null => {
+    lines ??= body.split('\n');
+    for (let ln = after + 1; ln <= lines.length; ln++) {
+      if ((lines[ln - 1] ?? '').trim() !== '') return ln;
+    }
+    return null; // directive at EOF with nothing after it — no target
+  };
 
   const index: DirectiveIndex = {
     fileDisableAll: false,
@@ -127,7 +153,8 @@ export function collectDirectives(ast: Root): DirectiveIndex | null {
         break;
       }
       case 'disable-next-line': {
-        const target = directive.line + 1;
+        const target = nextNonBlankLine(directive.line);
+        if (target === null) break;
         let entry = index.nextLine.get(target);
         if (!entry) {
           entry = { all: false, rules: new Set() };

@@ -143,6 +143,12 @@ export interface ProjectFile {
   path: string;
   /** Raw file content (unparsed). */
   content: string;
+  /**
+   * Body content with frontmatter stripped — the same coordinate space as
+   * `ast` positions. Used by the suppression layer for line-level directive
+   * targeting.
+   */
+  body: string;
   /** Parsed YAML frontmatter (v3/v4 only), or null if absent. */
   frontmatter: Record<string, unknown> | null;
   /**

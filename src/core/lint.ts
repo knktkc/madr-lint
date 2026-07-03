@@ -320,7 +320,7 @@ function filterSuppressedProjectDiagnostics(
     const cached = indexByPath.get(path);
     if (cached !== undefined) return cached;
     const file = fileByPath.get(path);
-    const index = file ? collectDirectives(file.ast) : null;
+    const index = file ? collectDirectives(file.ast, file.body) : null;
     indexByPath.set(path, index);
     return index;
   };

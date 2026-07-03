@@ -192,7 +192,8 @@ export function runRulesOnFile(
   // something to potentially suppress — a clean file short-circuits, so
   // filename-only rules on passing files keep their zero-parse fast path.
   if (diagnostics.length === 0) return diagnostics;
-  const directives = collectDirectives(ensureParsed().ast);
+  const { ast, body } = ensureParsed();
+  const directives = collectDirectives(ast, body);
   return directives ? filterSuppressed(diagnostics, directives) : diagnostics;
 }
 
@@ -281,6 +282,7 @@ export function buildProjectFile(file: FileContext): ProjectFile {
   return {
     path: file.path,
     content: file.content,
+    body: parsed.body,
     frontmatter: parsed.frontmatter,
     metadata: parsed.metadata,
     ast: parsed.ast,
