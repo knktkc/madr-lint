@@ -79,6 +79,46 @@ export interface RunRuleOptions {
 }
 
 /**
+ * Per-rule, per-file rule context. The lazy-parse getters live on the class
+ * PROTOTYPE — object literals with getters force expensive per-call shape
+ * setup, which the filename-format micro-bench (~400ns/op) measured as a
+ * double-digit % regression when a third getter was added (PR #53).
+ * Prototype accessors are set up once; instantiation is near-free. `report`
+ * stays a per-instance closure (it captures the rule name and severity, and
+ * this keeps it safely destructurable by rule authors).
+ */
+class PerFileRuleContext implements RuleContext {
+  readonly file: FileContext;
+  readonly options: Record<string, unknown>;
+  readonly report: RuleContext['report'];
+  private readonly ensureParsed: () => ParsedFile;
+
+  constructor(
+    file: FileContext,
+    options: Record<string, unknown>,
+    ensureParsed: () => ParsedFile,
+    report: RuleContext['report'],
+  ) {
+    this.file = file;
+    this.options = options;
+    this.ensureParsed = ensureParsed;
+    this.report = report;
+  }
+
+  get frontmatter(): Record<string, unknown> | null {
+    return this.ensureParsed().frontmatter;
+  }
+
+  get metadata(): Record<string, unknown> | null {
+    return this.ensureParsed().metadata;
+  }
+
+  get metadataLoc(): Record<string, { line: number; column: number }> | null {
+    return this.ensureParsed().metadataLoc;
+  }
+}
+
+/**
  * Run a single rule against a single file. Sugar over runRulesOnFile
  * for the common one-rule case (used heavily by tests).
  *
@@ -149,19 +189,11 @@ export function runRulesOnFile(
       }
     }
 
-    const context: RuleContext = {
+    const context: RuleContext = new PerFileRuleContext(
       file,
-      get frontmatter() {
-        return ensureParsed().frontmatter;
-      },
-      get metadata() {
-        return ensureParsed().metadata;
-      },
-      get metadataLoc() {
-        return ensureParsed().metadataLoc;
-      },
-      options: mergedOptions,
-      report(d) {
+      mergedOptions,
+      ensureParsed,
+      (d) => {
         diagnostics.push({
           ruleName: rule.meta.name,
           severity,
@@ -169,7 +201,7 @@ export function runRulesOnFile(
           ...d,
         });
       },
-    };
+    );
 
     let listeners: RuleListeners | void;
     try {
