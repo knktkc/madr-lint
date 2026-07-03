@@ -281,3 +281,39 @@ describe('parser/parseFile metadata combination', () => {
     expect(parsed.metadata).toBeNull();
   });
 });
+
+describe('parseFile — metadataLoc (list item positions for suppression)', () => {
+  it('list-sourced keys carry the item position in body coordinates', () => {
+    const parsed = parseFile('# T\n\n- Status: Proposed\n- Date: 2026-05-01\n');
+    expect(parsed.metadataLoc).toEqual({
+      status: { line: 3, column: 1 },
+      date: { line: 4, column: 1 },
+    });
+  });
+
+  it('positions are body-relative when frontmatter precedes the list', () => {
+    const parsed = parseFile(
+      '---\ndeciders: someone\n---\n# T\n\n- Status: Proposed\n',
+    );
+    // Body: "# T"(1), ""(2), "- Status: Proposed"(3).
+    expect(parsed.metadataLoc).toEqual({ status: { line: 3, column: 1 } });
+  });
+
+  it('a key overridden by defined frontmatter has NO position (effective value is not in the body)', () => {
+    const parsed = parseFile(
+      '---\nstatus: accepted\n---\n# T\n\n- Status: Proposed\n- Date: 2026-05-01\n',
+    );
+    // status is won by frontmatter → line-less; date stays list-sourced.
+    expect(parsed.metadataLoc).toEqual({ date: { line: 4, column: 1 } });
+  });
+
+  it('frontmatter-only files have null metadataLoc', () => {
+    const parsed = parseFile('---\nstatus: accepted\n---\n# T\n');
+    expect(parsed.metadataLoc).toBeNull();
+  });
+
+  it('files without metadata have null metadataLoc', () => {
+    const parsed = parseFile('# T\n\nJust prose.\n');
+    expect(parsed.metadataLoc).toBeNull();
+  });
+});

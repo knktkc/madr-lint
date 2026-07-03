@@ -173,4 +173,36 @@ describe('madr/status-enum', () => {
       expect(diagnostics[0]?.messageId).toBe('missingStatus');
     });
   });
+
+  describe('diagnostic location (loc) and inline suppression', () => {
+    it('v2 list-sourced invalid status carries the list item line (body coordinates)', () => {
+      const content = '# Title\n\n- Status: totally-wrong\n';
+      const diagnostics = runRule(rule, { content, path: 'v2.md' });
+      expect(diagnostics).toHaveLength(1);
+      expect(diagnostics[0]?.messageId).toBe('invalidStatus');
+      expect(diagnostics[0]?.loc).toEqual({ line: 3, column: 1 });
+    });
+
+    it('frontmatter-sourced invalid status stays line-less (frontmatter is outside body coordinates)', () => {
+      const content = '---\nstatus: totally-wrong\n---\n# Title\n';
+      const diagnostics = runRule(rule, { content, path: 'fm.md' });
+      expect(diagnostics).toHaveLength(1);
+      expect(diagnostics[0]?.messageId).toBe('invalidStatus');
+      expect(diagnostics[0]?.loc).toBeUndefined();
+    });
+
+    it('missingStatus stays line-less (nothing to point at)', () => {
+      const content = '# Title\n\nNo metadata here.\n';
+      const diagnostics = runRule(rule, { content, path: 'm.md' });
+      expect(diagnostics).toHaveLength(1);
+      expect(diagnostics[0]?.messageId).toBe('missingStatus');
+      expect(diagnostics[0]?.loc).toBeUndefined();
+    });
+
+    it('disable-next-line above the list item suppresses the real diagnostic', () => {
+      const content =
+        '# Title\n\n<!-- madr-lint-disable-next-line madr/status-enum -->\n- Status: totally-wrong\n';
+      expect(runRule(rule, { content, path: 'v2.md' })).toEqual([]);
+    });
+  });
 });

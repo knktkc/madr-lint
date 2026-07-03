@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { runRulesOnFile } from '../../src/core/runner.js';
 import { lintFiles } from '../../src/core/lint.js';
+import noBrokenLinks from '../../src/rules/no-broken-links/index.js';
 import noDuplicateNumbering from '../../src/rules/no-duplicate-numbering/index.js';
 import type { Diagnostic, Rule, RuleListeners } from '../../src/core/types.js';
 
@@ -307,5 +308,33 @@ describe('core/suppression — project rules (file-scoped)', () => {
   it('a disable-file scoped to a different rule does not suppress', () => {
     const diags = dupNumbering('# a\n\n<!-- madr-lint-disable-file madr/other-rule -->\n', '# b\n');
     expect(diags.map((d) => d.path).toSorted()).toEqual(['0001-a.md', '0001-b.md']);
+  });
+
+  it('disable-next-line suppresses a project diagnostic that carries a line (no-broken-links)', () => {
+    const adr = join(dir, '0001-a.md');
+    writeFileSync(
+      adr,
+      [
+        '---',
+        'status: accepted',
+        '---',
+        '# A', // body line 1
+        '<!-- madr-lint-disable-next-line madr/no-broken-links -->', // body 2
+        '[gone](./nope.md)', // body 3 (suppressed)
+        '', // body 4
+        '[also-gone](./nada.md)', // body 5 (reported)
+      ].join('\n'),
+    );
+    const result = lintFiles({
+      rules: [noBrokenLinks],
+      ruleSeverity: { 'madr/no-broken-links': 'error' },
+      files: [adr],
+      cwd: dir,
+    });
+    const broken = result.diagnostics.filter(
+      (d) => d.ruleName === 'madr/no-broken-links',
+    );
+    expect(broken).toHaveLength(1);
+    expect(broken[0]?.data?.url).toBe('./nada.md');
   });
 });
