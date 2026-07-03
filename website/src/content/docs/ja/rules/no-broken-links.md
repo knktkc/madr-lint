@@ -71,6 +71,8 @@ Markdown のリンク構文は MADR のバージョン間で同一です。
 
 ADR の相互参照を Markdown 本文の外部（例: Git タグや別の ADR レジストリ）で追跡しているリポジトリでは無効化してください。外部リンクの陳腐化はここでの対象外です — それには `lychee` のようなツールを使用してください。
 
+他のルールと同様、インラインコメントで抑制できます — [ルールの抑制](/ja/guides/suppressing-rules/)を参照してください。
+
 ## ソース
 
 - Rule source: <https://github.com/knktkc/madr-lint/blob/main/src/rules/no-broken-links/index.ts>

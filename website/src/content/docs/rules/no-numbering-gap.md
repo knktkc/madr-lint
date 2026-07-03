@@ -70,6 +70,8 @@ The numbering convention is identical across MADR versions.
 
 Keep this rule off (its default) when your numbering policy reserves slots, when drafts are routinely discarded mid-PR, or when you merge ADRs from multiple forks. Enable it only when numbering must be a contiguous sequence.
 
+Like all rules, this rule can be suppressed inline — see [Suppressing rules](/guides/suppressing-rules/).
+
 ## Source
 
 - Rule source: <https://github.com/knktkc/madr-lint/blob/main/src/rules/no-numbering-gap/index.ts>

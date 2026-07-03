@@ -223,4 +223,27 @@ describe('madr/no-broken-links', () => {
       expect(runRulesOnProject([rule], files)).toEqual([]);
     });
   });
+
+  describe('diagnostic location (loc)', () => {
+    it('broken-link diagnostic carries the link position (line/column)', () => {
+      const files = [f('docs/adr/0001-a.md', '# A\n\n[gone](./nope.md)\n')];
+      const diagnostics = runRulesOnProject([rule], files);
+      expect(diagnostics).toHaveLength(1);
+      expect(diagnostics[0]?.loc).toEqual({ line: 3, column: 1 });
+    });
+
+    it('loc is body-relative when the file has YAML frontmatter', () => {
+      const files = [
+        f(
+          'docs/adr/0001-a.md',
+          '---\nstatus: accepted\n---\n# A\n\n[gone](./nope.md)\n',
+        ),
+      ];
+      const diagnostics = runRulesOnProject([rule], files);
+      expect(diagnostics).toHaveLength(1);
+      // Frontmatter is stripped before mdast parsing, so the link sits on
+      // BODY line 3 — the same coordinate space suppression directives use.
+      expect(diagnostics[0]?.loc).toEqual({ line: 3, column: 1 });
+    });
+  });
 });

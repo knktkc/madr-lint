@@ -10,6 +10,8 @@ const PROTOCOL_REGEX = /^[a-z][a-z0-9+.-]*:/i;
 
 interface LinkLikeNode {
   url: string;
+  /** unist position — start carries the body-coordinate line/column. */
+  position?: { start: { line: number; column: number } };
 }
 
 function isLinkNode(node: MdastNode): node is MdastNode & LinkLikeNode {
@@ -112,9 +114,16 @@ const rule: ProjectRule<NoBrokenLinksOptions> = {
           (context.fileExists?.(resolvedPath) ?? false);
 
         if (!exists) {
+          // Link position is in body coordinates (frontmatter stripped) —
+          // the same space suppression directives use, so disable-next-line
+          // can target this diagnostic.
+          const start = link.position?.start;
           context.report({
             messageId: 'brokenLink',
             path: file.path,
+            ...(start
+              ? { loc: { line: start.line, column: start.column } }
+              : {}),
             data: { url, resolvedPath },
           });
         }

@@ -72,6 +72,8 @@ export default defineConfig({
 
 Set `madr/date-iso8601` to `off` when migrating from a system that uses a different date format. Prefer overriding `field` to read a custom metadata key.
 
+Like all rules, this rule can be suppressed inline — see [Suppressing rules](/guides/suppressing-rules/).
+
 ## Source
 
 - Rule source: <https://github.com/knktkc/madr-lint/blob/main/src/rules/date-iso8601/index.ts>

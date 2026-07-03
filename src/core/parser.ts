@@ -3,6 +3,12 @@ import { fromMarkdown } from 'mdast-util-from-markdown';
 import { toString } from 'mdast-util-to-string';
 import grayMatter from 'gray-matter';
 
+/** Source position of a metadata list item, in body coordinates. */
+export interface MetadataPosition {
+  line: number;
+  column: number;
+}
+
 export interface ParsedFile {
   /** Parsed YAML frontmatter (v3/v4), or null if absent. */
   frontmatter: Record<string, unknown> | null;
@@ -17,6 +23,15 @@ export interface ParsedFile {
    * on key conflict. null only when both are absent. See ADR-0006.
    */
   metadata: Record<string, unknown> | null;
+  /**
+   * Body-coordinate positions (list item start) for metadata keys whose
+   * EFFECTIVE value came from the v2 leading list. Keys won by defined
+   * frontmatter values are absent: frontmatter is stripped before mdast
+   * parsing, so it has no body line — and inline suppression directives
+   * (which live in the body) could not target it anyway. null when no
+   * effective value is list-sourced.
+   */
+  metadataLoc: Record<string, MetadataPosition> | null;
   /** mdast root of the body (frontmatter stripped). */
   ast: Root;
   /** Body content with frontmatter stripped. */
@@ -35,9 +50,14 @@ export function parseFile(content: string): ParsedFile {
   const data = matter.data as Record<string, unknown>;
   const frontmatter = Object.keys(data).length > 0 ? data : null;
   const ast = fromMarkdown(matter.content);
-  const listMetadata = extractListMetadata(ast);
+  const listResult = extractListMetadataWithLoc(ast);
+  const listMetadata = listResult?.values ?? null;
 
   let metadata: Record<string, unknown> | null = null;
+  let metadataLoc: Record<string, MetadataPosition> | null =
+    listResult && Object.keys(listResult.loc).length > 0
+      ? { ...listResult.loc }
+      : null;
   if (frontmatter && listMetadata) {
     // Frontmatter wins on conflict, BUT explicit null/undefined are
     // skipped so that `status: ~` in YAML doesn't blank a present
@@ -47,13 +67,26 @@ export function parseFile(content: string): ParsedFile {
       if (v !== null && v !== undefined) frontmatterDefined[k] = v;
     }
     metadata = { ...listMetadata, ...frontmatterDefined };
+    // A frontmatter-won key's effective value is not in the body, so it
+    // must not advertise the (shadowed) list item's position.
+    if (metadataLoc) {
+      for (const k of Object.keys(frontmatterDefined)) delete metadataLoc[k];
+      if (Object.keys(metadataLoc).length === 0) metadataLoc = null;
+    }
   } else if (frontmatter) {
     metadata = frontmatter;
   } else if (listMetadata) {
     metadata = listMetadata;
   }
 
-  return { frontmatter, listMetadata, metadata, ast, body: matter.content };
+  return {
+    frontmatter,
+    listMetadata,
+    metadata,
+    metadataLoc,
+    ast,
+    body: matter.content,
+  };
 }
 
 // Canonical MADR metadata field names across v2/v3/v4 (after key
@@ -98,6 +131,19 @@ const RECOGNIZED_METADATA_KEYS = new Set([
 export function extractListMetadata(
   ast: Root,
 ): Record<string, unknown> | null {
+  return extractListMetadataWithLoc(ast)?.values ?? null;
+}
+
+/**
+ * Position-carrying variant used by parseFile: alongside the values, records
+ * each key's list-item start position (body coordinates) so diagnostics on
+ * list-sourced metadata can carry a line — which is what makes inline
+ * suppression directives able to target them.
+ */
+function extractListMetadataWithLoc(ast: Root): {
+  values: Record<string, unknown>;
+  loc: Record<string, MetadataPosition>;
+} | null {
   let firstList: List | null = null;
   for (const child of ast.children) {
     if (child.type === 'heading') {
@@ -117,18 +163,21 @@ export function extractListMetadata(
 
   if (!firstList) return null;
 
-  const result: Record<string, unknown> = {};
+  const values: Record<string, unknown> = {};
+  const loc: Record<string, MetadataPosition> = {};
   for (const item of firstList.children) {
     const pair = extractListItemKV(item);
-    if (pair && !(pair.key in result)) {
-      result[pair.key] = pair.value;
+    if (pair && !(pair.key in values)) {
+      values[pair.key] = pair.value;
+      const start = item.position?.start;
+      if (start) loc[pair.key] = { line: start.line, column: start.column };
     }
   }
 
-  const hasRecognizedKey = Object.keys(result).some((k) =>
+  const hasRecognizedKey = Object.keys(values).some((k) =>
     RECOGNIZED_METADATA_KEYS.has(k),
   );
-  return hasRecognizedKey ? result : null;
+  return hasRecognizedKey ? { values, loc } : null;
 }
 
 const KEY_PATTERN = /^[A-Za-z][A-Za-z0-9 \-_]*$/;

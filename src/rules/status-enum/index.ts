@@ -55,8 +55,14 @@ const rule: Rule<StatusEnumOptions> = {
         ...values,
         ...prefixValues.map((p) => `${p} ...`),
       ];
+      // loc only exists for v2 list-sourced values: frontmatter is stripped
+      // before mdast parsing, so a frontmatter-sourced status has no body
+      // line to point at — inline suppression directives (which live in the
+      // body) can only silence it file-wide, never per line.
+      const loc = context.metadataLoc?.status;
       context.report({
         messageId: 'invalidStatus',
+        ...(loc ? { loc } : {}),
         data: { status, allowed },
       });
     }

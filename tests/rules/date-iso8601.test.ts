@@ -157,4 +157,28 @@ describe('madr/date-iso8601', () => {
       );
     });
   });
+
+  describe('diagnostic location (loc) and inline suppression', () => {
+    it('v2 list-sourced invalid date carries the list item line (body coordinates)', () => {
+      const content = '# Title\n\n- Date: 2026-99-99\n';
+      const diagnostics = runRule(rule, { content, path: 'v2.md' });
+      expect(diagnostics).toHaveLength(1);
+      expect(diagnostics[0]?.messageId).toBe('invalidDate');
+      expect(diagnostics[0]?.loc).toEqual({ line: 3, column: 1 });
+    });
+
+    it('frontmatter-sourced invalid date stays line-less (frontmatter is outside body coordinates)', () => {
+      const content = "---\ndate: '2026-99-99'\n---\n# Title\n";
+      const diagnostics = runRule(rule, { content, path: 'fm.md' });
+      expect(diagnostics).toHaveLength(1);
+      expect(diagnostics[0]?.messageId).toBe('invalidDate');
+      expect(diagnostics[0]?.loc).toBeUndefined();
+    });
+
+    it('disable-next-line above the list item suppresses the real diagnostic', () => {
+      const content =
+        '# Title\n\n<!-- madr-lint-disable-next-line madr/date-iso8601 -->\n- Date: 2026-99-99\n';
+      expect(runRule(rule, { content, path: 'v2.md' })).toEqual([]);
+    });
+  });
 });

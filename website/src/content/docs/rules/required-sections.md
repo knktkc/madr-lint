@@ -80,6 +80,8 @@ The default sections appear in every MADR version's template, so heading names a
 
 Set `madr/required-sections` to `off` only when migrating an ADR collection that uses different section names. Prefer overriding `sections` (and/or switching to `startsWith`) to preserve some level of validation.
 
+Like all rules, this rule can be suppressed inline — see [Suppressing rules](/guides/suppressing-rules/).
+
 ## Source
 
 - Rule source: <https://github.com/knktkc/madr-lint/blob/main/src/rules/required-sections/index.ts>

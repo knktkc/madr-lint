@@ -23,6 +23,14 @@ export type MdastNode = Root | Nodes;
 export type Severity = 'error' | 'warn';
 
 /**
+ * The reserved rule name used for internal-error diagnostics. A real rule
+ * cannot register with this name (the registry should reject collisions).
+ * Lives here (not in runner.ts) so leaf modules like the suppression layer
+ * can reference it without importing the runner.
+ */
+export const INTERNAL_ERROR_RULE_NAME = 'core/internal-error';
+
+/**
  * User-facing severity declaration in config files.
  * - bare string: enable/disable with default options
  * - tuple: enable with explicit options
@@ -93,6 +101,14 @@ export interface RuleContext<TOptions = Record<string, unknown>> {
    * are absent. See ADR-0006. Use this for format-agnostic field reads.
    */
   metadata: Record<string, unknown> | null;
+  /**
+   * Body-coordinate positions for `metadata` keys whose effective value came
+   * from the v2 leading list (the list item's start). Frontmatter-sourced
+   * keys are absent — frontmatter is stripped before mdast parsing, so it
+   * has no body line. Rules attach this as `loc` on metadata-value
+   * diagnostics so inline suppression directives can target them by line.
+   */
+  metadataLoc: Record<string, { line: number; column: number }> | null;
   /** User-merged options for this rule (validated against rule.meta.schema). */
   options: TOptions;
   /** Emit a diagnostic. */
@@ -135,6 +151,12 @@ export interface ProjectFile {
   path: string;
   /** Raw file content (unparsed). */
   content: string;
+  /**
+   * Body content with frontmatter stripped — the same coordinate space as
+   * `ast` positions. Used by the suppression layer for line-level directive
+   * targeting.
+   */
+  body: string;
   /** Parsed YAML frontmatter (v3/v4 only), or null if absent. */
   frontmatter: Record<string, unknown> | null;
   /**

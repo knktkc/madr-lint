@@ -94,6 +94,8 @@ export default defineConfig({
 
 Set `madr/status-enum` to `off` when migrating from a system with a different status vocabulary. Prefer overriding `values` / `prefixValues` to preserve some validation.
 
+Like all rules, this rule can be suppressed inline — see [Suppressing rules](/guides/suppressing-rules/).
+
 ## Source
 
 - Rule source: <https://github.com/knktkc/madr-lint/blob/main/src/rules/status-enum/index.ts>

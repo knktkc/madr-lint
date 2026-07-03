@@ -70,6 +70,8 @@ export default defineConfig({
 
 採番ポリシーが枠を予約している場合、下書きが PR の途中で日常的に破棄される場合、または複数のフォークから ADR をマージする場合は、このルールを（デフォルトの）オフのままにしてください。採番が連続したシーケンスでなければならない場合にのみ有効化してください。
 
+他のルールと同様、インラインコメントで抑制できます — [ルールの抑制](/ja/guides/suppressing-rules/)を参照してください。
+
 ## ソース
 
 - Rule source: <https://github.com/knktkc/madr-lint/blob/main/src/rules/no-numbering-gap/index.ts>

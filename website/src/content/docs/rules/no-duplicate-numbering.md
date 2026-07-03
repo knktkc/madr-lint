@@ -75,6 +75,8 @@ The filename numbering convention is identical across MADR versions.
 
 There is essentially no reason to disable this rule. If two ADRs share a number, one of them is wrong by definition.
 
+Like all rules, this rule can be suppressed inline — see [Suppressing rules](/guides/suppressing-rules/).
+
 ## Source
 
 - Rule source: <https://github.com/knktkc/madr-lint/blob/main/src/rules/no-duplicate-numbering/index.ts>

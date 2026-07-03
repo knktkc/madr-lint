@@ -73,6 +73,8 @@ The filename convention is identical across MADR versions.
 
 Set `madr/filename-format` to `off` only when migrating an existing ADR collection that uses a different convention. Prefer overriding `pattern` to preserve some level of validation.
 
+Like all rules, this rule can be suppressed inline — see [Suppressing rules](/guides/suppressing-rules/).
+
 ## Source
 
 - Rule source: <https://github.com/knktkc/madr-lint/blob/main/src/rules/filename-format/index.ts>

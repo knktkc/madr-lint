@@ -1,17 +1,23 @@
 import Ajv, { type AnySchemaObject, type ValidateFunction } from 'ajv';
-import type {
-  Diagnostic,
-  FileContext,
-  MdastNode,
-  ProjectFile,
-  ProjectRule,
-  ProjectRuleContext,
-  Rule,
-  RuleContext,
-  RuleListeners,
-  Severity,
+import {
+  INTERNAL_ERROR_RULE_NAME,
+  type Diagnostic,
+  type FileContext,
+  type MdastNode,
+  type ProjectFile,
+  type ProjectRule,
+  type ProjectRuleContext,
+  type Rule,
+  type RuleContext,
+  type RuleListeners,
+  type Severity,
 } from './types.js';
 import { parseFile, type ParsedFile } from './parser.js';
+import {
+  collectDirectives,
+  filterSuppressed,
+  DIRECTIVE_PREFIX,
+} from './suppression.js';
 
 // strict: true catches typo'd schema keywords at compile time.
 // allErrors: true so RuleOptionsError surfaces every issue at once.
@@ -31,11 +37,9 @@ function getValidator(schema: AnySchemaObject): ValidateFunction {
   return validator;
 }
 
-/**
- * The reserved rule name used for internal-error diagnostics. A real rule
- * cannot register with this name (the registry should reject collisions).
- */
-export const INTERNAL_ERROR_RULE_NAME = 'core/internal-error';
+// Defined in types.ts (leaf module) so the suppression layer can reference
+// it without a runner import cycle; re-exported here for API stability.
+export { INTERNAL_ERROR_RULE_NAME };
 
 /**
  * Thrown when a rule's merged options fail AJV validation against
@@ -75,8 +79,51 @@ export interface RunRuleOptions {
 }
 
 /**
+ * Per-rule, per-file rule context. The lazy-parse getters live on the class
+ * PROTOTYPE — object literals with getters force expensive per-call shape
+ * setup, which the filename-format micro-bench (~400ns/op) measured as a
+ * double-digit % regression when a third getter was added (PR #53).
+ * Prototype accessors are set up once; instantiation is near-free. `report`
+ * stays a per-instance closure (it captures the rule name and severity, and
+ * this keeps it safely destructurable by rule authors).
+ */
+class PerFileRuleContext implements RuleContext {
+  readonly file: FileContext;
+  readonly options: Record<string, unknown>;
+  readonly report: RuleContext['report'];
+  private readonly ensureParsed: () => ParsedFile;
+
+  constructor(
+    file: FileContext,
+    options: Record<string, unknown>,
+    ensureParsed: () => ParsedFile,
+    report: RuleContext['report'],
+  ) {
+    this.file = file;
+    this.options = options;
+    this.ensureParsed = ensureParsed;
+    this.report = report;
+  }
+
+  get frontmatter(): Record<string, unknown> | null {
+    return this.ensureParsed().frontmatter;
+  }
+
+  get metadata(): Record<string, unknown> | null {
+    return this.ensureParsed().metadata;
+  }
+
+  get metadataLoc(): Record<string, { line: number; column: number }> | null {
+    return this.ensureParsed().metadataLoc;
+  }
+}
+
+/**
  * Run a single rule against a single file. Sugar over runRulesOnFile
  * for the common one-rule case (used heavily by tests).
+ *
+ * Note: inline suppression directives (`<!-- madr-lint-disable... -->`)
+ * present in `file.content` ARE honored — matching diagnostics are filtered.
  */
 export function runRule<TOptions extends Record<string, unknown>>(
   rule: Rule<TOptions>,
@@ -104,6 +151,10 @@ export function runRule<TOptions extends Record<string, unknown>>(
  * Frontmatter is exposed lazily via context.frontmatter — the getter
  * triggers parseFile() on first access. Filename-style rules that never
  * touch frontmatter and return void from create() pay zero parse cost.
+ *
+ * Note: inline suppression directives (`<!-- madr-lint-disable... -->`)
+ * present in `file.content` ARE honored — matching diagnostics are filtered
+ * centrally after all rules have reported (see suppression.ts).
  */
 export function runRulesOnFile(
   rules: readonly Rule[],
@@ -138,16 +189,11 @@ export function runRulesOnFile(
       }
     }
 
-    const context: RuleContext = {
+    const context: RuleContext = new PerFileRuleContext(
       file,
-      get frontmatter() {
-        return ensureParsed().frontmatter;
-      },
-      get metadata() {
-        return ensureParsed().metadata;
-      },
-      options: mergedOptions,
-      report(d) {
+      mergedOptions,
+      ensureParsed,
+      (d) => {
         diagnostics.push({
           ruleName: rule.meta.name,
           severity,
@@ -155,7 +201,7 @@ export function runRulesOnFile(
           ...d,
         });
       },
-    };
+    );
 
     let listeners: RuleListeners | void;
     try {
@@ -182,7 +228,23 @@ export function runRulesOnFile(
     walk(ensureParsed().ast, enterMap, exitMap);
   }
 
-  return diagnostics;
+  // Central, post-report suppression (issue #23). Rules stay unaware; the
+  // runner filters here using directives collected from the file's `html`
+  // comment nodes. We only pay the parse + directive walk when there is
+  // something to potentially suppress — a clean file short-circuits, so
+  // filename-only rules on passing files keep their zero-parse fast path.
+  if (diagnostics.length === 0) return diagnostics;
+  // Perf guard (PR #53): every directive form contains the literal
+  // 'madr-lint-', and the parsed body is a substring of the raw content, so
+  // its absence PROVES no directives exist — filtering can be skipped
+  // without parsing. Without this, a Shape-A filename diagnostic on an
+  // otherwise-unparsed file forced a full gray-matter+mdast parse here
+  // (measured -99% on the filename-format invalid-path bench). The substring
+  // scan is ~µs; files that do contain the literal proceed exactly as before.
+  if (!file.content.includes(DIRECTIVE_PREFIX)) return diagnostics;
+  const { ast, body } = ensureParsed();
+  const directives = collectDirectives(ast, body);
+  return directives ? filterSuppressed(diagnostics, directives) : diagnostics;
 }
 
 // Internal-error diagnostics are ALWAYS severity 'error' regardless of the
@@ -270,6 +332,7 @@ export function buildProjectFile(file: FileContext): ProjectFile {
   return {
     path: file.path,
     content: file.content,
+    body: parsed.body,
     frontmatter: parsed.frontmatter,
     metadata: parsed.metadata,
     ast: parsed.ast,

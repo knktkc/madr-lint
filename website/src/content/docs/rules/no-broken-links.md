@@ -71,6 +71,8 @@ Markdown link syntax is identical across MADR versions.
 
 Disable for repos where ADR cross-references are tracked outside the Markdown body (e.g. via Git tags or a separate ADR registry). External link rot is out of scope here — use a tool like `lychee` for that.
 
+Like all rules, this rule can be suppressed inline — see [Suppressing rules](/guides/suppressing-rules/).
+
 ## Source
 
 - Rule source: <https://github.com/knktkc/madr-lint/blob/main/src/rules/no-broken-links/index.ts>
