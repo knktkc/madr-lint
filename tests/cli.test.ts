@@ -404,6 +404,17 @@ describe('cli (end-to-end)', () => {
       expect(r.stderr).toMatch(/exceeds --max-warnings 0/);
     }, 30_000);
 
+    it('--no-baseline resurfaces absorbed warnings into the threshold count', () => {
+      setupBaselinedWarn(); // wrong.md's warning is in the baseline file
+      const r = runCli(dir, [
+        'wrong.md', '--no-cache', '--no-baseline', '--quiet', '--max-warnings', '0',
+      ]);
+      // Baseline ignored → the absorbed warning reappears and trips the limit
+      expect(r.status).toBe(1);
+      expect(r.stderr).toMatch(/1 warning\(s\) found, exceeds --max-warnings 0/);
+      expect(r.stdout).not.toMatch(/all clear/i);
+    }, 30_000);
+
     it('--update-baseline --quiet writes the baseline and exits 0', () => {
       writeFileSync(
         join(dir, '.madrlintrc.json'),

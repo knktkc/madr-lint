@@ -28,6 +28,8 @@ export type ReporterFormat = 'text' | 'json' | 'sarif';
  * Coloring uses picocolors which honors NO_COLOR / FORCE_COLOR env vars.
  */
 export const textReporter: Reporter = {
+  // Deliberately 2-param (meta unused): the CLI prints baselineHiddenSummary()
+  // itself for text format, so the footer can outlive a suppressed banner.
   format(diagnostics, rulesByName) {
     if (diagnostics.length === 0) {
       return pc.green('✓ All clear.');
