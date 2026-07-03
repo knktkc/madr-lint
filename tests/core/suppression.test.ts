@@ -191,6 +191,78 @@ describe('core/suppression — per-file directives', () => {
     });
   });
 
+  describe('disable-next-line targets the next NON-BLANK line', () => {
+    // Deliberate deviation from ESLint's literal next-line: Markdown authors
+    // idiomatically leave a blank line after a comment block, and a directive
+    // that silently misses across it would be a footgun.
+    it('a blank line between directive and content does not defeat the directive', () => {
+      const content = [
+        '# A', // 1 (reported)
+        '<!-- madr-lint-disable-next-line -->', // 2
+        '', // 3 (blank — skipped)
+        '## B', // 4 (suppressed)
+        '## C', // 5 (reported)
+      ].join('\n');
+      expect(reportedLines(run([lineRule('test/line')], content))).toEqual([1, 5]);
+    });
+
+    it('multiple blank lines are skipped', () => {
+      const content = ['# A', '<!-- madr-lint-disable-next-line -->', '', '', '## B'].join('\n');
+      expect(reportedLines(run([lineRule('test/line')], content))).toEqual([1]);
+    });
+
+    it('suppression does not leak past the first non-blank line', () => {
+      const content = ['<!-- madr-lint-disable-next-line -->', '', '# A', '## B'].join('\n');
+      // Line 3 is the first non-blank → suppressed; line 4 still reported.
+      expect(reportedLines(run([lineRule('test/line')], content))).toEqual([4]);
+    });
+
+    it('a directive followed only by blank lines suppresses nothing (no crash)', () => {
+      const content = ['# A', '<!-- madr-lint-disable-next-line -->', '', ''].join('\n');
+      expect(reportedLines(run([lineRule('test/line')], content))).toEqual([1]);
+    });
+  });
+
+  describe('coalesced html nodes and multi-comment lines', () => {
+    it('two comments coalesced on ONE line are not a directive (no garbage rule list)', () => {
+      const content = [
+        '# A', // 1 (reported)
+        '<!-- madr-lint-disable-next-line test/line --><!-- x -->', // 2 (rejected)
+        '## B', // 3 (reported)
+      ].join('\n');
+      expect(reportedLines(run([lineRule('test/line')], content))).toEqual([1, 3]);
+    });
+
+    it('same-line coalesced UNSCOPED variant is also rejected', () => {
+      const content = [
+        '# A', // 1 (reported)
+        '<!-- madr-lint-disable --><!-- x -->', // 2 (rejected)
+        '## B', // 3 (reported)
+      ].join('\n');
+      expect(reportedLines(run([lineRule('test/line')], content))).toEqual([1, 3]);
+    });
+
+    it('a directive is recognized even when an adjacent comment line coalesces into the same html node', () => {
+      const content = [
+        '# A', // 1 (reported)
+        '<!-- note -->', // 2 ┐ one mdast html node (no blank line between)
+        '<!-- madr-lint-disable test/line -->', // 3 ┘
+        '## B', // 4 (suppressed)
+      ].join('\n');
+      expect(reportedLines(run([lineRule('test/line')], content))).toEqual([1]);
+    });
+
+    it('adjacent disable/enable comment lines (one html node) both apply', () => {
+      const content = [
+        '# A', // 1 (reported)
+        '<!-- madr-lint-disable test/line -->', // 2 ┐ one html node
+        '<!-- madr-lint-enable test/line -->', // 3 ┘
+        '## B', // 4 (reported — the disabled range is empty)
+      ].join('\n');
+      expect(reportedLines(run([lineRule('test/line')], content))).toEqual([1, 4]);
+    });
+  });
+
   describe('malformed / unknown / non-directive comments are ignored', () => {
     it('an unknown suffix (disable-line) is not a directive', () => {
       const content = ['# A', '<!-- madr-lint-disable-line test/line -->', '## B'].join('\n');
@@ -336,5 +408,30 @@ describe('core/suppression — project rules (file-scoped)', () => {
     );
     expect(broken).toHaveLength(1);
     expect(broken[0]?.data?.url).toBe('./nada.md');
+  });
+
+  it('disable-next-line skips a blank line before the target (project path)', () => {
+    const adr = join(dir, '0001-a.md');
+    writeFileSync(
+      adr,
+      [
+        '---',
+        'status: accepted',
+        '---',
+        '# A', // body line 1
+        '<!-- madr-lint-disable-next-line madr/no-broken-links -->', // body 2
+        '', // body 3 (blank — skipped)
+        '[gone](./nope.md)', // body 4 (suppressed)
+      ].join('\n'),
+    );
+    const result = lintFiles({
+      rules: [noBrokenLinks],
+      ruleSeverity: { 'madr/no-broken-links': 'error' },
+      files: [adr],
+      cwd: dir,
+    });
+    expect(
+      result.diagnostics.filter((d) => d.ruleName === 'madr/no-broken-links'),
+    ).toEqual([]);
   });
 });
