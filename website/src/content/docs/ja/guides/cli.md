@@ -29,6 +29,9 @@ madr-lint docs/adr docs/decisions/0007-use-x.md
 | フラグ | デフォルト | 説明 |
 |---|---|---|
 | `--format <format>` | `text` | レポーター: `text`、`json`、または `sarif`。 |
+| `--quiet` | オフ | エラーのみ報告し、警告を出力から除外します。 |
+| `--max-warnings <n>` | （なし） | 警告数が `n` を超えると終了コード 1 で終了します。`0` は警告が 1 件でも CI を失敗させます。負の値は制限なし。 |
+| `--config <path>` | （自動） | ディスカバリーをバイパスして、指定した設定ファイル（TS または JSON）を読み込みます。 |
 | `--cache` / `--no-cache` | `--cache` | ファイル単位のコンテンツハッシュキャッシュを使用します。 |
 | `--cache-dir <dir>` | `.madr-lint/cache` | キャッシュディレクトリ。 |
 | `--baseline` / `--no-baseline` | `--baseline` | 存在する場合に `.madr-lint/baseline.json` を差し引きます。 |
@@ -37,6 +40,23 @@ madr-lint docs/adr docs/decisions/0007-use-x.md
 | `--version` | | バージョンを出力します。 |
 
 CLI フラグは設定ファイルより優先されます。例えば `--no-cache` は `cache: true` を上書きします。
+
+### `--quiet` と `--max-warnings` の組み合わせ
+
+`--quiet` は**出力**から警告を除外しますが、元の警告数は `--max-warnings` のしきい値チェックに引き続き使用されます（ESLint の[ドキュメント](https://eslint.org/docs/latest/use/command-line-interface)と同じ仕様です）。`--quiet --max-warnings 0` とすることで、ログをクリーンに保ちながら警告が存在する場合に終了コードを非ゼロにできます。
+
+しきい値を超過した場合、その理由はすべての `--format` において**標準エラー出力（stderr）**に出力されます。標準出力のペイロードは機械可読な消費者のためにクリーンに保たれます。
+
+```text
+madr-lint: 3 warning(s) found, exceeds --max-warnings 0
+```
+
+```bash
+# CI: 警告があれば失敗させるが、出力をクリーンに保つ
+madr-lint --quiet --max-warnings 0
+```
+
+[ベースライン](/ja/guides/adopting-existing-repo/)に吸収された警告は `--max-warnings` に**カウントされません**。ベースラインはしきい値チェックの前に減算されるため、引き継いだ負債が CI を失敗させることはなく、新規の警告のみがカウントされます。`--update-baseline` は `--quiet` や `--max-warnings` に関係なく常に終了コード 0 で終了します。
 
 ## レポーター
 
@@ -90,9 +110,9 @@ madr-lint --format sarif > madr-lint.sarif
 
 | 終了コード | 意味 |
 |---|---|
-| `0` | エラーなし（警告は出力される場合があります） |
-| `1` | 1 件以上の `error` 重大度の診断 |
-| `2` | 設定の問題（無効なルールオプション、未知の `--format`） |
+| `0` | エラーなし。`--max-warnings` を設定している場合は警告数が上限以内 |
+| `1` | 1 件以上の `error` 重大度の診断、または警告数が `--max-warnings` を超過 |
+| `2` | 使用法または設定エラー（`--max-warnings` の値が不正、`--config` ファイルが存在しない、無効なルールオプション、未知の `--format`） |
 
 ## キャッシュ
 

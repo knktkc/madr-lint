@@ -41,6 +41,53 @@ const CONFIG_FILES = [
   'madr-lint.config.cjs',
 ];
 
+export class ConfigFileNotFoundError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ConfigFileNotFoundError';
+  }
+}
+
+/**
+ * Load and resolve a config from an explicit file path, bypassing discovery.
+ * Throws `ConfigFileNotFoundError` if the file does not exist.
+ * Throws `SyntaxError` or other load errors if the file is malformed.
+ */
+export function loadConfigFromPath(filePath: string): ResolvedConfig {
+  // Race-free error classification: fs check-APIs (existsSync/statSync) before
+  // a use are TOCTOU by construction (CodeQL js/file-system-race). Reading IS
+  // the use, so classify its errors instead: ENOENT/EISDIR carry exactly the
+  // two cases we distinguish, with no check-then-use window.
+  let raw: string;
+  try {
+    raw = readFileSync(filePath, 'utf8');
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === 'ENOENT') {
+      throw new ConfigFileNotFoundError(`Config file not found: ${filePath}`);
+    }
+    // A directory exists on disk but jiti's failure reads like a missing
+    // npm package ("Cannot find module") — fail with an honest message instead.
+    if (code === 'EISDIR') {
+      throw new ConfigFileNotFoundError(
+        `Config path is a directory, not a file: ${filePath}`,
+      );
+    }
+    throw err;
+  }
+  if (filePath.endsWith('.json')) {
+    const parsed = JSON.parse(raw) as MadrLintConfig;
+    return resolveExtends(parsed);
+  }
+  const jiti = createJiti(import.meta.url, { interopDefault: true });
+  const loaded = jiti(filePath) as MadrLintConfig | { default: MadrLintConfig };
+  const config: MadrLintConfig =
+    typeof loaded === 'object' && loaded !== null && 'default' in loaded
+      ? (loaded.default as MadrLintConfig)
+      : (loaded as MadrLintConfig);
+  return resolveExtends(config);
+}
+
 /**
  * Loads and resolves a config from `cwd`. If no config file is found,
  * returns the defaults (no rules enabled — caller can opt into the

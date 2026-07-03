@@ -29,6 +29,9 @@ madr-lint docs/adr docs/decisions/0007-use-x.md
 | Flag | Default | Description |
 |---|---|---|
 | `--format <format>` | `text` | Reporter: `text`, `json`, or `sarif`. |
+| `--quiet` | off | Report errors only; suppress warnings from output. |
+| `--max-warnings <n>` | (none) | Exit 1 when warning count exceeds `n`. `0` means any warning fails CI. Negative = no limit. |
+| `--config <path>` | (auto) | Load exactly this config file (TS or JSON), bypassing discovery. |
 | `--cache` / `--no-cache` | `--cache` | Use the per-file content-hash cache. |
 | `--cache-dir <dir>` | `.madr-lint/cache` | Cache directory. |
 | `--baseline` / `--no-baseline` | `--baseline` | Subtract `.madr-lint/baseline.json` when present. |
@@ -37,6 +40,30 @@ madr-lint docs/adr docs/decisions/0007-use-x.md
 | `--version` | | Print the version. |
 
 CLI flags win over the config file — e.g. `--no-cache` overrides `cache: true`.
+
+### `--quiet` × `--max-warnings` interplay
+
+`--quiet` filters warnings from **output** but the original warning count is still
+used for the `--max-warnings` threshold — mirroring ESLint's documented semantics.
+This lets you run `--quiet --max-warnings 0` to keep CI logs free of warning noise
+while still failing the build when warnings exist.
+
+When the threshold is exceeded, the reason is printed to **stderr** for every
+`--format`, so stdout payloads stay clean for machine consumers:
+
+```text
+madr-lint: 3 warning(s) found, exceeds --max-warnings 0
+```
+
+```bash
+# CI: fail on any warning, but keep output clean
+madr-lint --quiet --max-warnings 0
+```
+
+Warnings absorbed by the [baseline](/guides/adopting-existing-repo/) do **not**
+count toward `--max-warnings` — the baseline is subtracted before the threshold
+is checked, so inherited debt never fails CI. Only fresh warnings count.
+`--update-baseline` always exits 0, regardless of `--quiet` or `--max-warnings`.
 
 ## Reporters
 
@@ -90,9 +117,9 @@ madr-lint --format sarif > madr-lint.sarif
 
 | Exit code | Meaning |
 |---|---|
-| `0` | No errors (warnings may still be printed) |
-| `1` | One or more `error`-severity diagnostics |
-| `2` | Configuration problem (invalid rule options, unknown `--format`) |
+| `0` | No errors; warning count within `--max-warnings` limit (if set) |
+| `1` | One or more `error`-severity diagnostics, or warning count exceeds `--max-warnings` |
+| `2` | Usage or configuration error (invalid `--max-warnings` value, missing `--config` file, invalid rule options, unknown `--format`) |
 
 ## Caching
 

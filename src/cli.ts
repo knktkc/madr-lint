@@ -11,7 +11,13 @@ import {
   writeBaseline,
 } from './core/baseline.js';
 import { computeConfigHash } from './core/cache.js';
-import { loadConfig, resolveExtends, type ResolvedConfig } from './core/config.js';
+import {
+  ConfigFileNotFoundError,
+  loadConfig,
+  loadConfigFromPath,
+  resolveExtends,
+  type ResolvedConfig,
+} from './core/config.js';
 import { findAdrFiles } from './core/discover.js';
 import { shouldIgnore } from './core/ignore.js';
 import { lintFiles, type CacheConfig } from './core/lint.js';
@@ -70,15 +76,72 @@ const main = defineCommand({
         'Rewrite .madr-lint/baseline.json from a full lint, then exit 0',
       default: false,
     },
+    quiet: {
+      type: 'boolean',
+      description: 'Report errors only; suppress warnings from output',
+      default: false,
+    },
+    'max-warnings': {
+      type: 'string',
+      description:
+        'Exit 1 when warning count exceeds n. n=0 means any warning fails. Negative = no limit.',
+      required: false,
+    },
+    config: {
+      type: 'string',
+      description: 'Path to config file, bypassing auto-discovery',
+      required: false,
+    },
   },
   run({ args }) {
     const cwd = process.cwd();
-    let config: ResolvedConfig = loadConfig(cwd);
 
-    // CLI default UX: when no rules are explicitly configured, fall back to
-    // the `recommended` preset so users get useful output without authoring
-    // `.madrlintrc.json` first.
-    if (Object.keys(config.rules).length === 0) {
+    // Parse --max-warnings. Require an integer (including negative); float or
+    // non-numeric is a usage error (exit 2), not a lint failure (exit 1).
+    // Number('') === 0, so an empty value (e.g. --max-warnings "$UNSET_VAR")
+    // would silently become the strictest limit — reject it explicitly.
+    let maxWarnings = -1;
+    const rawMaxWarnings = args['max-warnings'] as string | undefined;
+    if (rawMaxWarnings !== undefined) {
+      const parsed = Number(rawMaxWarnings);
+      if (rawMaxWarnings.trim() === '' || !Number.isInteger(parsed)) {
+        console.error(
+          `Invalid --max-warnings "${rawMaxWarnings}": must be an integer.`,
+        );
+        process.exit(2);
+      }
+      maxWarnings = parsed;
+    }
+
+    // --config bypasses the config discovery walk. When the user explicitly
+    // points to a config file we skip the recommended fallback — they chose
+    // the config intentionally (even if it has no rules).
+    let config: ResolvedConfig;
+    let configExplicit = false;
+    const configArg = args.config as string | undefined;
+    if (configArg) {
+      const absConfigPath = resolve(cwd, configArg);
+      try {
+        config = loadConfigFromPath(absConfigPath);
+        configExplicit = true;
+      } catch (err) {
+        if (err instanceof ConfigFileNotFoundError) {
+          console.error(err.message);
+        } else {
+          console.error(
+            `Failed to load config "${configArg}": ${err instanceof Error ? err.message : String(err)}`,
+          );
+        }
+        process.exit(2);
+      }
+    } else {
+      config = loadConfig(cwd);
+    }
+
+    // When no rules are configured and no explicit config was provided, fall
+    // back to `recommended` so users get useful output without authoring a
+    // config first.
+    if (!configExplicit && Object.keys(config.rules).length === 0) {
       config = resolveExtends({ extends: ['madr-lint:recommended'] });
     }
 
@@ -182,21 +245,51 @@ const main = defineCommand({
       );
       process.exit(2);
     }
-    console.log(
-      reporter.format(result.diagnostics, rulesByName, {
-        baselineHidden: result.baselineHidden,
-      }),
-    );
+    // result.diagnostics is POST-baseline (lintFiles subtracts before
+    // returning), so baselined warnings never count toward --max-warnings —
+    // the whole point of a baseline is that inherited debt does not fail CI.
+    const allDiagnostics = result.diagnostics;
+    const warningCount = allDiagnostics.filter((d) => d.severity === 'warn').length;
+    const errorCount = allDiagnostics.filter((d) => d.severity === 'error').length;
+    const overWarningLimit = maxWarnings >= 0 && warningCount > maxWarnings;
+
+    // --quiet filters warnings from OUTPUT but the original warning count is
+    // still used for --max-warnings (mirrors ESLint: "warnings still run, not
+    // reported"). So `--quiet --max-warnings 0` keeps the log free of warning
+    // noise while still failing the build — the threshold verdict below goes
+    // to stderr so the failure is never mute.
+    const reported = args.quiet
+      ? allDiagnostics.filter((d) => d.severity !== 'warn')
+      : allDiagnostics;
+
+    // Text-only: a "✓ All clear." banner beside exit 1 would lie, so suppress
+    // it when the run fails purely on the warning threshold. json/sarif
+    // payloads still print — machine consumers read stdout + stderr + exit.
+    const suppressAllClear =
+      format === 'text' && reported.length === 0 && overWarningLimit;
+    if (!suppressAllClear) {
+      console.log(
+        reporter.format(reported, rulesByName, {
+          baselineHidden: result.baselineHidden,
+        }),
+      );
+    }
     // Text-only footer: JSON carries the count in its summary; SARIF stays
-    // schema-clean.
+    // schema-clean. Printed even when --quiet or the banner is suppressed —
+    // knowing the baseline absorbed diagnostics is never noise.
     if (format === 'text' && result.baselineHidden > 0) {
       console.log(baselineHiddenSummary(result.baselineHidden));
     }
 
-    const errorCount = result.diagnostics.filter(
-      (d) => d.severity === 'error',
-    ).length;
-    process.exit(errorCount > 0 ? 1 : 0);
+    // The threshold verdict goes to stderr for every format so it survives
+    // --quiet and machine-readable stdout alike.
+    if (overWarningLimit) {
+      console.error(
+        `madr-lint: ${warningCount} warning(s) found, exceeds --max-warnings ${maxWarnings}`,
+      );
+    }
+
+    process.exit(errorCount > 0 || overWarningLimit ? 1 : 0);
   },
 });
 
