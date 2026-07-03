@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -323,6 +323,109 @@ describe('cli (end-to-end)', () => {
 
       const r = runCli(dir, ['wrong.md', '0001-a.md', '--no-cache', '--config', cfgPath]);
       expect(r.status).toBe(0);
+    }, 30_000);
+  });
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // baseline × --quiet / --max-warnings interplay
+  // lintFiles subtracts the baseline BEFORE returning diagnostics, so
+  // baselined warnings never count toward --max-warnings, and
+  // summary.baselineHidden counts ONLY baseline-absorbed diagnostics —
+  // quiet-filtered warnings are not "hidden by baseline".
+  // ──────────────────────────────────────────────────────────────────────────
+
+  describe('baseline × --quiet / --max-warnings', () => {
+    // Baseline wrong.md's filename-format warning via --update-baseline, so
+    // subsequent runs see it as inherited debt.
+    function setupBaselinedWarn() {
+      writeFileSync(
+        join(dir, '.madrlintrc.json'),
+        JSON.stringify({ rules: { 'madr/filename-format': 'warn' } }),
+      );
+      writeFileSync(join(dir, 'wrong.md'), '# x\n');
+      const u = runCli(dir, ['wrong.md', '--no-cache', '--update-baseline']);
+      expect(u.status).toBe(0);
+    }
+
+    it('baselined warnings do NOT count toward --max-warnings', () => {
+      setupBaselinedWarn();
+      const r = runCli(dir, ['wrong.md', '--no-cache', '--quiet', '--max-warnings', '0']);
+      expect(r.status).toBe(0);
+      expect(r.stderr).not.toMatch(/exceeds --max-warnings/);
+    }, 30_000);
+
+    it('threshold counts only post-baseline warnings (1 fresh of 2 total)', () => {
+      setupBaselinedWarn();
+      writeFileSync(join(dir, 'bad.md'), '# y\n'); // fresh, unbaselined warning
+      const r = runCli(dir, ['wrong.md', 'bad.md', '--no-cache', '--max-warnings', '0']);
+      expect(r.status).toBe(1);
+      // "1", not "2": the baselined warning was subtracted before the count
+      expect(r.stderr).toMatch(/1 warning\(s\) found, exceeds --max-warnings 0/);
+    }, 30_000);
+
+    it('--quiet × baseline in one run: json baselineHidden counts only baseline-absorbed', () => {
+      setupBaselinedWarn();
+      writeFileSync(join(dir, 'bad.md'), '# y\n');
+      const r = runCli(dir, [
+        'wrong.md', 'bad.md', '--no-cache', '--quiet', '--format', 'json',
+      ]);
+      expect(r.status).toBe(0); // warnings never fail a run without --max-warnings
+      const payload = JSON.parse(r.stdout) as {
+        summary: { warnings: number; baselineHidden: number };
+      };
+      expect(payload.summary.baselineHidden).toBe(1); // NOT 2 — quiet-filtered ≠ baselined
+      expect(payload.summary.warnings).toBe(0); // quiet filtered the fresh warning
+    }, 30_000);
+
+    it('text baseline footer still shown under --quiet', () => {
+      setupBaselinedWarn();
+      const r = runCli(dir, ['wrong.md', '--no-cache', '--quiet']);
+      expect(r.status).toBe(0);
+      expect(r.stdout).toMatch(/hidden by baseline/);
+    }, 30_000);
+
+    it('baseline hides all and the run passes: All clear AND footer coexist', () => {
+      setupBaselinedWarn();
+      const r = runCli(dir, ['wrong.md', '--no-cache']);
+      expect(r.status).toBe(0);
+      expect(r.stdout).toMatch(/all clear/i);
+      expect(r.stdout).toMatch(/hidden by baseline/);
+    }, 30_000);
+
+    it('threshold fails under --quiet: no All clear banner, footer still printed', () => {
+      setupBaselinedWarn();
+      writeFileSync(join(dir, 'bad.md'), '# y\n');
+      const r = runCli(dir, [
+        'wrong.md', 'bad.md', '--no-cache', '--quiet', '--max-warnings', '0',
+      ]);
+      expect(r.status).toBe(1);
+      expect(r.stdout).not.toMatch(/all clear/i);
+      expect(r.stdout).toMatch(/hidden by baseline/);
+      expect(r.stderr).toMatch(/exceeds --max-warnings 0/);
+    }, 30_000);
+
+    it('--update-baseline --quiet writes the baseline and exits 0', () => {
+      writeFileSync(
+        join(dir, '.madrlintrc.json'),
+        JSON.stringify({ rules: { 'madr/filename-format': 'warn' } }),
+      );
+      writeFileSync(join(dir, 'wrong.md'), '# x\n');
+      const r = runCli(dir, ['wrong.md', '--no-cache', '--quiet', '--update-baseline']);
+      expect(r.status).toBe(0);
+      expect(existsSync(join(dir, '.madr-lint/baseline.json'))).toBe(true);
+    }, 30_000);
+
+    it('--update-baseline --max-warnings 0 exits 0 despite warnings (update mode wins)', () => {
+      writeFileSync(
+        join(dir, '.madrlintrc.json'),
+        JSON.stringify({ rules: { 'madr/filename-format': 'warn' } }),
+      );
+      writeFileSync(join(dir, 'wrong.md'), '# x\n');
+      const r = runCli(dir, [
+        'wrong.md', '--no-cache', '--max-warnings', '0', '--update-baseline',
+      ]);
+      expect(r.status).toBe(0);
+      expect(r.stderr).not.toMatch(/exceeds --max-warnings/);
     }, 30_000);
   });
 });
