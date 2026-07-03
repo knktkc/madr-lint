@@ -6,7 +6,9 @@ description: The built-in madr-lint rules — what each checks, whether it is pe
 Every rule has an ESLint-style name (`madr/<kebab-case>`) and supports the
 `error` / `warn` / `off` severities. Rules are either **per-file** (pure checks
 over one ADR) or **project** (cross-file integrity). Configure severities and
-options in your [config file](/guides/configuration/).
+options in your [config file](/guides/configuration/). A single legitimate
+exception does not need a config change — silence it inline with a
+[suppression comment](/guides/suppressing-rules/).
 
 ## Per-file rules
 
