@@ -15,8 +15,9 @@ long-lived `NPM_TOKEN`.
 
 Ask the user (or infer from project state):
 
-1. **Node versions to test** — default `[22, 24]`. Matrix is fixed across
-   ubuntu-latest unless the user wants Mac/Windows too (overhead, defer).
+1. **Node versions to test** — default `[22, 24]`, across ubuntu-latest,
+   macos-latest, and windows-latest (path handling breaks silently without
+   Windows in the matrix).
 2. **npm package access** — `public` (OSS) or `restricted` (private).
    For madr-lint: `public` once flipped Public.
 3. **Trusted Publishers configured?** — has the user set up the npm
@@ -49,11 +50,12 @@ concurrency:
 
 jobs:
   test:
-    name: Test (Node ${{ matrix.node }})
-    runs-on: ubuntu-latest
+    name: Test (Node ${{ matrix.node }}, ${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
         node: [22, 24]
     steps:
       - uses: actions/checkout@v4
