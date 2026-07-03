@@ -63,7 +63,7 @@ madr-lint --format json
 ```json
 {
   "version": 1,
-  "summary": { "total": 2, "errors": 2, "warnings": 0 },
+  "summary": { "total": 2, "errors": 2, "warnings": 0, "baselineHidden": 0 },
   "results": [
     {
       "path": "docs/adr/0003-use-postgres.md",

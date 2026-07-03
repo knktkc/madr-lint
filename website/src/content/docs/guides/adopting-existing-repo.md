@@ -23,7 +23,7 @@ madr-lint
 
 ```bash
 madr-lint --update-baseline
-# → Wrote 359 entries across 53 files to .madr-lint/baseline.json
+# → Wrote 359 violations across 53 files to .madr-lint/baseline.json
 ```
 
 This writes `.madr-lint/baseline.json` and exits `0`. **Commit that file.**
@@ -108,5 +108,11 @@ madr-lint --no-baseline
 - Editing or deleting the baseline takes effect immediately — it is independent
   of the [content-hash cache](/guides/cli/#caching), which always stores
   pre-baseline results.
+- A baseline file that exists but cannot be parsed is ignored with a one-line
+  `stderr` warning (run `--update-baseline` to regenerate it). A missing file
+  stays silent.
+- `--format json` reports how many diagnostics were absorbed via
+  `summary.baselineHidden` (always present; `0` when no baseline is active).
+  SARIF output is unaffected.
 - `core/internal-error` (emitted when a rule itself crashes) is **never**
   baselined — it signals a bug, not debt.

@@ -22,7 +22,7 @@ madr-lint
 
 ```bash
 madr-lint --update-baseline
-# → Wrote 359 entries across 53 files to .madr-lint/baseline.json
+# → Wrote 359 violations across 53 files to .madr-lint/baseline.json
 ```
 
 これは `.madr-lint/baseline.json` を書き出して `0` で終了します。**このファイルを
@@ -107,5 +107,10 @@ madr-lint --no-baseline
   コメントを、返済予定の大量のレガシー負債にはベースラインを使ってください。
 - ベースラインの編集や削除は即座に反映されます。ベースラインは常に差し引き前の結果を
   保存する[コンテンツハッシュキャッシュ](/ja/guides/cli/#キャッシュ)とは独立しています。
+- ベースラインファイルが存在するのにパースできない場合は、`stderr` に 1 行の警告を
+  出して無視されます（`--update-baseline` を実行して再生成してください）。ファイルが
+  存在しない場合は何も出力されません。
+- `--format json` では、吸収された診断の件数が `summary.baselineHidden` で報告されます
+  （常に存在し、ベースラインが有効でないときは `0`）。SARIF 出力には影響しません。
 - `core/internal-error`（ルール自体がクラッシュしたときに発行される）は**決して**
   ベースライン化されません — これは負債ではなくバグを示すためです。

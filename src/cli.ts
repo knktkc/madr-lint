@@ -1,8 +1,9 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { relative, resolve, sep } from 'node:path';
 import { defineCommand, runMain } from 'citty';
 import {
   baselineHiddenSummary,
+  baselineMalformedWarning,
   baselinePath,
   baselineWriteSummary,
   buildBaseline,
@@ -132,8 +133,13 @@ const main = defineCommand({
     // subtract nothing here and (below) rebuild the file from the raw output.
     const baselineFile = baselinePath(cwd);
     const updateBaseline = args['update-baseline'] === true;
-    const baseline =
-      updateBaseline || args.baseline === false ? null : loadBaseline(baselineFile);
+    const useBaseline = !updateBaseline && args.baseline !== false;
+    const baseline = useBaseline ? loadBaseline(baselineFile) : null;
+    // Absent → silent no-op. Present but unusable → warn: silently ignoring a
+    // corrupt baseline would flip CI red with zero explanation.
+    if (useBaseline && baseline === null && existsSync(baselineFile)) {
+      console.error(baselineMalformedWarning());
+    }
 
     const allRulesArray: AnyRule[] = Object.values(builtinRules);
     let result: ReturnType<typeof lintFiles>;
@@ -176,8 +182,13 @@ const main = defineCommand({
       );
       process.exit(2);
     }
-    console.log(reporter.format(result.diagnostics, rulesByName));
-    // Text-only footer: JSON/SARIF stay machine-clean.
+    console.log(
+      reporter.format(result.diagnostics, rulesByName, {
+        baselineHidden: result.baselineHidden,
+      }),
+    );
+    // Text-only footer: JSON carries the count in its summary; SARIF stays
+    // schema-clean.
     if (format === 'text' && result.baselineHidden > 0) {
       console.log(baselineHiddenSummary(result.baselineHidden));
     }
