@@ -241,4 +241,98 @@ describe('core/baseline', () => {
       );
     });
   });
+
+  // CodeQL js/prototype-polluting-assignment: `entries[d.path] ??= {}` with a
+  // key of '__proto__' reads Object.prototype (non-nullish), so the follow-up
+  // write lands ON Object.prototype — polluting every object in the process —
+  // and the entry silently vanishes from the serialized baseline. Paths derive
+  // from on-disk filenames, so this is externally reachable.
+  describe('prototype pollution hardening', () => {
+    // A RED run of these tests really does pollute Object.prototype; scrub
+    // the specific keys afterwards so sibling tests are not contaminated.
+    // NOTE: '__proto__' itself must NOT be scrubbed — deleting the built-in
+    // accessor from Object.prototype would change '__proto__' semantics for
+    // the rest of the worker and mask the very hazard under test.
+    const SENTINEL_KEYS = ['madr/status-enum', 'invalidStatus'];
+    afterEach(() => {
+      for (const key of SENTINEL_KEYS) {
+        if (Object.hasOwn(Object.prototype, key)) {
+          Reflect.deleteProperty(Object.prototype, key);
+        }
+      }
+    });
+
+    it('a path of "__proto__" does not pollute Object.prototype and is still recorded', () => {
+      const b = buildBaseline([
+        diag({ path: '__proto__', ruleName: 'madr/status-enum', messageId: 'invalidStatus' }),
+      ]);
+      // Global pollution check: a fresh object must not have gained the rule key.
+      const fresh: Record<string, unknown> = {};
+      expect(fresh['madr/status-enum']).toBeUndefined();
+      // The entry must exist as an OWN property (not vanish into the prototype).
+      expect(Object.hasOwn(b.entries, '__proto__')).toBe(true);
+      expect(b.entries['__proto__']?.['madr/status-enum']?.['invalidStatus']).toBe(1);
+    });
+
+    it('a ruleName of "__proto__" does not pollute Object.prototype and is still recorded', () => {
+      const b = buildBaseline([
+        diag({ path: 'a.md', ruleName: '__proto__', messageId: 'invalidStatus' }),
+      ]);
+      const fresh: Record<string, unknown> = {};
+      expect(fresh['invalidStatus']).toBeUndefined();
+      const byRule = b.entries['a.md'];
+      expect(byRule && Object.hasOwn(byRule, '__proto__')).toBe(true);
+      expect(byRule?.['__proto__']?.['invalidStatus']).toBe(1);
+    });
+
+    it('a messageId of "__proto__" is counted as an ordinary key', () => {
+      const b = buildBaseline([
+        diag({ path: 'a.md', ruleName: 'madr/status-enum', messageId: '__proto__' }),
+        diag({ path: 'a.md', ruleName: 'madr/status-enum', messageId: '__proto__' }),
+      ]);
+      const byMessage = b.entries['a.md']?.['madr/status-enum'];
+      expect(byMessage && Object.hasOwn(byMessage, '__proto__')).toBe(true);
+      expect(byMessage?.['__proto__']).toBe(2);
+    });
+
+    it('a "__proto__" path survives serialize → write → load → apply round-trip', () => {
+      const dir = mkdtempSync(join(tmpdir(), 'madr-lint-proto-'));
+      try {
+        const d = diag({
+          path: '__proto__',
+          ruleName: 'madr/status-enum',
+          messageId: 'invalidStatus',
+        });
+        const built = buildBaseline([d]);
+        // Serialization must carry the key as DATA (not lose it to a setter).
+        expect(serializeBaseline(built)).toContain('"__proto__"');
+
+        const p = baselinePath(dir);
+        writeBaseline(p, built);
+        const loaded = loadBaseline(p);
+        expect(loaded).not.toBeNull();
+        const applied = applyBaseline([d], loaded as Baseline);
+        expect(applied.hidden).toBe(1);
+        expect(applied.kept).toEqual([]);
+        // Loading a '__proto__'-keyed file must not have polluted anything.
+        const fresh: Record<string, unknown> = {};
+        expect(fresh['madr/status-enum']).toBeUndefined();
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    });
+
+    it('a path merely CONTAINING a __proto__ segment is an ordinary whole-string key', () => {
+      const d = diag({
+        path: 'docs/adr/__proto__/0001-x.md',
+        ruleName: 'madr/status-enum',
+        messageId: 'invalidStatus',
+      });
+      const b = buildBaseline([d]);
+      expect(
+        b.entries['docs/adr/__proto__/0001-x.md']?.['madr/status-enum']?.['invalidStatus'],
+      ).toBe(1);
+      expect(applyBaseline([d], b).hidden).toBe(1);
+    });
+  });
 });
