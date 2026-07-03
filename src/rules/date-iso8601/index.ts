@@ -69,8 +69,14 @@ const rule: Rule<DateIso8601Options> = {
     }
 
     if (!isValidIso8601Date(dateStr)) {
+      // loc only exists for v2 list-sourced values: frontmatter is stripped
+      // before mdast parsing, so a frontmatter-sourced date has no body line
+      // to point at — inline suppression directives (which live in the body)
+      // can only silence it file-wide, never per line.
+      const loc = context.metadataLoc?.[fieldName];
       context.report({
         messageId: 'invalidDate',
+        ...(loc ? { loc } : {}),
         data: { date: dateStr },
       });
     }

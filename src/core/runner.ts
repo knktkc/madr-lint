@@ -147,6 +147,9 @@ export function runRulesOnFile(
       get metadata() {
         return ensureParsed().metadata;
       },
+      get metadataLoc() {
+        return ensureParsed().metadataLoc;
+      },
       options: mergedOptions,
       report(d) {
         diagnostics.push({
