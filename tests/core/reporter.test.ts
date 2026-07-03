@@ -110,7 +110,12 @@ describe('core/reporter — json', () => {
     const out = jsonReporter.format([], new Map());
     const parsed = JSON.parse(out);
     expect(parsed.version).toBe(1);
-    expect(parsed.summary).toEqual({ total: 0, errors: 0, warnings: 0 });
+    expect(parsed.summary).toEqual({
+      total: 0,
+      errors: 0,
+      warnings: 0,
+      baselineHidden: 0,
+    });
     expect(parsed.results).toEqual([]);
   });
 
@@ -135,7 +140,12 @@ describe('core/reporter — json', () => {
       },
     ];
     const out = JSON.parse(jsonReporter.format(diagnostics, rules));
-    expect(out.summary).toEqual({ total: 2, errors: 1, warnings: 1 });
+    expect(out.summary).toEqual({
+      total: 2,
+      errors: 1,
+      warnings: 1,
+      baselineHidden: 0,
+    });
     expect(out.results).toHaveLength(2);
     expect(out.results[0]).toMatchObject({
       path: 'a.md',
@@ -145,6 +155,11 @@ describe('core/reporter — json', () => {
       message: 'value 1',
       data: { n: 1 },
     });
+  });
+
+  it('summary.baselineHidden reflects the meta passed by the caller', () => {
+    const out = JSON.parse(jsonReporter.format([], new Map(), { baselineHidden: 5 }));
+    expect(out.summary.baselineHidden).toBe(5);
   });
 
   it('produces parseable JSON', () => {

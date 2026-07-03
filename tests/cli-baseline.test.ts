@@ -1,5 +1,12 @@
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -96,5 +103,37 @@ describe('cli — baseline (end-to-end)', () => {
     const r = runCli(dir, ['0001-a.md', '--no-cache']);
     expect(r.status).toBe(1);
     expect(r.stdout).not.toContain('hidden by baseline');
+  }, 30_000);
+
+  it('absent baseline file emits NO stderr warning', () => {
+    const r = runCli(dir, ['0001-a.md', '--no-cache']);
+    expect(r.stderr).not.toContain('malformed');
+  }, 30_000);
+
+  it('present-but-corrupt baseline warns on stderr and is ignored', () => {
+    mkdirSync(join(dir, '.madr-lint'), { recursive: true });
+    writeFileSync(baselineFile(), 'not json{');
+    const r = runCli(dir, ['0001-a.md', '--no-cache']);
+    // Proceeds as if absent: errors surface, exit 1 — but the user is told why.
+    expect(r.status).toBe(1);
+    expect(r.stderr).toContain('malformed');
+    expect(r.stderr).toContain('--update-baseline');
+  }, 30_000);
+
+  it('--format json exposes summary.baselineHidden when a baseline is active', () => {
+    runCli(dir, ['0001-a.md', '--no-cache', '--update-baseline']);
+    const r = runCli(dir, ['0001-a.md', '--no-cache', '--format', 'json']);
+    expect(r.status).toBe(0);
+    const parsed = JSON.parse(r.stdout) as {
+      summary: { total: number; baselineHidden: number };
+    };
+    expect(parsed.summary.baselineHidden).toBe(3);
+    expect(parsed.summary.total).toBe(0);
+  }, 30_000);
+
+  it('--update-baseline summary counts violations (not "entries")', () => {
+    const r = runCli(dir, ['0001-a.md', '--no-cache', '--update-baseline']);
+    expect(r.stdout).toContain('3 violations');
+    expect(r.stdout).not.toContain('entries');
   }, 30_000);
 });

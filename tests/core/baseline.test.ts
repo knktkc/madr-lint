@@ -215,9 +215,21 @@ describe('core/baseline', () => {
         diag({ path: 'b.md', ruleName: 'madr/status-enum', messageId: 'invalidStatus' }),
       ]);
       const s = baselineWriteSummary(baseline);
-      expect(s).toContain('3'); // 3 total baselined violations
+      // "violations" (sum of counts), not "entries" — that word names the
+      // on-disk map and would collide.
+      expect(s).toContain('3 violations');
+      expect(s).not.toContain('entries');
       expect(s).toContain('2 files');
       expect(s).toContain('.madr-lint/baseline.json');
+    });
+
+    it('baselineWriteSummary uses singular forms for one violation in one file', () => {
+      const baseline = buildBaseline([
+        diag({ path: 'a.md', ruleName: 'madr/status-enum', messageId: 'invalidStatus' }),
+      ]);
+      const s = baselineWriteSummary(baseline);
+      expect(s).toContain('1 violation ');
+      expect(s).toContain('1 file');
     });
 
     it('baselineHiddenSummary pluralizes and cites the baseline path', () => {
