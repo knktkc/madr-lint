@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, statSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { createJiti } from 'jiti';
 import { recommended } from '../configs/recommended.js';
@@ -40,6 +40,42 @@ const CONFIG_FILES = [
   'madr-lint.config.mjs',
   'madr-lint.config.cjs',
 ];
+
+export class ConfigFileNotFoundError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ConfigFileNotFoundError';
+  }
+}
+
+/**
+ * Load and resolve a config from an explicit file path, bypassing discovery.
+ * Throws `ConfigFileNotFoundError` if the file does not exist.
+ * Throws `SyntaxError` or other load errors if the file is malformed.
+ */
+export function loadConfigFromPath(filePath: string): ResolvedConfig {
+  if (!existsSync(filePath)) {
+    throw new ConfigFileNotFoundError(`Config file not found: ${filePath}`);
+  }
+  // A directory passes existsSync but jiti's failure reads like a missing
+  // npm package ("Cannot find module") — fail with an honest message instead.
+  if (statSync(filePath).isDirectory()) {
+    throw new ConfigFileNotFoundError(
+      `Config path is a directory, not a file: ${filePath}`,
+    );
+  }
+  if (filePath.endsWith('.json')) {
+    const parsed = JSON.parse(readFileSync(filePath, 'utf8')) as MadrLintConfig;
+    return resolveExtends(parsed);
+  }
+  const jiti = createJiti(import.meta.url, { interopDefault: true });
+  const loaded = jiti(filePath) as MadrLintConfig | { default: MadrLintConfig };
+  const config: MadrLintConfig =
+    typeof loaded === 'object' && loaded !== null && 'default' in loaded
+      ? (loaded.default as MadrLintConfig)
+      : (loaded as MadrLintConfig);
+  return resolveExtends(config);
+}
 
 /**
  * Loads and resolves a config from `cwd`. If no config file is found,
