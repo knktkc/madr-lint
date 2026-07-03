@@ -2,12 +2,17 @@ import { execFileSync } from 'node:child_process';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-// Run the real CLI through the local tsx binary (absolute path, so it resolves
-// regardless of the temp cwd) — this covers the process.exit / stderr paths
-// that the in-process lintFiles tests cannot.
-const TSX = join(import.meta.dirname, '../node_modules/.bin/tsx');
+// Run the real CLI via node + tsx ESM hook. We avoid node_modules/.bin/tsx
+// because on Windows those are .cmd wrapper scripts that execFileSync cannot
+// execute directly (no shell). Instead, point node at the tsx ESM loader
+// via an absolute file:// URL so resolution never depends on cwd or PATH.
+const NODE = process.execPath;
+const TSX_ESM = pathToFileURL(
+  join(import.meta.dirname, '../node_modules/tsx/dist/esm/index.mjs'),
+).href;
 const CLI = join(import.meta.dirname, '../src/cli.ts');
 
 interface CliResult {
@@ -18,7 +23,11 @@ interface CliResult {
 
 function runCli(cwd: string, args: string[]): CliResult {
   try {
-    const stdout = execFileSync(TSX, [CLI, ...args], { cwd, encoding: 'utf8' });
+    const stdout = execFileSync(
+      NODE,
+      [`--import=${TSX_ESM}`, CLI, ...args],
+      { cwd, encoding: 'utf8' },
+    );
     return { status: 0, stdout, stderr: '' };
   } catch (err) {
     const e = err as { status?: number; stdout?: string; stderr?: string };

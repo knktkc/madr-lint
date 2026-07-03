@@ -1,0 +1,3 @@
+# Normalize to LF everywhere — Windows CI runners default to autocrlf,
+# which would otherwise check out CRLF fixtures and break byte-exact tests.
+* text=auto eol=lf
