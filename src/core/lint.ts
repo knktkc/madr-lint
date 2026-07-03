@@ -16,6 +16,7 @@ import {
 import {
   collectDirectives,
   isSuppressed,
+  DIRECTIVE_PREFIX,
   type DirectiveIndex,
 } from './suppression.js';
 
@@ -320,7 +321,14 @@ function filterSuppressedProjectDiagnostics(
     const cached = indexByPath.get(path);
     if (cached !== undefined) return cached;
     const file = fileByPath.get(path);
-    const index = file ? collectDirectives(file.ast, file.body) : null;
+    // Unlike the per-file path, no parse can be forced here — project files
+    // are eager-parsed by buildProjectFile before rules run. The prefix
+    // check just skips the AST walk for directive-free files (same
+    // soundness argument: no 'madr-lint-' in content ⇒ no directives).
+    const index =
+      file && file.content.includes(DIRECTIVE_PREFIX)
+        ? collectDirectives(file.ast, file.body)
+        : null;
     indexByPath.set(path, index);
     return index;
   };

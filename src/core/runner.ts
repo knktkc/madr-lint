@@ -13,7 +13,11 @@ import {
   type Severity,
 } from './types.js';
 import { parseFile, type ParsedFile } from './parser.js';
-import { collectDirectives, filterSuppressed } from './suppression.js';
+import {
+  collectDirectives,
+  filterSuppressed,
+  DIRECTIVE_PREFIX,
+} from './suppression.js';
 
 // strict: true catches typo'd schema keywords at compile time.
 // allErrors: true so RuleOptionsError surfaces every issue at once.
@@ -198,6 +202,14 @@ export function runRulesOnFile(
   // something to potentially suppress — a clean file short-circuits, so
   // filename-only rules on passing files keep their zero-parse fast path.
   if (diagnostics.length === 0) return diagnostics;
+  // Perf guard (PR #53): every directive form contains the literal
+  // 'madr-lint-', and the parsed body is a substring of the raw content, so
+  // its absence PROVES no directives exist — filtering can be skipped
+  // without parsing. Without this, a Shape-A filename diagnostic on an
+  // otherwise-unparsed file forced a full gray-matter+mdast parse here
+  // (measured -99% on the filename-format invalid-path bench). The substring
+  // scan is ~µs; files that do contain the literal proceed exactly as before.
+  if (!file.content.includes(DIRECTIVE_PREFIX)) return diagnostics;
   const { ast, body } = ensureParsed();
   const directives = collectDirectives(ast, body);
   return directives ? filterSuppressed(diagnostics, directives) : diagnostics;

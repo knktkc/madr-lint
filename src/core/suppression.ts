@@ -30,7 +30,14 @@ const DIRECTIVE_KINDS = new Set<DirectiveKind>([
   'disable-next-line',
 ]);
 
-const PREFIX = 'madr-lint-';
+/**
+ * Every directive form contains this literal. Callers use it as a cheap
+ * raw-content pre-filter: since the parsed body is a substring of the raw
+ * content, `!content.includes(DIRECTIVE_PREFIX)` PROVES the file contains
+ * no directives — so directive collection, and any parse it would otherwise
+ * force, can be skipped entirely.
+ */
+export const DIRECTIVE_PREFIX = 'madr-lint-';
 
 interface Directive {
   kind: DirectiveKind;
@@ -68,9 +75,9 @@ function parseDirective(value: string, line: number): Directive | null {
   // alone: reject any candidate whose interior still carries comment
   // delimiters.
   if (inner.includes('<!--') || inner.includes('-->')) return null;
-  if (!inner.startsWith(PREFIX)) return null;
+  if (!inner.startsWith(DIRECTIVE_PREFIX)) return null;
 
-  const afterPrefix = inner.slice(PREFIX.length);
+  const afterPrefix = inner.slice(DIRECTIVE_PREFIX.length);
   // The keyword token ends at the first whitespace; the remainder is the
   // optional rule list. Matching the FULL token against the exact keyword set
   // is what makes `madr-lint-disable-line` (token `disable-line`) a non-match.
