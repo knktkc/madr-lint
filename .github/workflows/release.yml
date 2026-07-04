@@ -30,6 +30,11 @@ jobs:
           registry-url: https://registry.npmjs.org
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
+      # `changeset publish` shells out to the npm CLI. Node 22 bundles npm 10,
+      # which cannot do OIDC trusted publishing (needs npm >= 11.5.1) — its
+      # publish PUT gets a 404 (auth-shaped, not a real "not found"). Upgrade
+      # npm before publishing; bump this pin deliberately.
+      - run: npm install -g npm@11.18.0
       - uses: changesets/action@a45c4d594aa4e2c509dc14a9f2b3b67ba3780d0d # v1.9.0
         with:
           publish: pnpm publish-ci
@@ -37,8 +42,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Tokenless publish via npm OIDC trusted publishing (registered on the
-          # madr-lint npm package). pnpm 10 performs the OIDC token exchange from
-          # the id-token permission above — no long-lived NPM_TOKEN. Provenance is
-          # attested from the same id-token. Stay on pnpm 10: pnpm 11 has an OIDC
-          # regression (pnpm/pnpm#11513).
+          # madr-lint npm package). The npm CLI (upgraded above) performs the
+          # OIDC token exchange from the id-token permission — no long-lived
+          # NPM_TOKEN. Provenance is attested from the same id-token.
           NPM_CONFIG_PROVENANCE: 'true'
