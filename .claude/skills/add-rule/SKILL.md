@@ -52,7 +52,6 @@ mkdir -p tests/rules
 mkdir -p tests/fixtures/<kebab>/valid
 mkdir -p tests/fixtures/<kebab>/invalid
 mkdir -p benchmarks/<kebab>/fixtures
-mkdir -p docs/rules
 ```
 
 ### Step 3: Generate the RED-phase files
@@ -287,7 +286,7 @@ const rule: Rule<<Camel>Options> = {
     versionCompat: ['<v2|v3|v4>'],
     docs: {
       description: '<one-line description>',
-      url: 'https://github.com/knktkc/madr-lint/blob/main/docs/rules/<kebab>.md',
+      url: 'https://knktkc.github.io/madr-lint/rules/<kebab>/',
       recommended: <true|false>,
     },
     messages: {
@@ -409,7 +408,7 @@ Project rules don't need separate fixture files — the corpus is synthesized in
 
 ### Step 9: Generate the docs stub
 
-`docs/rules/<kebab>.md` with: Description, Rationale, Examples (good/bad — one example per fixture, with a one-line "why" each), Options table, MADR version compat table, "When to disable".
+`website/src/content/docs/rules/<kebab>.md` AND its JA translation `website/src/content/docs/ja/rules/<kebab>.md` with: Description, Rationale, Examples (good/bad — one example per fixture, with a one-line "why" each), Options table, MADR version compat table, "When to disable", and the standard inline-suppression note. Add both pages to the sidebar in `website/astro.config.mjs`.
 
 ### Step 10: Re-run vitest — confirm *different* RED — gate #2
 
@@ -435,7 +434,7 @@ Files created:
   - tests/rules/<kebab>.test.ts
   - tests/fixtures/<kebab>/{valid,invalid}/*.md
   - benchmarks/<kebab>/{bench.ts, fixtures/*.md}
-  - docs/rules/<kebab>.md
+  - website/src/content/docs/{,ja/}rules/<kebab>.md
 Registry & recommended preset updated.
 
 RED state confirmed (N tests failing at toHaveLength(1)).

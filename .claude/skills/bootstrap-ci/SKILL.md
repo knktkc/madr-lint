@@ -198,7 +198,7 @@ updates:
 
 # Rule-specific ownership (extend as contributors arrive)
 src/rules/ @knktkc
-docs/rules/ @knktkc
+website/src/content/docs/rules/ @knktkc
 ```
 
 ### Step 6: Set up changesets (idempotent)
