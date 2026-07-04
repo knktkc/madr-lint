@@ -73,7 +73,7 @@ const rule: ProjectRule<NoBrokenLinksOptions> = {
     docs: {
       description:
         'Relative-path Markdown links must resolve to an existing file in the project',
-      url: 'https://github.com/knktkc/madr-lint/blob/main/docs/rules/no-broken-links.md',
+      url: 'https://knktkc.github.io/madr-lint/rules/no-broken-links/',
       recommended: true,
     },
     messages: {

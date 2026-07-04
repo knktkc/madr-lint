@@ -15,7 +15,7 @@ export const recommended: Record<string, RuleSeverity> = {
   'madr/no-broken-links': 'error',
   'madr/no-duplicate-numbering': 'error',
   // Convention-only — opt in if your team treats ADR numbering as a
-  // contiguous sequence. See docs/rules/no-numbering-gap.md.
+  // contiguous sequence. See https://knktkc.github.io/madr-lint/rules/no-numbering-gap/.
   'madr/no-numbering-gap': 'off',
   'madr/required-sections': 'error',
   'madr/status-enum': 'error',

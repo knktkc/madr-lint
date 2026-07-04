@@ -31,7 +31,7 @@ const rule: ProjectRule<SupersedesBidirectionalOptions> = {
     docs: {
       description:
         'Frontmatter `supersedes` and `superseded-by` must reference each other bidirectionally',
-      url: 'https://github.com/knktkc/madr-lint/blob/main/docs/rules/supersedes-bidirectional.md',
+      url: 'https://knktkc.github.io/madr-lint/rules/supersedes-bidirectional/',
       recommended: true,
     },
     messages: {

@@ -34,7 +34,7 @@ const rule: Rule<DateIso8601Options> = {
     versionCompat: ['v2', 'v3', 'v4'],
     docs: {
       description: 'Validate that ADR `date` (frontmatter or v2 bold-list) is a valid ISO 8601 calendar date (YYYY-MM-DD)',
-      url: 'https://github.com/knktkc/madr-lint/blob/main/docs/rules/date-iso8601.md',
+      url: 'https://knktkc.github.io/madr-lint/rules/date-iso8601/',
       recommended: true,
     },
     messages: {

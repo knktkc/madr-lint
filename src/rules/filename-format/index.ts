@@ -14,7 +14,7 @@ const rule: Rule<FilenameFormatOptions> = {
     versionCompat: ['v2', 'v3', 'v4'],
     docs: {
       description: 'Enforce ADR filename convention NNNN-kebab-case.md',
-      url: 'https://github.com/knktkc/madr-lint/blob/main/docs/rules/filename-format.md',
+      url: 'https://knktkc.github.io/madr-lint/rules/filename-format/',
       recommended: true,
     },
     messages: {

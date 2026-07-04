@@ -14,7 +14,7 @@ const rule: Rule<StatusEnumOptions> = {
     versionCompat: ['v2', 'v3', 'v4'],
     docs: {
       description: 'Validate that ADR `status` (frontmatter or v2 bold-list) is in the allowed enum',
-      url: 'https://github.com/knktkc/madr-lint/blob/main/docs/rules/status-enum.md',
+      url: 'https://knktkc.github.io/madr-lint/rules/status-enum/',
       recommended: true,
     },
     messages: {

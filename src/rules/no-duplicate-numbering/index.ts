@@ -15,7 +15,7 @@ const rule: ProjectRule<NoDuplicateNumberingOptions> = {
     versionCompat: ['v2', 'v3', 'v4'],
     docs: {
       description: 'No two ADRs share the same NNNN- number prefix',
-      url: 'https://github.com/knktkc/madr-lint/blob/main/docs/rules/no-duplicate-numbering.md',
+      url: 'https://knktkc.github.io/madr-lint/rules/no-duplicate-numbering/',
       recommended: true,
     },
     messages: {
