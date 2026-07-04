@@ -41,6 +41,9 @@ jobs:
 The action exits non-zero when there are `error`-severity diagnostics, failing
 the job automatically.
 
+By default the action installs the `latest` npm dist-tag; for production
+workflows we recommend [pinning an exact `version:`](#examples) instead.
+
 ## Inputs
 
 | Input | Default | Description |
@@ -60,6 +63,10 @@ the job automatically.
           version: '0.1.0'
           path: docs/adr
 ```
+
+Pinning an exact `version:` makes CI deterministic and protects it from a
+hijacked `latest` dist-tag (supply-chain compromise) — recommended for
+production workflows.
 
 **Treat warnings as errors (fail on any warning):**
 

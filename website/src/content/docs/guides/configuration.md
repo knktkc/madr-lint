@@ -29,6 +29,10 @@ madr-lint.config.cjs
 [`jiti`](https://github.com/unjs/jiti), so TypeScript and both module systems
 work without a build step.
 
+> **Config files are code.** A TypeScript/JavaScript config is **executed**
+> when loaded — the same trust model as ESLint configs. Only run lints with
+> `--config` paths or config files from sources you trust.
+
 If **no** config file is found and you don't set any rules, the CLI falls back
 to the `madr-lint:recommended` preset so it is useful with zero config.
 
