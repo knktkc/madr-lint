@@ -122,8 +122,8 @@ jobs:
         with: { path: docs/adr }
 ```
 
-> Until `v0` is tagged (first npm release), pin to `@main`:
-> `uses: knktkc/madr-lint@main`
+> The floating `v0` tag is published alongside the v0.2.0 release. If it isn't
+> available yet, use `@main` (or pin an exact tag like `@v0.2.0`).
 
 Or run it via `npx` in any CI provider:
 

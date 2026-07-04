@@ -5,7 +5,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        Before asking, please skim the [README](../../README.md) and the per-rule docs under `docs/rules/`.
+        Before asking, please skim the [README](../../README.md) and the [per-rule docs](https://knktkc.github.io/madr-lint/rules/).
         If you found a bug, use the "Bug report" template instead.
   - type: textarea
     id: question

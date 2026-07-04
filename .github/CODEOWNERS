@@ -6,4 +6,3 @@
 
 # Rule-specific ownership (extend as contributors arrive)
 src/rules/ @knktkc
-docs/rules/ @knktkc
