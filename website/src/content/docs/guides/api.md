@@ -106,6 +106,21 @@ const config = defineConfig({
 });
 ```
 
+## Baseline
+
+Build and apply a [baseline](/guides/adopting-existing-repo/) programmatically
+— the same subtraction the CLI's `--baseline` / `--update-baseline` flags use:
+
+```typescript
+import { buildBaseline, applyBaseline, writeBaseline, baselinePath } from 'madr-lint';
+
+const baseline = buildBaseline(diagnostics);
+writeBaseline(baselinePath(process.cwd()), baseline);
+
+// Later, on a fresh lint run:
+const { kept, hidden } = applyBaseline(newDiagnostics, baseline);
+```
+
 ## Exports
 
 | Export | Description |
@@ -121,6 +136,15 @@ const config = defineConfig({
 | `defineConfig` | Type-safe config helper |
 | `RuleOptionsError` | Thrown when rule options fail validation |
 | `isProjectRule` | Type guard for project vs per-file rules |
+| `buildBaseline` | Aggregate diagnostics into a `Baseline` (path → rule → messageId → count) |
+| `applyBaseline` | Subtract a `Baseline` from a diagnostic list, returning `{ kept, hidden }` |
+| `loadBaseline` | Read and parse a baseline file, or `null` if absent/malformed |
+| `serializeBaseline` | Deterministically serialize a `Baseline` to JSON text |
+| `writeBaseline` | Serialize and write a `Baseline` to disk, creating parent dirs |
+| `baselinePath` | Resolve the absolute path to `.madr-lint/baseline.json` for a cwd |
+| `BASELINE_VERSION` | Current on-disk baseline schema version |
+| `INTERNAL_ERROR_RULE_NAME` | Reserved rule name for runner-thrown errors; never baselined |
 
-Types (`Rule`, `ProjectRule`, `RuleContext`, `Diagnostic`, `RuleSeverity`, …)
-are exported for authoring custom rules.
+Types (`Rule`, `ProjectRule`, `RuleContext`, `Diagnostic`, `RuleSeverity`,
+`Baseline`, `BaselineApplyResult`, …) are exported for authoring custom rules
+and tooling.

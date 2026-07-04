@@ -28,7 +28,7 @@ madr-lint docs/adr docs/decisions/0007-use-x.md
 
 | Flag | Default | Description |
 |---|---|---|
-| `--format <format>` | `text` | Reporter: `text`, `json`, or `sarif`. |
+| `--format <format>` | `text` | Reporter: `text`, `json`, `sarif`, or `github`. |
 | `--quiet` | off | Report errors only; suppress warnings from output. |
 | `--max-warnings <n>` | (none) | Exit 1 when warning count exceeds `n`. `0` means any warning fails CI. Negative = no limit. |
 | `--config <path>` | (auto) | Load exactly this config file (TS or JSON), bypassing discovery. |

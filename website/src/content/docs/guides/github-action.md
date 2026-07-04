@@ -35,11 +35,14 @@ jobs:
           path: docs/adr
 ```
 
-> **Until `v0` is tagged (first npm release)** pin to `@main`:
-> `uses: knktkc/madr-lint@main`
+> The floating `v0` tag is published alongside the v0.2.0 release. If it isn't
+> available yet, use `@main` (or pin an exact tag like `@v0.2.0`).
 
 The action exits non-zero when there are `error`-severity diagnostics, failing
 the job automatically.
+
+By default the action installs the `latest` npm dist-tag; for production
+workflows we recommend [pinning an exact `version:`](#examples) instead.
 
 ## Inputs
 
@@ -60,6 +63,10 @@ the job automatically.
           version: '0.1.0'
           path: docs/adr
 ```
+
+Pinning an exact `version:` makes CI deterministic and protects it from a
+hijacked `latest` dist-tag (supply-chain compromise) — recommended for
+production workflows.
 
 **Treat warnings as errors (fail on any warning):**
 

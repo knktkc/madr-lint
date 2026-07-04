@@ -10,7 +10,7 @@ This file is auto-attached to every Claude Code session in this repository. It c
 - **License**: MIT
 - **Status**: Pre-1.0 development. Currently Private repo, going Public at v0.1.0.
 
-## Architecture principles (locked at v0.1.0)
+## Architecture principles (locked since v0.1.0)
 
 These decisions are very expensive to retrofit. They are baked into the rule API and runner from day one. Implementation lands incrementally — the **Status** lines below show what is shipped today vs aspirational.
 
@@ -72,7 +72,7 @@ Linters live or die by speed. Performance is treated as a feature, not an aftert
 - **MADR version awareness**: rules respect the configured `madrVersion` (`v2 | v3 | v4 | auto`). Use `versionMap[version]` for spec lookup. Cite the actual MADR template URL in `spec.md` per version — do not infer section names from memory.
 - **Rule shapes**: a rule has one of four shapes — pick the simplest that fits. Shapes A/B/C are per-file rules (`Rule<TOptions>` with `create()`); Shape D is the cross-file project rule (`ProjectRule<TOptions>` with `check()`):
   - **A. filename / metadata-only** — `create()` reports directly from `context.file.path`, returns void. Example: `madr/filename-format`.
-  - **B. frontmatter-only** — `create()` reads `context.frontmatter` (lazy-parsed), returns void. Examples: `madr/status-enum`, `madr/date-iso8601`.
+  - **B. frontmatter-only** — `create()` reads `context.metadata` (frontmatter merged with v2 list metadata, lazy-parsed), returns void. Examples: `madr/status-enum`, `madr/date-iso8601`.
   - **C. AST traversal** — `create()` returns `RuleListeners` with `enter`/`exit` keyed by mdast node type. Use `mdast-util-to-string` (or recursive text extraction) to read heading content — naive `children[0].value` misses `## **Status**`. Example: `madr/required-sections`.
   - **D. project (cross-file)** — `meta.type: 'project'`, has `check(context)` instead of `create()`. `context.files: readonly ProjectFile[]` is eager-parsed (path + content + frontmatter + AST). `context.report({ messageId, path, data })` requires explicit `path` (no current-file context). See [ADR-0005](docs/adr/0005-project-rule-api.md). Examples: `madr/no-duplicate-numbering`, `madr/no-broken-links`.
 - **Reserved rule names**: `core/internal-error` is reserved — emitted by the runner when a rule throws. Do not register a rule with this name.
@@ -81,7 +81,7 @@ Linters live or die by speed. Performance is treated as a feature, not an aftert
 
 ```
 src/
-├── core/          # Runner, parser, reporter, cache, severity resolver
+├── core/          # Runner, parser, reporter, cache, baseline, suppression, severity resolver
 ├── rules/         # One subdir per rule: index.ts + schema.json + spec.md
 ├── configs/       # Preset configs (recommended.ts)
 ├── versions/      # MADR v2/v3/v4 spec maps
@@ -95,8 +95,8 @@ tests/
 benchmarks/        # tinybench/mitata, baseline.json per rule
 profiles/          # 0x flamegraphs (gitignored except baseline)
 docs/
-├── adr/           # This project's own ADRs (dogfooding, MADR v4 frontmatter)
-└── rules/         # Per-rule documentation
+└── adr/           # This project's own ADRs (dogfooding, MADR v4 frontmatter)
+                    # Per-rule docs live on the website (website/src/content/docs/rules/)
 ```
 
 ## Configuration file
@@ -153,3 +153,4 @@ ADRs use **MADR v4 frontmatter** format (this project's recommended target).
 - ADR-0004: Tooling adjustments (pnpm 10, vitest 4)
 - ADR-0005: Project rule API design (M2)
 - ADR-0006: v2 bold-list metadata bridge (M4)
+- ADR-0007: Baseline fingerprint design (M2)

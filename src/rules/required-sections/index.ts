@@ -14,7 +14,7 @@ const rule: Rule<RequiredSectionsOptions> = {
     versionCompat: ['v2', 'v3', 'v4'],
     docs: {
       description: 'Enforce that ADRs contain required heading sections',
-      url: 'https://github.com/knktkc/madr-lint/blob/main/docs/rules/required-sections.md',
+      url: 'https://knktkc.github.io/madr-lint/rules/required-sections/',
       recommended: true,
     },
     messages: {

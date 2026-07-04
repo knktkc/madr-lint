@@ -28,7 +28,7 @@ madr-lint docs/adr docs/decisions/0007-use-x.md
 
 | フラグ | デフォルト | 説明 |
 |---|---|---|
-| `--format <format>` | `text` | レポーター: `text`、`json`、または `sarif`。 |
+| `--format <format>` | `text` | レポーター: `text`、`json`、`sarif`、または `github`。 |
 | `--quiet` | オフ | エラーのみ報告し、警告を出力から除外します。 |
 | `--max-warnings <n>` | （なし） | 警告数が `n` を超えると終了コード 1 で終了します。`0` は警告が 1 件でも CI を失敗させます。負の値は制限なし。 |
 | `--config <path>` | （自動） | ディスカバリーをバイパスして、指定した設定ファイル（TS または JSON）を読み込みます。 |

@@ -106,6 +106,21 @@ const config = defineConfig({
 });
 ```
 
+## ベースライン
+
+[ベースライン](/ja/guides/adopting-existing-repo/)をプログラムから構築・適用できます —
+CLI の `--baseline` / `--update-baseline` フラグと同じ減算処理です。
+
+```typescript
+import { buildBaseline, applyBaseline, writeBaseline, baselinePath } from 'madr-lint';
+
+const baseline = buildBaseline(diagnostics);
+writeBaseline(baselinePath(process.cwd()), baseline);
+
+// 以降の lint 実行時:
+const { kept, hidden } = applyBaseline(newDiagnostics, baseline);
+```
+
 ## エクスポート
 
 | エクスポート | 説明 |
@@ -121,6 +136,15 @@ const config = defineConfig({
 | `defineConfig` | 型安全な設定ヘルパー |
 | `RuleOptionsError` | ルールオプションの検証に失敗したときにスローされる |
 | `isProjectRule` | プロジェクトルールとファイル単位ルールを判別する型ガード |
+| `buildBaseline` | 診断結果を `Baseline`（path → rule → messageId → count）に集約 |
+| `applyBaseline` | 診断結果リストから `Baseline` を減算し `{ kept, hidden }` を返す |
+| `loadBaseline` | ベースラインファイルを読み込んでパース。存在しない・不正な場合は `null` |
+| `serializeBaseline` | `Baseline` を決定論的に JSON テキストへシリアライズ |
+| `writeBaseline` | `Baseline` をシリアライズしてディスクに書き込み、親ディレクトリも作成 |
+| `baselinePath` | 指定した cwd に対する `.madr-lint/baseline.json` の絶対パスを解決 |
+| `BASELINE_VERSION` | 現在のベースラインのオンディスクスキーマバージョン |
+| `INTERNAL_ERROR_RULE_NAME` | ランナーが投げるエラー用の予約ルール名。ベースライン化されない |
 
-型（`Rule`、`ProjectRule`、`RuleContext`、`Diagnostic`、`RuleSeverity` など）は、
-カスタムルールを作成するためにエクスポートされています。
+型（`Rule`、`ProjectRule`、`RuleContext`、`Diagnostic`、`RuleSeverity`、
+`Baseline`、`BaselineApplyResult` など）は、カスタムルールやツールの作成のために
+エクスポートされています。

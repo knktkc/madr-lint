@@ -20,7 +20,7 @@ const rule: ProjectRule<NoNumberingGapOptions> = {
     docs: {
       description:
         'Detect gaps in ADR numbering (e.g. 0001 and 0003 exist but 0002 is missing). Convention-only; default off.',
-      url: 'https://github.com/knktkc/madr-lint/blob/main/docs/rules/no-numbering-gap.md',
+      url: 'https://knktkc.github.io/madr-lint/rules/no-numbering-gap/',
       recommended: false,
     },
     messages: {

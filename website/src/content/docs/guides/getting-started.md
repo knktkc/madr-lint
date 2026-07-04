@@ -81,9 +81,9 @@ See [Configuration](/guides/configuration/) for every option, and
 
 | Exit code | Meaning |
 |---|---|
-| `0` | No errors (warnings may still be printed) |
-| `1` | One or more `error`-severity diagnostics |
-| `2` | Configuration problem (e.g. invalid rule options, unknown `--format`) |
+| `0` | No errors; warning count within `--max-warnings` limit (if set) |
+| `1` | One or more `error`-severity diagnostics, or warning count exceeds `--max-warnings` |
+| `2` | Usage or configuration error (invalid `--max-warnings` value, missing `--config` file, invalid rule options, unknown `--format`) |
 
 ## Next steps
 
@@ -91,3 +91,5 @@ See [Configuration](/guides/configuration/) for every option, and
 - [CLI](/guides/cli/) — every command-line flag
 - [GitHub Action](/guides/github-action/) — run it in CI
 - [Rules](/rules/) — what each rule checks and its options
+- [Suppressing rules](/guides/suppressing-rules/) — inline `madr-lint-disable` comments
+- [Adopting on an existing repo](/guides/adopting-existing-repo/) — baseline legacy violations
