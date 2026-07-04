@@ -41,7 +41,8 @@ A fast, configurable linter for [MADR](https://adr.github.io/madr/) (Markdown Ar
 - **MADR v2 / v3 / v4 aware** — reads YAML frontmatter *and* v2 body-list metadata (both `- **Status**:` and canonical `* Status:`), or auto-detects per file.
 - **ESLint-style rules** — named `madr/*` rules with `error` / `warn` / `off` and per-rule options validated by a JSON Schema.
 - **Per-file & cross-file** — fast single-pass checks plus project rules for unique numbering, the supersedes graph, and link rot.
-- **CLI, library & CI** — `text` / `json` / `sarif` reporters, a programmatic API, and a drop-in GitHub Actions step.
+- **CLI, library & CI** — `text` / `json` / `sarif` / `github` reporters, a programmatic API, and a drop-in GitHub Actions step.
+- **Gradual adoption** — [inline suppression comments](https://knktkc.github.io/madr-lint/guides/suppressing-rules/) for one-off exceptions and a [baseline file](https://knktkc.github.io/madr-lint/guides/adopting-existing-repo/) to snapshot legacy debt so only new violations fail the build.
 
 ## Install
 
@@ -64,7 +65,7 @@ npx madr-lint docs/adr libs/x/adr
 npx madr-lint --format sarif > madr-lint.sarif
 ```
 
-Exit code: `0` clean · `1` on `error`-level diagnostics · `2` on a config problem.
+Exit code: `0` clean · `1` on error-level diagnostics or an exceeded `--max-warnings` threshold · `2` on a config problem.
 
 ## Configure
 
@@ -104,13 +105,29 @@ Rule values are a severity (`'error' | 'warn' | 'off'`) or a `[severity, options
 
 ## Use in CI
 
+`madr-lint` ships a composite GitHub Action that annotates the PR diff directly:
+
 ```yaml
 # .github/workflows/adr-lint.yml
 jobs:
   madr-lint:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }   # madr-lint requires Node ≥22
+      - uses: knktkc/madr-lint@v0
+        with: { path: docs/adr }
+```
+
+> Until `v0` is tagged (first npm release), pin to `@main`:
+> `uses: knktkc/madr-lint@main`
+
+Or run it via `npx` in any CI provider:
+
+```yaml
       - uses: actions/setup-node@v4
         with: { node-version: 22 }
       - run: npx madr-lint

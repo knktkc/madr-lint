@@ -10,7 +10,7 @@ mise install
 pnpm install
 
 # Verify the local checkout
-pnpm test          # 193+ vitest tests
+pnpm test          # vitest test suite
 pnpm typecheck
 pnpm lint
 pnpm build
@@ -33,7 +33,9 @@ Per-rule deliverables:
 - `tests/rules/<name>.test.ts` with hard assertions on diagnostic data shape (NEVER bare `toMatchInlineSnapshot()`)
 - `tests/fixtures/<name>/{valid,invalid}/*.md` (per-file rules) or inline files (project rules)
 - `benchmarks/<name>/bench.ts`
-- `docs/rules/<name>.md`
+- A rule doc page at `website/src/content/docs/rules/<name>.md` (+ the Japanese
+  translation at `website/src/content/docs/ja/rules/<name>.md`) — the live site
+  is the per-rule doc deliverable; `meta.docs.url` points there.
 - Registry entry in `src/rules/index.ts`
 - Severity entry in `src/configs/recommended.ts`
 
@@ -57,7 +59,8 @@ Justify the new numbers in the PR description so the reviewer can rubber-stamp t
 - One concept per PR. Mixed feature + cleanup PRs get split.
 - Conventional Commits: `feat:`, `fix:`, `chore:`, `docs:`, `test:`, `refactor:`, `perf:`. Scope is encouraged: `feat(rules):` or `fix(core):`.
 - Add a [changeset](https://github.com/changesets/changesets) for any user-visible change: `pnpm changeset` — choose `patch`/`minor`/`major` and write a one-line summary.
-- All CI jobs (Node 22 + 24 matrix, lint, typecheck, test, build) must pass.
+- All CI jobs (Node 22 + 24 × ubuntu/macos/windows matrix, lint, typecheck,
+  test, build, plus the perf-regression and ReDoS checks) must pass.
 
 ## Architectural decisions
 
@@ -71,6 +74,7 @@ Existing ADRs:
 - ADR-0004: pnpm 10 + vitest 4 tooling baseline
 - ADR-0005: Project rule API design (cross-file rules)
 - ADR-0006: v2 bold-list metadata bridge (combined `context.metadata` field)
+- ADR-0007: Baseline fingerprint design (gradual adoption)
 
 ## Sign-off (DCO)
 
