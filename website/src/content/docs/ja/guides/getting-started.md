@@ -81,9 +81,9 @@ export default defineConfig({
 
 | 終了コード | 意味 |
 |---|---|
-| `0` | エラーなし（警告は出力される場合があります） |
-| `1` | 1 件以上の `error` 重大度の診断 |
-| `2` | 設定の問題（例: 無効なルールオプション、未知の `--format`） |
+| `0` | エラーなし。`--max-warnings` を設定している場合は警告数が上限以内 |
+| `1` | 1 件以上の `error` 重大度の診断、または警告数が `--max-warnings` を超過 |
+| `2` | 使用法または設定エラー（`--max-warnings` の値が不正、`--config` ファイルが存在しない、無効なルールオプション、未知の `--format`） |
 
 ## 次のステップ
 
@@ -91,3 +91,5 @@ export default defineConfig({
 - [CLI](/ja/guides/cli/) — すべてのコマンドラインフラグ
 - [GitHub Action](/ja/guides/github-action/) — CI での実行
 - [ルール](/ja/rules/) — 各ルールがチェックする内容とそのオプション
+- [ルールの抑制](/ja/guides/suppressing-rules/) — インラインの `madr-lint-disable` コメント
+- [既存リポジトリへの導入](/ja/guides/adopting-existing-repo/) — 既存の違反をベースライン化する
