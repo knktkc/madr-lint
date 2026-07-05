@@ -1,6 +1,7 @@
 // @ts-check
 import { defineConfig } from 'astro/config';
 import starlight from '@astrojs/starlight';
+import starlightLlmsTxt from 'starlight-llms-txt';
 
 const BASE = '/madr-lint';
 
@@ -59,6 +60,21 @@ export default defineConfig({
         root: { label: 'English', lang: 'en' },
         ja: { label: '日本語', lang: 'ja' },
       },
+      plugins: [
+        // Serves /llms.txt (index) + /llms-full.txt (full concatenated docs) at
+        // build time — see https://github.com/knktkc/madr-lint/issues/68. The
+        // plugin filters content-collection docs by Starlight's `defaultLocale`
+        // (`root` = English here), so llms-full.txt is EN-only: the /ja/ tree is
+        // a translation of the same content, and duplicating it would bloat the
+        // file without adding information for an LLM. Pinned to 0.10.x (last
+        // release supporting Astro 6 / Starlight 0.40 — 0.11.0 requires Astro 7
+        // / Starlight >=0.41).
+        starlightLlmsTxt({
+          projectName: 'madr-lint',
+          description:
+            'A fast, configurable linter for MADR (Markdown Architectural Decision Records) — validates ADR file structure, naming, status enums, dates, and cross-file integrity.',
+        }),
+      ],
       sidebar: [
         {
           label: 'Guides',
