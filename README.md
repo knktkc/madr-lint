@@ -15,6 +15,8 @@
 [Getting started](https://knktkc.github.io/madr-lint/guides/getting-started/) ·
 [Rules](https://knktkc.github.io/madr-lint/rules/)
 
+<sub>For AI agents: [llms.txt](https://knktkc.github.io/madr-lint/llms.txt) indexes the docs; [llms-full.txt](https://knktkc.github.io/madr-lint/llms-full.txt) has the full text in one fetch.</sub>
+
 </div>
 
 A fast, configurable linter for [MADR](https://adr.github.io/madr/) (Markdown Architectural Decision Records). It validates the things a plain Markdown linter can't: required sections, a valid status, ISO-8601 dates, filename convention, and cross-file integrity like unique numbering and non-broken links — across MADR **v2, v3, and v4**.
