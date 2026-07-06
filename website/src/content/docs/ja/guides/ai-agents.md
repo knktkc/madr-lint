@@ -103,21 +103,21 @@ npx madr-lint --format json
       "messageId": "missingSection",
       "severity": "error",
       "message": "Missing required section: \"Consequences\"",
+      "suggestion": "add a \"## Consequences\" heading to the document body",
+      "docsUrl": "https://knktkc.github.io/madr-lint/rules/required-sections/",
       "data": { "section": "Consequences", "found": ["Context and Problem Statement", "Decision Outcome"] }
     }
   ]
 }
 ```
 
-上記は、本稿執筆時点で最新の公開バージョンである **v0.2.0** が実際に出力する形です —
-`path`、`ruleName`、`messageId`、`severity`、`message`、そしてルール固有の `data`
-オブジェクトです。すでに `main` にマージ済み（まだリリースには含まれていない）の
-変更により、各 result にさらに 2 つのフィールドが追加される予定です:
+上記は、本稿執筆時点で最新の公開バージョンである **v0.3.0** が実際に出力する形です —
+`path`、`ruleName`、`messageId`、`severity`、`message`、ルール固有の `data`
+オブジェクトに加え、各 result にさらに 2 つのフィールドが含まれます:
 `suggestion`（機械的に適用できる修正内容。ルールが定義していない場合は `null`）と
-`docsUrl`（ルールのドキュメントページ）です。これが公開されたら、`data` から
-自前で修正メッセージを組み立てるより `suggestion` を読む方を優先してください。
-上記の 2 つのスキルはいずれも現在公開されている形に基づいて書かれており、
-関係する箇所でその旨を明記しています。
+`docsUrl`（ルールのドキュメントページ）です。`data` から自前で修正メッセージを
+組み立てるより `suggestion` を読む方を優先してください。上記の 2 つのスキルは
+いずれもこの現在公開されている形に基づいて書かれています。
 
 詳しいレポーターのリファレンスは [CLI](/ja/guides/cli/#json) ガイド、
 CLI を呼び出す代わりにライブラリとして使う方法は

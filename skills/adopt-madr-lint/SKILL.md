@@ -6,7 +6,7 @@ allowed-tools: Bash(npm:*), Bash(pnpm:*), Bash(yarn:*), Bash(npx:*), Bash(node:*
 
 # adopt-madr-lint — roll out madr-lint on an existing repo
 
-Grounded against **madr-lint@0.2.0** (the latest published npm release as of
+Grounded against **madr-lint@0.3.0** (the latest published npm release as of
 this writing). `madr-lint init` (tracked as
 [#30](https://github.com/knktkc/madr-lint/issues/30)) has not shipped yet, so
 this skill writes the config file by hand — step 3 becomes a single command
@@ -135,12 +135,14 @@ npx madr-lint
 npx madr-lint --format json
 ```
 
-> **0.2.0 JSON shape** — each entry in `results[]` has `path`, `ruleName`,
-> `messageId`, `severity`, `message`, and `data`. There is **no**
-> `suggestion` or `docsUrl` field in this release (that lands in a later
-> version — see the note at the end). Don't write code that assumes those
-> keys exist; read `message`/`data` and, for a human-facing fix hint, look
-> the rule up at `https://knktkc.github.io/madr-lint/rules/<rule-name-without-madr/>/`.
+> **0.3.0 JSON shape** — each entry in `results[]` has `path`, `ruleName`,
+> `messageId`, `severity`, `message`, `data`, and now `suggestion` (a
+> machine-actionable fix, or `null` when the rule has none) and `docsUrl`
+> (the rule's documentation page). Prefer surfacing `suggestion` to the user
+> over hand-rolling a fix message from `data`; fall back to looking the rule
+> up at `docsUrl` (or
+> `https://knktkc.github.io/madr-lint/rules/<rule-name-without-madr/>/`) when
+> `suggestion` is `null`.
 
 Read `summary.total` (or the text reporter's final `N errors` / `N warnings`
 line).
@@ -244,7 +246,7 @@ Notes:
   action does not install Node itself.
 - The floating `v0` tag is published alongside the v0.2.0 release. If it
   isn't resolvable yet, use `@main` or pin an exact tag (`@v0.2.0`) instead.
-- For production CI, prefer pinning `version: '0.2.0'` under `with:` over the
+- For production CI, prefer pinning `version: '0.3.0'` under `with:` over the
   default `latest` dist-tag, to protect against a hijacked `latest` publish.
 - To fail CI on any warning too, add `args: '--max-warnings 0'`.
 - For a monorepo with multiple ADR directories, set `path` to a
@@ -302,10 +304,7 @@ directives are for one-off exceptions, not policy.
 Step 3 (writing `.madrlintrc.json` by hand) becomes `npx madr-lint init`,
 which is expected to auto-detect the ADR dir and dominant MADR version and
 write the config for you — Steps 1 and 3 collapse into one command. Steps
-2 and 4–8 are unaffected. Also watch for `suggestion`/`docsUrl` fields
-appearing in `--format json` output in a release after 0.2.0 — once
-available, prefer surfacing `data.suggestion` to the user over hand-rolling
-a fix message from `data`.
+2 and 4–8 are unaffected.
 
 ## Reference: commands used in this skill
 
@@ -313,6 +312,6 @@ a fix message from `data`.
 |---|---|
 | `npx madr-lint --version` | confirm the installed version |
 | `npx madr-lint` | text lint of the configured `adrDir` |
-| `npx madr-lint --format json` | machine-readable lint (0.2.0: no `suggestion`/`docsUrl`) |
+| `npx madr-lint --format json` | machine-readable lint (includes `suggestion`/`docsUrl` per result) |
 | `npx madr-lint --update-baseline` | snapshot current violations, exit 0 |
 | `npx madr-lint --no-baseline` | audit everything, ignoring the baseline |
