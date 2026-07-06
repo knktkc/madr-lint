@@ -292,6 +292,11 @@ const rule: Rule<<Camel>Options> = {
     messages: {
       // <messageId>: '<template with {{placeholders}}>'
     },
+    suggestions: {
+      // <messageId>: '<how to fix, same {{placeholders}} as messages>'
+      // Add one wherever a MECHANICAL remediation exists; omit the messageId
+      // when the fix is contextual (see CLAUDE.md "Suggestions" convention).
+    },
     defaultOptions: {
       // <defaults — every key must be in schema.json>
     },
