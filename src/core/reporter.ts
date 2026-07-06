@@ -1,4 +1,5 @@
 import pc from 'picocolors';
+import { interpolate } from './interpolate.js';
 import type { AnyRule, Diagnostic } from './types.js';
 
 /**
@@ -38,8 +39,14 @@ export const textReporter: Reporter = {
     const byFile = groupByFile(diagnostics);
     const lines: string[] = [];
 
+    // Aligns a suggestion / docs line under the message column:
+    // severity gutter (9) + padded ruleId (28) + the 2-space separator.
+    const gutter = ' '.repeat(9 + 28 + 2);
+
     for (const [file, fileDiagnostics] of byFile) {
       lines.push(pc.underline(file));
+      // ruleName -> docs URL, first-seen order, one entry per rule in the group.
+      const docsByRule = new Map<string, string>();
       for (const d of fileDiagnostics) {
         const sev =
           d.severity === 'error'
@@ -48,6 +55,17 @@ export const textReporter: Reporter = {
         const ruleId = pc.dim(d.ruleName.padEnd(28));
         const message = renderMessage(d, rulesByName);
         lines.push(`${sev}${ruleId}  ${message}`);
+        if (d.suggestion) {
+          lines.push(`${gutter}${pc.cyan(`→ ${d.suggestion}`)}`);
+        }
+        if (d.docsUrl && !docsByRule.has(d.ruleName)) {
+          docsByRule.set(d.ruleName, d.docsUrl);
+        }
+      }
+      // Compact footer: the docs URL once per rule per file group, never per
+      // diagnostic — self-contained without repeating the link. See issue #67.
+      for (const [ruleName, url] of docsByRule) {
+        lines.push(pc.dim(`  ${ruleName}  ${url}`));
       }
       lines.push('');
     }
@@ -76,13 +94,6 @@ function renderMessage(
   const rule = rulesByName.get(d.ruleName);
   const template = rule?.meta.messages[d.messageId] ?? d.messageId;
   return interpolate(template, d.data ?? {});
-}
-
-function interpolate(template: string, data: Record<string, unknown>): string {
-  return template.replace(/\{\{(\w+)\}\}/g, (_, key: string) => {
-    const v = data[key];
-    return v !== undefined ? String(v) : `{{${key}}}`;
-  });
 }
 
 function formatSummary(errors: number, warnings: number): string {
@@ -117,6 +128,10 @@ export const jsonReporter: Reporter = {
         messageId: d.messageId,
         severity: d.severity,
         message: renderMessage(d, rulesByName),
+        // Self-contained diagnostics (#67): always present so consumers can
+        // rely on the keys — `suggestion` is null when the rule declares none.
+        suggestion: d.suggestion,
+        docsUrl: d.docsUrl,
         data: d.data ?? {},
       })),
     };
@@ -209,7 +224,13 @@ export const githubReporter: Reporter = {
       const level = d.severity === 'error' ? 'error' : 'warning';
       const file = escapeGhProperty(d.path);
       const title = escapeGhProperty(d.ruleName);
-      const message = escapeGhMessage(renderMessage(d, rulesByName));
+      // Self-contained diagnostics (#67): fold the suggestion into the single
+      // annotation message (annotations carry no separate remediation field),
+      // escaping the combined string once. Properties are unchanged.
+      const rendered = renderMessage(d, rulesByName);
+      const message = escapeGhMessage(
+        d.suggestion ? `${rendered} — ${d.suggestion}` : rendered,
+      );
 
       const linePart = d.loc ? `,line=${d.loc.line}` : '';
       lines.push(`::${level} file=${file}${linePart},title=${title}::${message}`);

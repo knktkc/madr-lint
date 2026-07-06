@@ -6,6 +6,7 @@ import {
   loadManifest,
   manifestPath,
   saveManifest,
+  CACHE_SCHEMA_VERSION,
   type CacheEntry,
   type CacheManifest,
 } from './cache.js';
@@ -132,6 +133,7 @@ export function lintFiles(opts: LintOptions): LintResult {
       manifest = loaded;
     } else {
       manifest = {
+        schemaVersion: CACHE_SCHEMA_VERSION,
         version: opts.cache.pkgVersion,
         configHash: opts.cache.configHash,
         files: {},

@@ -15,7 +15,21 @@ export interface CacheEntry {
   perFileDiagnostics: Diagnostic[];
 }
 
+/**
+ * On-disk manifest schema version. Bump whenever the shape of what we CACHE
+ * changes — in particular the `Diagnostic` shape inside `perFileDiagnostics`.
+ * pkgVersion invalidation only saves npm upgraders; repo devs and
+ * same-version CI caches would otherwise be served stale-shape entries
+ * verbatim (e.g. diagnostics missing the #67 `suggestion`/`docsUrl` keys,
+ * silently dropped from json output). History: 2 = Diagnostic gained
+ * `suggestion` + `docsUrl` (#67); 1 (implicit) = pre-schema manifests, which
+ * carry no `schemaVersion` field at all.
+ */
+export const CACHE_SCHEMA_VERSION = 2;
+
 export interface CacheManifest {
+  /** Manifest schema version. Missing or mismatched ⇒ the cache is cold. */
+  schemaVersion: number;
   /** madr-lint version when this manifest was written. Mismatch invalidates the cache. */
   version: string;
   /** Stable hash of the resolved config. Mismatch invalidates the cache. */
@@ -65,6 +79,10 @@ export function loadManifest(path: string): CacheManifest | null {
   try {
     const data = JSON.parse(readFileSync(path, 'utf8')) as Partial<CacheManifest>;
     if (
+      // Single invalidation point for schema drift: an unknown (or absent)
+      // schema version nulls here, so every consumer sees a cold cache — no
+      // scattered re-hydration of stale-shape entries downstream.
+      data.schemaVersion !== CACHE_SCHEMA_VERSION ||
       typeof data.version !== 'string' ||
       typeof data.configHash !== 'string' ||
       typeof data.files !== 'object' ||

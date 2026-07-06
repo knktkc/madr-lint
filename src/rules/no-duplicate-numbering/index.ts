@@ -21,6 +21,10 @@ const rule: ProjectRule<NoDuplicateNumberingOptions> = {
     messages: {
       duplicateNumber: 'ADR number {{number}} is used by multiple files: {{paths}}',
     },
+    suggestions: {
+      duplicateNumber:
+        'renumber all but one of these files so each ADR has a unique NNNN- prefix',
+    },
     defaultOptions: {},
     schema,
   },

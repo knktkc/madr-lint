@@ -10,8 +10,10 @@ import {
   type Rule,
   type RuleContext,
   type RuleListeners,
+  type RuleMeta,
   type Severity,
 } from './types.js';
+import { interpolate } from './interpolate.js';
 import { parseFile, type ParsedFile } from './parser.js';
 import {
   collectDirectives,
@@ -40,6 +42,25 @@ function getValidator(schema: AnySchemaObject): ValidateFunction {
 // Defined in types.ts (leaf module) so the suppression layer can reference
 // it without a runner import cycle; re-exported here for API stability.
 export { INTERNAL_ERROR_RULE_NAME };
+
+// core/internal-error diagnostics carry no rule docs URL of their own — a rule
+// bug is a repository issue, so point consumers at the repo. See issue #67.
+const INTERNAL_ERROR_DOCS_URL = 'https://github.com/knktkc/madr-lint';
+
+/**
+ * Resolve a diagnostic's `suggestion` from the rule's declarative
+ * `meta.suggestions[messageId]`, interpolated with the diagnostic's `data`
+ * exactly like the message. Returns null when the rule declares none for this
+ * messageId. Report-time only — a clean file resolves nothing. See issue #67.
+ */
+function resolveSuggestion(
+  meta: Pick<RuleMeta, 'suggestions'>,
+  messageId: string,
+  data: Record<string, unknown> | undefined,
+): string | null {
+  const template = meta.suggestions?.[messageId];
+  return template !== undefined ? interpolate(template, data ?? {}) : null;
+}
 
 /**
  * Thrown when a rule's merged options fail AJV validation against
@@ -199,6 +220,8 @@ export function runRulesOnFile(
           severity,
           path: file.path,
           ...d,
+          suggestion: resolveSuggestion(rule.meta, d.messageId, d.data),
+          docsUrl: rule.meta.docs.url ?? '',
         });
       },
     );
@@ -261,6 +284,8 @@ function internalErrorDiagnostic(
     messageId: 'ruleThrew',
     severity: 'error',
     path,
+    suggestion: null,
+    docsUrl: INTERNAL_ERROR_DOCS_URL,
     data: {
       rule: ruleName,
       operation,
@@ -382,6 +407,8 @@ export function runRulesOnProject(
           ruleName: rule.meta.name,
           severity,
           ...d,
+          suggestion: resolveSuggestion(rule.meta, d.messageId, d.data),
+          docsUrl: rule.meta.docs.url ?? '',
         });
       },
     };

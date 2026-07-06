@@ -56,6 +56,14 @@ export interface RuleMeta<TOptions = Record<string, unknown>> {
   };
   /** messageId -> template string with {{placeholders}}. */
   messages: Record<string, string>;
+  /**
+   * messageId -> machine-actionable remediation template, parallel to
+   * `messages` and interpolated the same way. Partial: declare an entry only
+   * where a concrete, mechanical fix exists; omit where the fix is inherently
+   * contextual. The runner resolves the entry for a reported messageId into
+   * `Diagnostic.suggestion` (null when absent). See issue #67.
+   */
+  suggestions?: Record<string, string>;
   /** Default options merged with user config. */
   defaultOptions: TOptions;
   /** AJV JSON Schema for options. Validated at runRule time. */
@@ -85,6 +93,19 @@ export interface Diagnostic {
   };
   /** Data for placeholder interpolation in messages[messageId]. */
   data?: Record<string, unknown>;
+  /**
+   * Machine-actionable remediation, resolved by the runner at report time from
+   * `rule.meta.suggestions[messageId]` (interpolated with `data`, exactly like
+   * the message). `null` when the rule declares no suggestion for this
+   * messageId. Every runner-produced diagnostic sets this. See issue #67.
+   */
+  suggestion: string | null;
+  /**
+   * The rule's documentation URL (`rule.meta.docs.url`), resolved by the runner
+   * so consumers need not reconstruct it from `ruleName`. `core/internal-error`
+   * diagnostics point at the repository; a rule without a docs URL yields `''`.
+   */
+  docsUrl: string;
 }
 
 export interface RuleContext<TOptions = Record<string, unknown>> {
@@ -111,8 +132,13 @@ export interface RuleContext<TOptions = Record<string, unknown>> {
   metadataLoc: Record<string, { line: number; column: number }> | null;
   /** User-merged options for this rule (validated against rule.meta.schema). */
   options: TOptions;
-  /** Emit a diagnostic. */
-  report(diagnostic: Omit<Diagnostic, 'ruleName' | 'severity' | 'path'>): void;
+  /** Emit a diagnostic. `suggestion` / `docsUrl` are resolved by the runner. */
+  report(
+    diagnostic: Omit<
+      Diagnostic,
+      'ruleName' | 'severity' | 'path' | 'suggestion' | 'docsUrl'
+    >,
+  ): void;
 }
 
 /**
@@ -187,9 +213,14 @@ export interface ProjectRuleContext<TOptions = Record<string, unknown>> {
   /**
    * Emit a diagnostic. Unlike per-file rules, project rules MUST set
    * `path` explicitly — the runner cannot infer which file the
-   * diagnostic relates to.
+   * diagnostic relates to. `suggestion` / `docsUrl` are resolved by the runner.
    */
-  report(diagnostic: Omit<Diagnostic, 'ruleName' | 'severity'>): void;
+  report(
+    diagnostic: Omit<
+      Diagnostic,
+      'ruleName' | 'severity' | 'suggestion' | 'docsUrl'
+    >,
+  ): void;
 }
 
 /**
