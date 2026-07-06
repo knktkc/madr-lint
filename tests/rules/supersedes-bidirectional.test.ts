@@ -1,6 +1,18 @@
 import { describe, it, expect } from 'vitest';
+import { jsonReporter } from '../../src/core/reporter.js';
 import { buildProjectFile, runRulesOnProject } from '../../src/core/runner.js';
+import type { AnyRule, Diagnostic } from '../../src/core/types.js';
 import rule from '../../src/rules/supersedes-bidirectional/index.js';
+
+// Render diagnostics through the real reporter pipeline so tests pin the
+// message text a user actually sees (template + interpolation together).
+function renderMessages(diagnostics: readonly Diagnostic[]): string[] {
+  const rules = new Map<string, AnyRule>([[rule.meta.name, rule]]);
+  const parsed = JSON.parse(jsonReporter.format(diagnostics, rules)) as {
+    results: Array<{ message: string }>;
+  };
+  return parsed.results.map((r) => r.message);
+}
 
 function file(path: string, frontmatter: Record<string, unknown>): ReturnType<typeof buildProjectFile> {
   const fmYaml = Object.entries(frontmatter)
@@ -71,6 +83,13 @@ describe('madr/supersedes-bidirectional', () => {
           direction: 'superseded-by',
         },
       });
+      // self-contained diagnostics (#67): the back-reference to add is mechanical
+      expect(diagnostics[0]?.suggestion).toBe(
+        'add "superseded-by: ADR-0042" to the frontmatter of this file',
+      );
+      expect(diagnostics[0]?.docsUrl).toBe(
+        'https://knktkc.github.io/madr-lint/rules/supersedes-bidirectional/',
+      );
     });
 
     it('back reference but source silent', () => {
@@ -90,6 +109,32 @@ describe('madr/supersedes-bidirectional', () => {
           direction: 'supersedes',
         },
       });
+    });
+
+    // The rendered message must name the field the source file ACTUALLY
+    // declares (`declared`), not the field the target should add — the
+    // pre-fix template printed `direction`, claiming a `supersedes:` source
+    // declared `superseded-by:` (and vice versa).
+    it('message names the declared field correctly (forward: source declares supersedes)', () => {
+      const files = [
+        file('0001-old.md', {}),
+        file('0042-new.md', { supersedes: 'ADR-0001' }),
+      ];
+      const [message] = renderMessages(runRulesOnProject([rule], files));
+      expect(message).toBe(
+        '`0042-new.md` declares `supersedes: ADR-0001`, but `ADR-0001` (this file) does not back-reference it via `superseded-by: ADR-0042`',
+      );
+    });
+
+    it('message names the declared field correctly (backward: source declares superseded-by)', () => {
+      const files = [
+        file('0001-old.md', { 'superseded-by': 'ADR-0042' }),
+        file('0042-new.md', {}),
+      ];
+      const [message] = renderMessages(runRulesOnProject([rule], files));
+      expect(message).toBe(
+        '`0001-old.md` declares `superseded-by: ADR-0042`, but `ADR-0042` (this file) does not back-reference it via `supersedes: ADR-0001`',
+      );
     });
 
     it('many-to-one with one missing back reference', () => {
@@ -122,6 +167,8 @@ describe('madr/supersedes-bidirectional', () => {
         path: '0042-x.md',
         data: { ref: 'ADR-9999', direction: 'supersedes' },
       });
+      // self-contained diagnostics (#67)
+      expect(diagnostics[0]?.suggestion).toContain('ADR-9999');
     });
 
     it('superseded-by points to non-existent ADR', () => {

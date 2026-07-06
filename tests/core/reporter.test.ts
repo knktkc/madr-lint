@@ -26,6 +26,17 @@ function makeRule(name: string, messages: Record<string, string>): Rule {
   };
 }
 
+// Build a Diagnostic with the runner-resolved fields (`suggestion`, `docsUrl`)
+// defaulted so the reporters — which read them off the diagnostic — can be
+// exercised without hand-writing them in every case. Reporters treat a null
+// suggestion / empty docsUrl as "absent".
+function diag(
+  d: Omit<Diagnostic, 'suggestion' | 'docsUrl'> &
+    Partial<Pick<Diagnostic, 'suggestion' | 'docsUrl'>>,
+): Diagnostic {
+  return { suggestion: null, docsUrl: '', ...d };
+}
+
 describe('core/reporter — text', () => {
   it('returns "All clear" when there are no diagnostics', () => {
     expect(textReporter.format([], new Map())).toContain('All clear');
@@ -36,9 +47,9 @@ describe('core/reporter — text', () => {
       ['test/r', makeRule('test/r', { foo: 'msg {{x}}' })],
     ]);
     const diagnostics: Diagnostic[] = [
-      { ruleName: 'test/r', messageId: 'foo', severity: 'error', path: 'a.md', data: { x: 1 } },
-      { ruleName: 'test/r', messageId: 'foo', severity: 'error', path: 'a.md', data: { x: 2 } },
-      { ruleName: 'test/r', messageId: 'foo', severity: 'warn', path: 'b.md', data: { x: 3 } },
+      diag({ ruleName: 'test/r', messageId: 'foo', severity: 'error', path: 'a.md', data: { x: 1 } }),
+      diag({ ruleName: 'test/r', messageId: 'foo', severity: 'error', path: 'a.md', data: { x: 2 } }),
+      diag({ ruleName: 'test/r', messageId: 'foo', severity: 'warn', path: 'b.md', data: { x: 3 } }),
     ];
     const out = textReporter.format(diagnostics, rules);
     expect(out).toContain('a.md');
@@ -52,13 +63,13 @@ describe('core/reporter — text', () => {
       ['test/r', makeRule('test/r', { hello: 'Hello {{name}}!' })],
     ]);
     const diagnostics: Diagnostic[] = [
-      {
+      diag({
         ruleName: 'test/r',
         messageId: 'hello',
         severity: 'error',
         path: 'a.md',
         data: { name: 'world' },
-      },
+      }),
     ];
     expect(textReporter.format(diagnostics, rules)).toContain('Hello world!');
   });
@@ -68,9 +79,9 @@ describe('core/reporter — text', () => {
       ['test/r', makeRule('test/r', { x: 'msg' })],
     ]);
     const diagnostics: Diagnostic[] = [
-      { ruleName: 'test/r', messageId: 'x', severity: 'error', path: 'a.md' },
-      { ruleName: 'test/r', messageId: 'x', severity: 'error', path: 'a.md' },
-      { ruleName: 'test/r', messageId: 'x', severity: 'warn', path: 'b.md' },
+      diag({ ruleName: 'test/r', messageId: 'x', severity: 'error', path: 'a.md' }),
+      diag({ ruleName: 'test/r', messageId: 'x', severity: 'error', path: 'a.md' }),
+      diag({ ruleName: 'test/r', messageId: 'x', severity: 'warn', path: 'b.md' }),
     ];
     const out = textReporter.format(diagnostics, rules);
     expect(out).toContain('2 errors');
@@ -79,7 +90,7 @@ describe('core/reporter — text', () => {
 
   it('falls back to messageId when rule or template is missing', () => {
     const diagnostics: Diagnostic[] = [
-      { ruleName: 'unknown/rule', messageId: 'mystery', severity: 'error', path: 'a.md' },
+      diag({ ruleName: 'unknown/rule', messageId: 'mystery', severity: 'error', path: 'a.md' }),
     ];
     const out = textReporter.format(diagnostics, new Map());
     expect(out).toContain('mystery');
@@ -90,7 +101,7 @@ describe('core/reporter — text', () => {
       ['test/r', makeRule('test/r', { x: 'msg' })],
     ]);
     const diagnostics: Diagnostic[] = [
-      { ruleName: 'test/r', messageId: 'x', severity: 'error', path: 'a.md' },
+      diag({ ruleName: 'test/r', messageId: 'x', severity: 'error', path: 'a.md' }),
     ];
     expect(textReporter.format(diagnostics, rules)).toContain('test/r');
   });
@@ -100,9 +111,74 @@ describe('core/reporter — text', () => {
       ['test/r', makeRule('test/r', { x: 'value: {{notProvided}}' })],
     ]);
     const diagnostics: Diagnostic[] = [
-      { ruleName: 'test/r', messageId: 'x', severity: 'error', path: 'a.md', data: {} },
+      diag({ ruleName: 'test/r', messageId: 'x', severity: 'error', path: 'a.md', data: {} }),
     ];
     expect(textReporter.format(diagnostics, rules)).toContain('{{notProvided}}');
+  });
+
+  // ── self-contained diagnostics (#67) ─────────────────────────────────
+  it('renders an indented → suggestion line under a diagnostic that has one', () => {
+    const rules = new Map<string, AnyRule>([
+      ['test/r', makeRule('test/r', { x: 'the problem' })],
+    ]);
+    const diagnostics: Diagnostic[] = [
+      diag({
+        ruleName: 'test/r',
+        messageId: 'x',
+        severity: 'error',
+        path: 'a.md',
+        suggestion: 'apply the concrete fix',
+      }),
+    ];
+    const out = textReporter.format(diagnostics, rules);
+    expect(out).toContain('→ apply the concrete fix');
+  });
+
+  it('renders no suggestion line when suggestion is null', () => {
+    const rules = new Map<string, AnyRule>([
+      ['test/r', makeRule('test/r', { x: 'the problem' })],
+    ]);
+    const diagnostics: Diagnostic[] = [
+      diag({ ruleName: 'test/r', messageId: 'x', severity: 'error', path: 'a.md' }),
+    ];
+    expect(textReporter.format(diagnostics, rules)).not.toContain('→');
+  });
+
+  it('prints the docs URL once per rule per file group (not per diagnostic)', () => {
+    const rules = new Map<string, AnyRule>([
+      ['test/r', makeRule('test/r', { x: 'msg' })],
+    ]);
+    const url = 'https://docs.example/rules/r/';
+    const diagnostics: Diagnostic[] = [
+      diag({ ruleName: 'test/r', messageId: 'x', severity: 'error', path: 'a.md', docsUrl: url }),
+      diag({ ruleName: 'test/r', messageId: 'x', severity: 'error', path: 'a.md', docsUrl: url }),
+    ];
+    const out = textReporter.format(diagnostics, rules);
+    expect(out.match(new RegExp(url.replace(/[/.]/g, '\\$&'), 'g')) ?? []).toHaveLength(1);
+  });
+
+  it('prints a distinct docs URL for each rule in a file group', () => {
+    const rules = new Map<string, AnyRule>([
+      ['test/a', makeRule('test/a', { x: 'msg' })],
+      ['test/b', makeRule('test/b', { x: 'msg' })],
+    ]);
+    const diagnostics: Diagnostic[] = [
+      diag({ ruleName: 'test/a', messageId: 'x', severity: 'error', path: 'a.md', docsUrl: 'https://docs.example/a/' }),
+      diag({ ruleName: 'test/b', messageId: 'x', severity: 'error', path: 'a.md', docsUrl: 'https://docs.example/b/' }),
+    ];
+    const out = textReporter.format(diagnostics, rules);
+    expect(out).toContain('https://docs.example/a/');
+    expect(out).toContain('https://docs.example/b/');
+  });
+
+  it('omits the docs URL line when docsUrl is empty', () => {
+    const rules = new Map<string, AnyRule>([
+      ['test/r', makeRule('test/r', { x: 'msg' })],
+    ]);
+    const diagnostics: Diagnostic[] = [
+      diag({ ruleName: 'test/r', messageId: 'x', severity: 'error', path: 'a.md', docsUrl: '' }),
+    ];
+    expect(textReporter.format(diagnostics, rules)).not.toContain('http');
   });
 });
 
@@ -125,20 +201,20 @@ describe('core/reporter — json', () => {
       ['test/r', makeRule('test/r', { x: 'value {{n}}' })],
     ]);
     const diagnostics: Diagnostic[] = [
-      {
+      diag({
         ruleName: 'test/r',
         messageId: 'x',
         severity: 'error',
         path: 'a.md',
         data: { n: 1 },
-      },
-      {
+      }),
+      diag({
         ruleName: 'test/r',
         messageId: 'x',
         severity: 'warn',
         path: 'b.md',
         data: { n: 2 },
-      },
+      }),
     ];
     const out = JSON.parse(jsonReporter.format(diagnostics, rules));
     expect(out.summary).toEqual({
@@ -167,6 +243,32 @@ describe('core/reporter — json', () => {
     const out = jsonReporter.format([], new Map());
     expect(() => JSON.parse(out)).not.toThrow();
   });
+
+  // ── self-contained diagnostics (#67) ─────────────────────────────────
+  it('every result carries suggestion (string|null) and docsUrl (string)', () => {
+    const rules = new Map<string, AnyRule>([
+      ['test/r', makeRule('test/r', { x: 'msg' })],
+    ]);
+    const diagnostics: Diagnostic[] = [
+      diag({
+        ruleName: 'test/r',
+        messageId: 'x',
+        severity: 'error',
+        path: 'a.md',
+        suggestion: 'do the fix',
+        docsUrl: 'https://docs.example/r/',
+      }),
+      diag({ ruleName: 'test/r', messageId: 'x', severity: 'warn', path: 'b.md' }),
+    ];
+    const out = JSON.parse(jsonReporter.format(diagnostics, rules));
+    expect(out.results[0]).toMatchObject({
+      suggestion: 'do the fix',
+      docsUrl: 'https://docs.example/r/',
+    });
+    // Keys are ALWAYS present — pin the machine-readable shape.
+    expect(out.results[1]).toHaveProperty('suggestion', null);
+    expect(out.results[1]).toHaveProperty('docsUrl', '');
+  });
 });
 
 describe('core/reporter — sarif', () => {
@@ -185,9 +287,9 @@ describe('core/reporter — sarif', () => {
       ['test/b', makeRule('test/b', { x: 'msg-b' })],
     ]);
     const diagnostics: Diagnostic[] = [
-      { ruleName: 'test/a', messageId: 'x', severity: 'error', path: 'a.md' },
-      { ruleName: 'test/a', messageId: 'x', severity: 'error', path: 'b.md' },
-      { ruleName: 'test/b', messageId: 'x', severity: 'warn', path: 'b.md' },
+      diag({ ruleName: 'test/a', messageId: 'x', severity: 'error', path: 'a.md' }),
+      diag({ ruleName: 'test/a', messageId: 'x', severity: 'error', path: 'b.md' }),
+      diag({ ruleName: 'test/b', messageId: 'x', severity: 'warn', path: 'b.md' }),
     ];
     const out = JSON.parse(sarifReporter.format(diagnostics, rules));
     expect(out.runs[0].tool.driver.rules).toHaveLength(2);
@@ -201,18 +303,39 @@ describe('core/reporter — sarif', () => {
       ['test/a', makeRule('test/a', { x: 'msg' })],
     ]);
     const diagnostics: Diagnostic[] = [
-      {
+      diag({
         ruleName: 'test/a',
         messageId: 'x',
         severity: 'error',
         path: 'docs/adr/0001.md',
-      },
+      }),
     ];
     const out = JSON.parse(sarifReporter.format(diagnostics, rules));
     expect(out.runs[0].results[0].locations[0].physicalLocation).toEqual({
       artifactLocation: { uri: 'docs/adr/0001.md', uriBaseId: '%SRCROOT%' },
       region: { startLine: 1 },
     });
+  });
+
+  // ── self-contained diagnostics (#67): SARIF is unchanged — helpUri already
+  // carries the docs URL, so no new per-result fields are added. ────────────
+  it('does not add suggestion or docsUrl fields to SARIF results', () => {
+    const rules = new Map<string, AnyRule>([
+      ['test/a', makeRule('test/a', { x: 'msg' })],
+    ]);
+    const diagnostics: Diagnostic[] = [
+      diag({
+        ruleName: 'test/a',
+        messageId: 'x',
+        severity: 'error',
+        path: 'a.md',
+        suggestion: 'do the fix',
+        docsUrl: 'https://docs.example/a/',
+      }),
+    ];
+    const result = JSON.parse(sarifReporter.format(diagnostics, rules)).runs[0].results[0];
+    expect(result).not.toHaveProperty('suggestion');
+    expect(result).not.toHaveProperty('docsUrl');
   });
 });
 
@@ -222,14 +345,14 @@ describe('core/reporter — github', () => {
       ['madr/foo', makeRule('madr/foo', { bad: 'Bad thing {{x}}' })],
     ]);
     const diagnostics: Diagnostic[] = [
-      {
+      diag({
         ruleName: 'madr/foo',
         messageId: 'bad',
         severity: 'error',
         path: 'docs/adr/0001.md',
         loc: { line: 5, column: 0 },
         data: { x: 'here' },
-      },
+      }),
     ];
     const out = githubReporter.format(diagnostics, rules);
     expect(out).toContain('::error file=docs/adr/0001.md,line=5,title=madr/foo::Bad thing here');
@@ -240,13 +363,13 @@ describe('core/reporter — github', () => {
       ['madr/bar', makeRule('madr/bar', { warn: 'Watch out' })],
     ]);
     const diagnostics: Diagnostic[] = [
-      {
+      diag({
         ruleName: 'madr/bar',
         messageId: 'warn',
         severity: 'warn',
         path: 'docs/adr/0002.md',
         loc: { line: 3, column: 0 },
-      },
+      }),
     ];
     const out = githubReporter.format(diagnostics, rules);
     expect(out).toContain('::warning file=docs/adr/0002.md,line=3,title=madr/bar::Watch out');
@@ -257,12 +380,12 @@ describe('core/reporter — github', () => {
       ['madr/baz', makeRule('madr/baz', { x: 'msg' })],
     ]);
     const diagnostics: Diagnostic[] = [
-      {
+      diag({
         ruleName: 'madr/baz',
         messageId: 'x',
         severity: 'error',
         path: 'docs/adr/0003.md',
-      },
+      }),
     ];
     const out = githubReporter.format(diagnostics, rules);
     expect(out).toContain('::error file=docs/adr/0003.md,title=madr/baz::msg');
@@ -274,13 +397,13 @@ describe('core/reporter — github', () => {
       ['madr/esc', makeRule('madr/esc', { x: '100% done\r\nok' })],
     ]);
     const diagnostics: Diagnostic[] = [
-      {
+      diag({
         ruleName: 'madr/esc',
         messageId: 'x',
         severity: 'error',
         path: 'a.md',
         data: {},
-      },
+      }),
     ];
     const out = githubReporter.format(diagnostics, rules);
     expect(out).toContain('100%25 done%0D%0Aok');
@@ -291,12 +414,12 @@ describe('core/reporter — github', () => {
       ['madr/rule:check', makeRule('madr/rule:check', { x: 'msg' })],
     ]);
     const diagnostics: Diagnostic[] = [
-      {
+      diag({
         ruleName: 'madr/rule:check',
         messageId: 'x',
         severity: 'error',
         path: 'path,with,commas.md',
-      },
+      }),
     ];
     const out = githubReporter.format(diagnostics, rules);
     // commas in file path should be escaped
@@ -310,12 +433,12 @@ describe('core/reporter — github', () => {
       ['madr/pct', makeRule('madr/pct', { x: 'msg' })],
     ]);
     const diagnostics: Diagnostic[] = [
-      {
+      diag({
         ruleName: 'madr/pct',
         messageId: 'x',
         severity: 'error',
         path: 'test%20file.md',
-      },
+      }),
     ];
     const out = githubReporter.format(diagnostics, rules);
     // literal % in the path must itself be encoded: %20 → %2520
@@ -327,8 +450,8 @@ describe('core/reporter — github', () => {
       ['test/r', makeRule('test/r', { x: 'msg' })],
     ]);
     const diagnostics: Diagnostic[] = [
-      { ruleName: 'test/r', messageId: 'x', severity: 'error', path: 'a.md' },
-      { ruleName: 'test/r', messageId: 'x', severity: 'warn', path: 'b.md' },
+      diag({ ruleName: 'test/r', messageId: 'x', severity: 'error', path: 'a.md' }),
+      diag({ ruleName: 'test/r', messageId: 'x', severity: 'warn', path: 'b.md' }),
     ];
     const out = githubReporter.format(diagnostics, rules);
     expect(out).toContain('1 error');
@@ -350,6 +473,54 @@ describe('core/reporter — github', () => {
   it('prints zero-count summary on a clean run (log line is never empty)', () => {
     const out = githubReporter.format([], new Map());
     expect(out).toContain('0 errors, 0 warnings');
+  });
+
+  // ── self-contained diagnostics (#67) ─────────────────────────────────
+  it('appends the suggestion to the annotation message when present', () => {
+    const rules = new Map<string, AnyRule>([
+      ['madr/foo', makeRule('madr/foo', { bad: 'Bad thing {{x}}' })],
+    ]);
+    const diagnostics: Diagnostic[] = [
+      diag({
+        ruleName: 'madr/foo',
+        messageId: 'bad',
+        severity: 'error',
+        path: 'a.md',
+        data: { x: 'here' },
+        suggestion: 'do the fix',
+      }),
+    ];
+    const out = githubReporter.format(diagnostics, rules);
+    expect(out).toContain('::error file=a.md,title=madr/foo::Bad thing here — do the fix');
+  });
+
+  it('does not append a separator when there is no suggestion', () => {
+    const rules = new Map<string, AnyRule>([
+      ['madr/foo', makeRule('madr/foo', { bad: 'Bad thing' })],
+    ]);
+    const diagnostics: Diagnostic[] = [
+      diag({ ruleName: 'madr/foo', messageId: 'bad', severity: 'error', path: 'a.md' }),
+    ];
+    const out = githubReporter.format(diagnostics, rules);
+    expect(out).toContain('::Bad thing');
+    expect(out).not.toContain(' — ');
+  });
+
+  it('escapes % and newlines in an appended suggestion', () => {
+    const rules = new Map<string, AnyRule>([
+      ['madr/foo', makeRule('madr/foo', { bad: 'Bad' })],
+    ]);
+    const diagnostics: Diagnostic[] = [
+      diag({
+        ruleName: 'madr/foo',
+        messageId: 'bad',
+        severity: 'error',
+        path: 'a.md',
+        suggestion: 'use 100%\nnow',
+      }),
+    ];
+    const out = githubReporter.format(diagnostics, rules);
+    expect(out).toContain('Bad — use 100%25%0Anow');
   });
 });
 

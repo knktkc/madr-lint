@@ -75,6 +75,11 @@ describe('madr/no-broken-links', () => {
         path: 'docs/adr/0001-a.md',
         data: { url: './0099-nope.md', resolvedPath: 'docs/adr/0099-nope.md' },
       });
+      // self-contained diagnostics (#67)
+      expect(diagnostics[0]?.suggestion).toContain('fix the link target');
+      expect(diagnostics[0]?.docsUrl).toBe(
+        'https://knktkc.github.io/madr-lint/rules/no-broken-links/',
+      );
     });
 
     it('multiple broken links in one file', () => {

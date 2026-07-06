@@ -32,6 +32,10 @@ describe('madr/required-sections', () => {
         data: {
           section: 'Context and Problem Statement',
         },
+        // self-contained diagnostics (#67): machine-actionable remediation
+        suggestion:
+          'add a "## Context and Problem Statement" heading to the document body',
+        docsUrl: 'https://knktkc.github.io/madr-lint/rules/required-sections/',
       });
     });
 

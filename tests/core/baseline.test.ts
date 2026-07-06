@@ -18,6 +18,8 @@ import { INTERNAL_ERROR_RULE_NAME, type Diagnostic } from '../../src/core/types.
 function diag(partial: Partial<Diagnostic> & Pick<Diagnostic, 'ruleName' | 'messageId' | 'path'>): Diagnostic {
   return {
     severity: 'error',
+    suggestion: null,
+    docsUrl: '',
     ...partial,
   };
 }

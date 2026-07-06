@@ -64,8 +64,23 @@ describe('madr/date-iso8601', () => {
           messageId: 'invalidDate',
           data: { date: expectedRaw },
         });
+        // self-contained diagnostics (#67): show the expected format
+        expect(diagnostics[0]?.suggestion).toContain('YYYY-MM-DD');
+        expect(diagnostics[0]?.docsUrl).toBe(
+          'https://knktkc.github.io/madr-lint/rules/date-iso8601/',
+        );
       });
     }
+
+    it('missingDate suggests adding the field in YYYY-MM-DD format', () => {
+      const content = readFileSync(
+        join(fixturesDir, 'invalid', 'no-date-field.md'),
+        'utf8',
+      );
+      const diagnostics = runRule(rule, { content, path: 'no-date-field.md' });
+      expect(diagnostics[0]?.messageId).toBe('missingDate');
+      expect(diagnostics[0]?.suggestion).toContain('YYYY-MM-DD');
+    });
   });
 
   describe('YAML date type handling', () => {
