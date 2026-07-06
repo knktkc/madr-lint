@@ -6,7 +6,7 @@ allowed-tools: Bash(npx:*), Bash(ls:*), Bash(find:*), Bash(cat:*), Bash(grep:*),
 
 # new-adr — author a new MADR ADR that lints clean
 
-Grounded against **madr-lint@0.2.0** (the latest published npm release) and
+Grounded against **madr-lint@0.3.0** (the latest published npm release) and
 the upstream MADR templates
 ([v4](https://github.com/adr/madr/blob/develop/template/adr-template.md),
 [v2.1.2](https://github.com/adr/madr/blob/2.1.2/template/template.md)).
@@ -203,10 +203,12 @@ npx madr-lint --format json <adrDir>/<new-file>.md
 ```
 
 Read `summary.total`. If it's `0`, you're done. Otherwise, read
-`results[]` — each entry has `messageId`, `message`, and `data` (0.2.0 has
-no `suggestion`/`docsUrl` field yet; read `message`/`data` directly) — fix
-the file, and re-run. Do not stop until `summary.total` is `0` for this
-file, or exit code is `0` for a plain `npx madr-lint <file>` run.
+`results[]` — each entry has `messageId`, `message`, `data`, `suggestion`
+(a machine-actionable fix, or `null` when the rule has none), and `docsUrl`
+— prefer `suggestion` over hand-rolling a fix from `data` when it's
+present — fix the file, and re-run. Do not stop until `summary.total` is
+`0` for this file, or exit code is `0` for a plain `npx madr-lint <file>`
+run.
 
 Two things that commonly trip this up, both confirmed during dogfooding:
 

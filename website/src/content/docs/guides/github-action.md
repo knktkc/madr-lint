@@ -60,7 +60,7 @@ workflows we recommend [pinning an exact `version:`](#examples) instead.
 ```yaml
       - uses: knktkc/madr-lint@v0
         with:
-          version: '0.2.0'
+          version: '0.3.0'
           path: docs/adr
 ```
 

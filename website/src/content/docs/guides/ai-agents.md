@@ -105,21 +105,21 @@ npx madr-lint --format json
       "messageId": "missingSection",
       "severity": "error",
       "message": "Missing required section: \"Consequences\"",
+      "suggestion": "add a \"## Consequences\" heading to the document body",
+      "docsUrl": "https://knktkc.github.io/madr-lint/rules/required-sections/",
       "data": { "section": "Consequences", "found": ["Context and Problem Statement", "Decision Outcome"] }
     }
   ]
 }
 ```
 
-The shape above is what **v0.2.0** (the latest published release at the time
+The shape above is what **v0.3.0** (the latest published release at the time
 of writing) actually emits — `path`, `ruleName`, `messageId`, `severity`,
-`message`, and a rule-specific `data` object. A change already merged to
-`main` (not yet in a published release) adds two more fields to every
-result, `suggestion` (a machine-actionable fix, or `null`) and `docsUrl` (the
-rule's documentation page) — once that ships, prefer reading `suggestion`
-over hand-rolling a fix message from `data`. Both skills above are written
-against the current, published shape and call this out at the point it
-matters.
+`message`, a rule-specific `data` object, and two more fields on every
+result: `suggestion` (a machine-actionable fix, or `null` when the rule has
+none) and `docsUrl` (the rule's documentation page). Prefer reading
+`suggestion` over hand-rolling a fix message from `data`. Both skills above
+are written against this current, published shape.
 
 See the [CLI](/guides/cli/#json) guide for the full reporter reference and
 the [Programmatic API](/guides/api/) guide for using `madr-lint` as a
