@@ -103,7 +103,7 @@ npx madr-lint --format json
       "messageId": "missingSection",
       "severity": "error",
       "message": "Missing required section: \"Consequences\"",
-      "data": { "section": "Consequences" }
+      "data": { "section": "Consequences", "found": ["Context and Problem Statement", "Decision Outcome"] }
     }
   ]
 }
