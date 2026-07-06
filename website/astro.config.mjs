@@ -90,6 +90,7 @@ export default defineConfig({
             { slug: 'guides/suppressing-rules', translations: { ja: 'ルールの抑制' } },
             { slug: 'guides/github-action', translations: { ja: 'GitHub Action' } },
             { slug: 'guides/api', translations: { ja: 'プログラマティックAPI' } },
+            { slug: 'guides/ai-agents', translations: { ja: 'AIエージェント' } },
           ],
         },
         {
