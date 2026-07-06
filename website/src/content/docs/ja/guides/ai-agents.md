@@ -65,7 +65,6 @@ madr-lint 固有のツールを必要としません（CLI 自体を除く）。
 参照）。ファイルをコピーしてプロジェクトに取り込んでください。
 
 ```bash
-mkdir -p .claude/skills
 curl -fsSL -o .claude/skills/adopt-madr-lint/SKILL.md --create-dirs \
   https://raw.githubusercontent.com/knktkc/madr-lint/main/skills/adopt-madr-lint/SKILL.md
 curl -fsSL -o .claude/skills/new-adr/SKILL.md --create-dirs \

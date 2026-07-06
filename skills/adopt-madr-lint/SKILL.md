@@ -1,7 +1,7 @@
 ---
 name: adopt-madr-lint
 description: Roll out madr-lint on an existing repository that already has (or is about to have) Architecture Decision Records. Detects the ADR directory, installs madr-lint, writes a config, runs a first lint pass, snapshots legacy debt into a baseline so only new violations fail the build, wires up the GitHub Action, and optionally triages the worst offenders with inline suppression. Use for phrases like "adopt madr-lint", "add ADR linting to this repo", "roll out madr-lint", "set up madr-lint in CI", "onboard madr-lint gradually", "baseline our ADR violations", or "wire up madr-lint on GitHub Actions".
-allowed-tools: Bash(npm:*), Bash(pnpm:*), Bash(yarn:*), Bash(npx:*), Bash(node:*), Bash(git:*), Bash(ls:*), Bash(find:*), Bash(grep:*), Bash(mkdir:*), Bash(cat:*), Read, Write, Edit
+allowed-tools: Bash(npm:*), Bash(pnpm:*), Bash(yarn:*), Bash(npx:*), Bash(node:*), Bash(git add:*), Bash(git status:*), Bash(git commit:*), Bash(ls:*), Bash(find:*), Bash(grep:*), Bash(mkdir:*), Bash(cat:*), Read, Write, Edit
 ---
 
 # adopt-madr-lint — roll out madr-lint on an existing repo
@@ -179,7 +179,7 @@ npx madr-lint
 point of the baseline): temporarily introduce one, confirm `npx madr-lint`
 exits `1` and reports it, then remove it again.
 
-#### Commit the baseline — do NOT `git add -A` here
+#### Stage the baseline — do NOT `git add -A` here
 
 `.madr-lint/baseline.json` and `.madr-lint/cache/manifest.json` are
 siblings under `.madr-lint/`. The baseline is meant to be committed; the
@@ -194,12 +194,19 @@ printf '.madr-lint/cache/\n' >> .gitignore
 git add .gitignore .madrlintrc.json .madr-lint/baseline.json package.json
 # plus whichever lockfile your package manager uses, e.g.:
 git add package-lock.json   # or pnpm-lock.yaml / yarn.lock
-
-git commit -m "chore: adopt madr-lint (baseline legacy ADR debt)"
 ```
 
-If the repo's workflow expects a human to review before committing, stage
-these paths and stop here instead of committing automatically.
+**Stop at staging.** The default end state of this step is the paths above
+staged plus a proposed commit message printed for the user, e.g.:
+
+```text
+chore: adopt madr-lint (baseline legacy ADR debt)
+```
+
+Only run `git commit` yourself if your operator has explicitly authorized
+commits for this task (in the task instructions or the repo's agent
+conventions). Committing on someone's behalf is the exception, not the
+default.
 
 ### Step 7: Wire up CI
 

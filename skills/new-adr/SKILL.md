@@ -11,6 +11,9 @@ the upstream MADR templates
 ([v4](https://github.com/adr/madr/blob/develop/template/adr-template.md),
 [v2.1.2](https://github.com/adr/madr/blob/2.1.2/template/template.md)).
 
+This procedure is mechanical: follow it top to bottom. The only judgment
+calls are explicitly marked **DECISION POINT**.
+
 ## When to invoke
 
 - "write an ADR for \<decision\>"
@@ -39,15 +42,20 @@ grep -n "adrDir\|madrVersion" madr-lint.config.ts 2>/dev/null
 ```
 
 Read `adrDir` (default `docs/adr` if unset or no config exists) and
-`madrVersion` (default `auto` if unset). If `madrVersion` is `auto` or the
-repo has no config at all, **look at the most recent existing ADR** to infer
-which template to follow — YAML frontmatter means v3/v4 (use the v4
-template below unless told otherwise), a `* Status:` / `- **Status**:` body
-list means v2 (use the v2 template below).
+`madrVersion` (default `auto` if unset).
 
-If there are no existing ADRs and no config, default to **v4** — it's this
-project's own recommended target and the only version with a still-current
-upstream template.
+**DECISION POINT — which template to follow:**
+
+- `madrVersion` is explicitly `v2`, `v3`, or `v4` in the config → use that
+  version's template (v3/v4 → the v4 template below).
+- `madrVersion` is `auto`, or the repo has no config at all → **look at the
+  most recent existing ADR** to infer the house style: YAML frontmatter
+  means v3/v4 (use the v4 template below unless told otherwise), a
+  `* Status:` / `- **Status**:` body list means v2 (use the v2 template
+  below).
+- No existing ADRs and no config → default to **v4**. It's this project's
+  own recommended target and the only version with a still-current upstream
+  template.
 
 ### Step 2: Determine the next number
 

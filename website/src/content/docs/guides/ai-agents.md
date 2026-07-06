@@ -66,7 +66,6 @@ no `madr-lint` CLI flag that installs them (yet; see the note below). Bring
 them into a project by copying the files:
 
 ```bash
-mkdir -p .claude/skills
 curl -fsSL -o .claude/skills/adopt-madr-lint/SKILL.md --create-dirs \
   https://raw.githubusercontent.com/knktkc/madr-lint/main/skills/adopt-madr-lint/SKILL.md
 curl -fsSL -o .claude/skills/new-adr/SKILL.md --create-dirs \
