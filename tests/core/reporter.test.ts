@@ -154,7 +154,10 @@ describe('core/reporter — text', () => {
       diag({ ruleName: 'test/r', messageId: 'x', severity: 'error', path: 'a.md', docsUrl: url }),
     ];
     const out = textReporter.format(diagnostics, rules);
-    expect(out.match(new RegExp(url.replace(/[/.]/g, '\\$&'), 'g')) ?? []).toHaveLength(1);
+    // Count literal occurrences via split — no regex, so no metacharacter
+    // escaping to get wrong (CodeQL js/incomplete-sanitization flagged the
+    // previous hand-rolled escape for not handling backslashes).
+    expect(out.split(url).length - 1).toBe(1);
   });
 
   it('prints a distinct docs URL for each rule in a file group', () => {
