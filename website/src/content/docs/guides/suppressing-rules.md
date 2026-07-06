@@ -89,6 +89,17 @@ attributed to a file; a directive in that file suppresses them:
   section, a missing metadata field) are only silenced by file-scoped
   suppression: `disable-file`, or a `disable` left open to the end of the
   file. A bounded `disable`/`enable` pair does not silence them.
+- **A suppression comment placed between MADR v2 metadata-list items splits
+  the list.** v2 metadata is a Markdown list (`* Status: accepted` /
+  `* Date: 2024-1-5`); an HTML comment inserted *between* items breaks the
+  list in two, and the v2 metadata bridge only reads up to the split — the
+  field after the comment silently disappears from the parsed metadata. That
+  degrades a line-suppressible `invalidDate` into an unsuppressible
+  file-level `missingDate` (see "Diagnostics without a line" above) — a
+  worse, unsuppressed error than the one you started with. Place directives
+  above the whole list instead, or use `madr-lint-disable-file` for v2
+  files. Tracked as
+  [#73](https://github.com/knktkc/madr-lint/issues/73).
 - **One directive per comment, standing alone.** A comment that contains
   another comment on the same line (`<!-- … --><!-- … -->`) is rejected as a
   directive. Unknown keywords (e.g. `madr-lint-disable-line`) and ordinary

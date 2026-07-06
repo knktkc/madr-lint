@@ -108,7 +108,7 @@ madr-lint --format json
       "message": "Missing required section: \"Consequences\"",
       "suggestion": "add a \"## Consequences\" heading to the document body",
       "docsUrl": "https://knktkc.github.io/madr-lint/rules/required-sections/",
-      "data": { "section": "Consequences" }
+      "data": { "section": "Consequences", "found": ["Context and Problem Statement", "Decision Outcome"] }
     }
   ]
 }

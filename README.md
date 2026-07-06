@@ -15,7 +15,7 @@
 [Getting started](https://knktkc.github.io/madr-lint/guides/getting-started/) ·
 [Rules](https://knktkc.github.io/madr-lint/rules/)
 
-<sub>For AI agents: [llms.txt](https://knktkc.github.io/madr-lint/llms.txt) indexes the docs; [llms-full.txt](https://knktkc.github.io/madr-lint/llms-full.txt) has the full text in one fetch; the [AI agents guide](https://knktkc.github.io/madr-lint/guides/ai-agents/) covers the ready-made [`adopt-madr-lint`](skills/adopt-madr-lint/SKILL.md) / [`new-adr`](skills/new-adr/SKILL.md) skills.</sub>
+<sub>For AI agents: [llms.txt](https://knktkc.github.io/madr-lint/llms.txt) indexes the docs; [llms-full.txt](https://knktkc.github.io/madr-lint/llms-full.txt) has the full text in one fetch; the [AI agents guide](https://knktkc.github.io/madr-lint/guides/ai-agents/) covers the ready-made [`adopt-madr-lint`](https://github.com/knktkc/madr-lint/blob/main/skills/adopt-madr-lint/SKILL.md) / [`new-adr`](https://github.com/knktkc/madr-lint/blob/main/skills/new-adr/SKILL.md) skills.</sub>
 
 </div>
 

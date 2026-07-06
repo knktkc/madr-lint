@@ -69,6 +69,7 @@ Linters live or die by speed. Performance is treated as a feature, not an aftert
 - **ID format**: `madr/<kebab-case>`, e.g., `madr/required-sections`. ESLint-style. No `MADR001` numbering.
 - **Severity**: every rule supports `error | warn | off`. Defaults set in `recommended` preset.
 - **Options**: every rule accepts an options object validated by an AJV schema (`strict: true`). Every key in `defaultOptions` MUST be declared in `schema.json` `properties` (we use `additionalProperties: false`).
+- **Suggestions**: `meta.suggestions` is a declarative map parallel to `meta.messages`, keyed by the same messageIds and interpolated identically (same `{{placeholder}}` + `data`). Add a suggestion wherever a mechanical remediation exists; omit the messageId when the fix is contextual (e.g., `invalidStatus` already lists the allowed values in its message, so it has none).
 - **MADR version awareness**: rules respect the configured `madrVersion` (`v2 | v3 | v4 | auto`). Use `versionMap[version]` for spec lookup. Cite the actual MADR template URL in `spec.md` per version — do not infer section names from memory.
 - **Rule shapes**: a rule has one of four shapes — pick the simplest that fits. Shapes A/B/C are per-file rules (`Rule<TOptions>` with `create()`); Shape D is the cross-file project rule (`ProjectRule<TOptions>` with `check()`):
   - **A. filename / metadata-only** — `create()` reports directly from `context.file.path`, returns void. Example: `madr/filename-format`.
