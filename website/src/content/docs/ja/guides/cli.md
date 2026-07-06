@@ -62,19 +62,28 @@ madr-lint --quiet --max-warnings 0
 
 ### `text`（デフォルト）
 
-人間が読みやすい形式で、ファイルごとにグループ化されます。
+人間が読みやすい形式で、ファイルごとにグループ化されます。ルールが具体的な修正方法を
+提示できる場合はインデントされた `→` 行で表示し、ルールのドキュメント URL は
+ファイルグループごとにルール単位で 1 回だけ出力されます（診断ごとには繰り返さず、
+出力をコンパクトに保ちます）。
 
 ```text
 docs/adr/0003-use-postgres.md
-  error  madr/status-enum        Status "decided" is not one of: ...
+  error  madr/date-iso8601       Date "2026-13-01" is not a valid ISO 8601 calendar date (YYYY-MM-DD)
+                                 → use the YYYY-MM-DD calendar-date format, e.g. 2025-03-14
   error  madr/required-sections  Missing required section: "Consequences"
+                                 → add a "## Consequences" heading to the document body
+  madr/date-iso8601       https://knktkc.github.io/madr-lint/rules/date-iso8601/
+  madr/required-sections  https://knktkc.github.io/madr-lint/rules/required-sections/
 
 2 errors
 ```
 
 ### `json`
 
-ツール向けの構造化された出力です。
+ツール向けの構造化された出力です。各 result は `suggestion`（機械的に適用できる
+修正内容。ルールがそのメッセージに対して定義していない場合は `null`）と、ルールの
+ドキュメント URL である `docsUrl` を持ちます。
 
 ```bash
 madr-lint --format json
@@ -83,15 +92,17 @@ madr-lint --format json
 ```json
 {
   "version": 1,
-  "summary": { "total": 2, "errors": 2, "warnings": 0, "baselineHidden": 0 },
+  "summary": { "total": 1, "errors": 1, "warnings": 0, "baselineHidden": 0 },
   "results": [
     {
       "path": "docs/adr/0003-use-postgres.md",
-      "ruleName": "madr/status-enum",
-      "messageId": "invalidStatus",
+      "ruleName": "madr/required-sections",
+      "messageId": "missingSection",
       "severity": "error",
-      "message": "Status \"decided\" is not one of: ...",
-      "data": { "status": "decided" }
+      "message": "Missing required section: \"Consequences\"",
+      "suggestion": "add a \"## Consequences\" heading to the document body",
+      "docsUrl": "https://knktkc.github.io/madr-lint/rules/required-sections/",
+      "data": { "section": "Consequences" }
     }
   ]
 }

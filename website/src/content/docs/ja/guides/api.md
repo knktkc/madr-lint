@@ -46,6 +46,29 @@ const diagnostics = runRule(
 // → [{ ruleName: 'madr/status-enum', messageId: 'invalidStatus', ... }]
 ```
 
+## Diagnostic の形
+
+ランナーが返す各 diagnostic は自己完結しています。機械的に適用できる修正内容と
+ドキュメントリンクを持つため、消費側がルール名から組み立て直す必要はありません。
+
+```typescript
+interface Diagnostic {
+  ruleName: string;           // 例: 'madr/required-sections'
+  messageId: string;          // ルールの `messages` マップのキー
+  severity: 'error' | 'warn';
+  path: string;               // POSIX 相対パス
+  loc?: { line: number; column: number };
+  data?: Record<string, unknown>;
+  suggestion: string | null;  // 具体的な修正内容。ルールが定義していなければ null
+  docsUrl: string;            // rule.meta.docs.url（core/internal-error はリポジトリ）
+}
+```
+
+`suggestion` と `docsUrl` は、ルールの宣言的な `meta.suggestions[messageId]` と
+`meta.docs.url` から、ランナーがレポート時に解決します。`suggestion` はメッセージと
+同じく diagnostic の `data` で補間されます。ルールがこれらの文字列を手続き的に
+組み立てることはありません。
+
 ## ファイル単位のルールをまとめて実行する
 
 複数のファイル単位ルールは単一の AST 走査を共有します。

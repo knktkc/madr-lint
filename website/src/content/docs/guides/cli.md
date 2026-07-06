@@ -69,19 +69,27 @@ is checked, so inherited debt never fails CI. Only fresh warnings count.
 
 ### `text` (default)
 
-Human-readable, grouped by file:
+Human-readable, grouped by file. Where a rule offers a concrete fix, an indented
+`→` line shows it; the rule's documentation URL is printed once per rule per file
+group (never per diagnostic, so output stays compact):
 
 ```text
 docs/adr/0003-use-postgres.md
-  error  madr/status-enum        Status "decided" is not one of: ...
+  error  madr/date-iso8601       Date "2026-13-01" is not a valid ISO 8601 calendar date (YYYY-MM-DD)
+                                 → use the YYYY-MM-DD calendar-date format, e.g. 2025-03-14
   error  madr/required-sections  Missing required section: "Consequences"
+                                 → add a "## Consequences" heading to the document body
+  madr/date-iso8601       https://knktkc.github.io/madr-lint/rules/date-iso8601/
+  madr/required-sections  https://knktkc.github.io/madr-lint/rules/required-sections/
 
 2 errors
 ```
 
 ### `json`
 
-Structured output for tooling:
+Structured output for tooling. Each result carries `suggestion` — a
+machine-actionable fix, or `null` when the rule defines none for that message —
+and `docsUrl`, the rule's documentation URL:
 
 ```bash
 madr-lint --format json
@@ -90,15 +98,17 @@ madr-lint --format json
 ```json
 {
   "version": 1,
-  "summary": { "total": 2, "errors": 2, "warnings": 0, "baselineHidden": 0 },
+  "summary": { "total": 1, "errors": 1, "warnings": 0, "baselineHidden": 0 },
   "results": [
     {
       "path": "docs/adr/0003-use-postgres.md",
-      "ruleName": "madr/status-enum",
-      "messageId": "invalidStatus",
+      "ruleName": "madr/required-sections",
+      "messageId": "missingSection",
       "severity": "error",
-      "message": "Status \"decided\" is not one of: ...",
-      "data": { "status": "decided" }
+      "message": "Missing required section: \"Consequences\"",
+      "suggestion": "add a \"## Consequences\" heading to the document body",
+      "docsUrl": "https://knktkc.github.io/madr-lint/rules/required-sections/",
+      "data": { "section": "Consequences" }
     }
   ]
 }

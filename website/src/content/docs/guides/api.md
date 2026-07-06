@@ -46,6 +46,30 @@ const diagnostics = runRule(
 // → [{ ruleName: 'madr/status-enum', messageId: 'invalidStatus', ... }]
 ```
 
+## Diagnostic shape
+
+Every diagnostic the runner emits is self-contained — it carries a
+machine-actionable fix and a docs link, so a consumer never has to reconstruct
+them from the rule name:
+
+```typescript
+interface Diagnostic {
+  ruleName: string;           // e.g. 'madr/required-sections'
+  messageId: string;          // key into the rule's `messages` map
+  severity: 'error' | 'warn';
+  path: string;               // POSIX-relative file path
+  loc?: { line: number; column: number };
+  data?: Record<string, unknown>;
+  suggestion: string | null;  // concrete remediation, or null when the rule defines none
+  docsUrl: string;            // rule.meta.docs.url (the repo for core/internal-error)
+}
+```
+
+`suggestion` and `docsUrl` are resolved by the runner at report time from the
+rule's declarative `meta.suggestions[messageId]` and `meta.docs.url`.
+`suggestion` is interpolated with the diagnostic's `data`, exactly like the
+message; rules never build these strings imperatively.
+
 ## Run per-file rules together
 
 Multiple per-file rules share a single AST traversal.
