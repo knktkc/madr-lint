@@ -30,6 +30,10 @@ See `CLAUDE.md` "Rule authoring conventions" for shape details, and `docs/adr/00
 
 Per-rule deliverables:
 - `src/rules/<name>/{index.ts, schema.json, spec.md}`
+- `meta.suggestions` in `index.ts` for each messageId that has a mechanical
+  remediation — a map parallel to `meta.messages`, keyed the same way and
+  interpolated identically. Omit a messageId when the fix is contextual
+  (see `CLAUDE.md` "Rule authoring conventions").
 - `tests/rules/<name>.test.ts` with hard assertions on diagnostic data shape (NEVER bare `toMatchInlineSnapshot()`)
 - `tests/fixtures/<name>/{valid,invalid}/*.md` (per-file rules) or inline files (project rules)
 - `benchmarks/<name>/bench.ts`
