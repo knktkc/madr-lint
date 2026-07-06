@@ -12,6 +12,7 @@ import {
   type RuleListeners,
   type Severity,
 } from './types.js';
+import { interpolate } from './interpolate.js';
 import { parseFile, type ParsedFile } from './parser.js';
 import {
   collectDirectives,
@@ -40,6 +41,10 @@ function getValidator(schema: AnySchemaObject): ValidateFunction {
 // Defined in types.ts (leaf module) so the suppression layer can reference
 // it without a runner import cycle; re-exported here for API stability.
 export { INTERNAL_ERROR_RULE_NAME };
+
+// core/internal-error diagnostics carry no rule docs URL of their own — a rule
+// bug is a repository issue, so point consumers at the repo. See issue #67.
+const INTERNAL_ERROR_DOCS_URL = 'https://github.com/knktkc/madr-lint';
 
 /**
  * Thrown when a rule's merged options fail AJV validation against
@@ -189,15 +194,27 @@ export function runRulesOnFile(
       }
     }
 
+    // Per-rule constants hoisted OUT of the report closure: resolving them per
+    // report() call (helper call + rule.meta.docs.url chain + an absent
+    // `suggestions` property walk) measured a confirmed -19% on the CI x64
+    // no-numbering-gap dirty-path bench, though Apple-silicon runs masked it.
+    // The literal below also keeps the base construction pattern — boilerplate
+    // head then a single trailing spread — so no post-spread shape transitions.
+    const ruleName = rule.meta.name;
+    const suggestions = rule.meta.suggestions;
+    const docsUrl = rule.meta.docs.url ?? '';
     const context: RuleContext = new PerFileRuleContext(
       file,
       mergedOptions,
       ensureParsed,
       (d) => {
+        const template = suggestions?.[d.messageId];
         diagnostics.push({
-          ruleName: rule.meta.name,
+          ruleName,
           severity,
           path: file.path,
+          suggestion: template === undefined ? null : interpolate(template, d.data ?? {}),
+          docsUrl,
           ...d,
         });
       },
@@ -261,6 +278,8 @@ function internalErrorDiagnostic(
     messageId: 'ruleThrew',
     severity: 'error',
     path,
+    suggestion: null,
+    docsUrl: INTERNAL_ERROR_DOCS_URL,
     data: {
       rule: ruleName,
       operation,
@@ -373,14 +392,22 @@ export function runRulesOnProject(
       }
     }
 
+    // Same hoisting as the per-file closure — see the comment there (CI x64
+    // bench regression when these resolved per report call).
+    const ruleName = rule.meta.name;
+    const suggestions = rule.meta.suggestions;
+    const docsUrl = rule.meta.docs.url ?? '';
     const context: ProjectRuleContext = {
       files,
       options: mergedOptions,
       fileExists: runtime.fileExists,
       report(d) {
+        const template = suggestions?.[d.messageId];
         diagnostics.push({
-          ruleName: rule.meta.name,
+          ruleName,
           severity,
+          suggestion: template === undefined ? null : interpolate(template, d.data ?? {}),
+          docsUrl,
           ...d,
         });
       },

@@ -21,6 +21,13 @@ const rule: Rule<StatusEnumOptions> = {
       missingStatus: 'Metadata does not contain a "status" field (checked frontmatter and v2 bold-list)',
       invalidStatus: 'Status "{{status}}" is not one of: {{allowed}}',
     },
+    // No suggestion for invalidStatus: the message already lists the allowed
+    // values (the expected-vs-actual is self-contained), so a suggestion would
+    // only restate it. See issue #67.
+    suggestions: {
+      missingStatus:
+        'add a "status" field to the frontmatter (for MADR v2, a "* Status: ..." list item) — allowed values: {{allowed}}',
+    },
     defaultOptions: {
       values: ['proposed', 'rejected', 'accepted', 'deprecated'],
       prefixValues: ['superseded by'],
@@ -29,13 +36,17 @@ const rule: Rule<StatusEnumOptions> = {
     schema,
   },
   create(context) {
+    const { values, prefixValues, caseSensitive } = context.options;
+    // The allowed-value list is shared by both the invalidStatus message and
+    // the missingStatus suggestion, so build it once up front.
+    const allowed = [...values, ...prefixValues.map((p) => `${p} ...`)];
+
     const meta = context.metadata;
     if (!meta || typeof meta.status !== 'string') {
-      context.report({ messageId: 'missingStatus', data: {} });
+      context.report({ messageId: 'missingStatus', data: { allowed } });
       return;
     }
 
-    const { values, prefixValues, caseSensitive } = context.options;
     const status = meta.status;
     const compareStatus = caseSensitive ? status : status.toLowerCase();
     const compareValues = caseSensitive
@@ -51,10 +62,6 @@ const rule: Rule<StatusEnumOptions> = {
     );
 
     if (!exactMatch && !prefixMatch) {
-      const allowed = [
-        ...values,
-        ...prefixValues.map((p) => `${p} ...`),
-      ];
       // loc only exists for v2 list-sourced values: frontmatter is stripped
       // before mdast parsing, so a frontmatter-sourced status has no body
       // line to point at — inline suppression directives (which live in the

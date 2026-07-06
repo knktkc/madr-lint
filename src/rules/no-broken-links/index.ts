@@ -80,6 +80,10 @@ const rule: ProjectRule<NoBrokenLinksOptions> = {
       brokenLink:
         'Link to "{{url}}" resolves to "{{resolvedPath}}", which does not exist in the project',
     },
+    suggestions: {
+      brokenLink:
+        "fix the link target or remove the link; relative paths resolve from the ADR file's own directory",
+    },
     defaultOptions: {},
     schema,
   },

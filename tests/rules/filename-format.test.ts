@@ -32,6 +32,14 @@ describe('madr/filename-format', () => {
             expected: '^[0-9]{4}-[a-z0-9-]+\\.md$',
           },
         });
+        // self-contained diagnostics (#67): suggestion carries a concrete
+        // conforming example, and every diagnostic carries the docs URL.
+        expect(diagnostics[0]?.suggestion).toContain(
+          '0001-record-architecture-decisions.md',
+        );
+        expect(diagnostics[0]?.docsUrl).toBe(
+          'https://knktkc.github.io/madr-lint/rules/filename-format/',
+        );
       });
     }
   });

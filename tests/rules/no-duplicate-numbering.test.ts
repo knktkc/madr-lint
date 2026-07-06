@@ -23,6 +23,11 @@ describe('madr/no-duplicate-numbering', () => {
         severity: 'error',
         data: { number: '0001' },
       });
+      // self-contained diagnostics (#67)
+      expect(d.suggestion).toContain('renumber');
+      expect(d.docsUrl).toBe(
+        'https://knktkc.github.io/madr-lint/rules/no-duplicate-numbering/',
+      );
     }
     const paths = diagnostics.map((d) => d.path).toSorted();
     expect(paths).toEqual(['0001-a.md', '0001-b.md']);

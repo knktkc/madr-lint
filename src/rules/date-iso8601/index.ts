@@ -41,6 +41,11 @@ const rule: Rule<DateIso8601Options> = {
       missingDate: 'Metadata does not contain a "{{field}}" field (checked frontmatter and v2 bold-list)',
       invalidDate: 'Date "{{date}}" is not a valid ISO 8601 calendar date (YYYY-MM-DD)',
     },
+    suggestions: {
+      missingDate:
+        'add a "{{field}}" field in YYYY-MM-DD format to the frontmatter (for MADR v2, a "* Date: ..." list item)',
+      invalidDate: 'use the YYYY-MM-DD calendar-date format, e.g. 2025-03-14',
+    },
     defaultOptions: {
       field: 'date',
     },

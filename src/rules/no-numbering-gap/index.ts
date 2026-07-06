@@ -27,6 +27,9 @@ const rule: ProjectRule<NoNumberingGapOptions> = {
       numberingGap:
         'Numbering gap: missing {{missing}} between ADR-{{from}} and ADR-{{to}}',
     },
+    // No `suggestions`: a gap can be intentional (a rejected or deleted ADR),
+    // and closing it may mean either adding the missing ADR OR renumbering —
+    // the right remediation is contextual, so we omit a suggestion. See #67.
     defaultOptions: {},
     schema,
   },

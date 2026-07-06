@@ -30,6 +30,23 @@ describe('madr/status-enum', () => {
         severity: 'error',
         path: 'no-frontmatter.md',
       });
+      // self-contained diagnostics (#67): missingStatus suggests adding the field
+      expect(diagnostics[0]?.suggestion).toContain(
+        'add a "status" field to the frontmatter',
+      );
+      expect(diagnostics[0]?.docsUrl).toBe(
+        'https://knktkc.github.io/madr-lint/rules/status-enum/',
+      );
+    });
+
+    it('invalidStatus omits a suggestion (message already lists allowed values)', () => {
+      const content = readFileSync(
+        join(fixturesDir, 'invalid', 'typo.md'),
+        'utf8',
+      );
+      const diagnostics = runRule(rule, { content, path: 'typo.md' });
+      expect(diagnostics[0]?.messageId).toBe('invalidStatus');
+      expect(diagnostics[0]?.suggestion).toBeNull();
     });
 
     it('no-status.md produces missingStatus', () => {

@@ -21,6 +21,12 @@ const rule: Rule<FilenameFormatOptions> = {
       invalidFilename:
         'Filename "{{filename}}" does not match expected pattern "{{expected}}"',
     },
+    suggestions: {
+      // The message already states the expected pattern; the suggestion adds a
+      // concrete, conforming example of the NNNN-kebab-case.md convention.
+      invalidFilename:
+        'rename the file to the NNNN-kebab-case.md convention, e.g. 0001-record-architecture-decisions.md',
+    },
     defaultOptions: {
       pattern: '^[0-9]{4}-[a-z0-9-]+\\.md$',
     },

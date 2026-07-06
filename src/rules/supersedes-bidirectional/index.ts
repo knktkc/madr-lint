@@ -37,8 +37,18 @@ const rule: ProjectRule<SupersedesBidirectionalOptions> = {
     messages: {
       unknownReference:
         'Frontmatter `{{direction}}: {{ref}}` references an ADR that does not exist',
+      // `declared` is the field the SOURCE file actually declares;
+      // `direction` is the field THIS file (the diagnostic's path) must add.
+      // They are opposites — rendering `direction` as the declared field
+      // would mislabel the source's frontmatter in both directions.
       missingBackReference:
-        '`{{source}}` declares `{{direction}}: {{ref}}`, but `{{ref}}` (this file) does not back-reference it via `{{expected}}`',
+        '`{{source}}` declares `{{declared}}: {{ref}}`, but `{{ref}}` (this file) does not back-reference it via `{{direction}}: {{expected}}`',
+    },
+    suggestions: {
+      unknownReference:
+        'correct "{{ref}}" to an existing ADR number, or remove "{{direction}}: {{ref}}" from the frontmatter',
+      missingBackReference:
+        'add "{{direction}}: {{expected}}" to the frontmatter of this file',
     },
     defaultOptions: {},
     schema,
@@ -83,6 +93,7 @@ const rule: ProjectRule<SupersedesBidirectionalOptions> = {
             data: {
               ref,
               source: file.path,
+              declared: FORWARD_FIELD,
               direction: BACKWARD_FIELD,
               expected: fileRef,
             },
@@ -110,6 +121,7 @@ const rule: ProjectRule<SupersedesBidirectionalOptions> = {
             data: {
               ref,
               source: file.path,
+              declared: BACKWARD_FIELD,
               direction: FORWARD_FIELD,
               expected: fileRef,
             },

@@ -20,6 +20,10 @@ const rule: Rule<RequiredSectionsOptions> = {
     messages: {
       missingSection: 'Missing required section: "{{section}}"',
     },
+    suggestions: {
+      missingSection:
+        'add a "## {{section}}" heading to the document body',
+    },
     defaultOptions: {
       sections: [
         'Context and Problem Statement',

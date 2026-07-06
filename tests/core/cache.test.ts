@@ -8,6 +8,7 @@ import {
   loadManifest,
   saveManifest,
   manifestPath,
+  CACHE_SCHEMA_VERSION,
   type CacheManifest,
 } from '../../src/core/cache.js';
 
@@ -66,6 +67,7 @@ describe('core/cache', () => {
     it('round-trips a manifest unchanged', () => {
       const path = manifestPath(tmp);
       const m: CacheManifest = {
+        schemaVersion: CACHE_SCHEMA_VERSION,
         version: '0.1.0-alpha.0',
         configHash: 'abc123',
         files: {
@@ -78,6 +80,8 @@ describe('core/cache', () => {
                 severity: 'error',
                 path: 'docs/adr/0001-x.md',
                 data: { section: 'Context' },
+                suggestion: 'add a "## Context" heading to the document body',
+                docsUrl: 'https://knktkc.github.io/madr-lint/rules/required-sections/',
               },
             ],
           },
@@ -90,6 +94,7 @@ describe('core/cache', () => {
     it('returns null when the manifest file is malformed JSON', () => {
       const path = manifestPath(tmp);
       saveManifest(path, {
+        schemaVersion: CACHE_SCHEMA_VERSION,
         version: '1',
         configHash: 'h',
         files: {},
@@ -107,12 +112,64 @@ describe('core/cache', () => {
     it('creates the cache directory if it does not exist', () => {
       const nested = join(tmp, 'a', 'b', 'c');
       const path = manifestPath(nested);
-      saveManifest(path, { version: '1', configHash: 'h', files: {} });
-      expect(loadManifest(path)).toEqual({
+      const m: CacheManifest = {
+        schemaVersion: CACHE_SCHEMA_VERSION,
         version: '1',
         configHash: 'h',
         files: {},
-      });
+      };
+      saveManifest(path, m);
+      expect(loadManifest(path)).toEqual(m);
+    });
+  });
+
+  // Self-contained diagnostics (#67) changed the CACHED Diagnostic shape:
+  // entries written by an older madr-lint at the SAME pkgVersion would be
+  // served verbatim and silently drop the new suggestion/docsUrl keys from
+  // json/API output. The manifest therefore carries a schema version; any
+  // mismatch (including the field being absent in pre-schema manifests) is
+  // treated exactly like a pkgVersion mismatch — cold.
+  describe('schema version invalidation', () => {
+    let tmp: string;
+
+    beforeEach(() => {
+      tmp = mkdtempSync(join(tmpdir(), 'madr-lint-cache-schema-'));
+    });
+
+    afterEach(() => {
+      rmSync(tmp, { recursive: true, force: true });
+    });
+
+    it('returns null for a pre-schema manifest (no schemaVersion field)', () => {
+      const path = manifestPath(tmp);
+      writeFileSync(
+        path,
+        JSON.stringify({ version: '1', configHash: 'h', files: {} }),
+        'utf8',
+      );
+      expect(loadManifest(path)).toBeNull();
+    });
+
+    it('returns null for a manifest with an older schemaVersion', () => {
+      const path = manifestPath(tmp);
+      writeFileSync(
+        path,
+        JSON.stringify({ schemaVersion: 1, version: '1', configHash: 'h', files: {} }),
+        'utf8',
+      );
+      expect(loadManifest(path)).toBeNull();
+    });
+
+    it('accepts a manifest with the current schemaVersion', () => {
+      const path = manifestPath(tmp);
+      const m: CacheManifest = {
+        schemaVersion: CACHE_SCHEMA_VERSION,
+        version: '1',
+        configHash: 'h',
+        files: {},
+      };
+      saveManifest(path, m);
+      expect(loadManifest(path)).toEqual(m);
     });
   });
 });

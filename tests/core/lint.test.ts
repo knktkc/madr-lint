@@ -2,7 +2,8 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { lintFiles } from '../../src/core/lint.js';
+import { computeContentHash, manifestPath } from '../../src/core/cache.js';
+import { lintFiles, type CacheConfig } from '../../src/core/lint.js';
 import { RuleOptionsError } from '../../src/core/runner.js';
 import type { ProjectRule } from '../../src/core/types.js';
 import filenameFormat from '../../src/rules/filename-format/index.js';
@@ -392,6 +393,89 @@ describe('core/lint', () => {
       for (const d of result.diagnostics) {
         expect(d.path).not.toContain('\\');
         expect(d.path).toBe(d.path.split('\\').join('/'));
+      }
+    });
+  });
+
+  // Self-contained diagnostics (#67): cached diagnostics carry the new
+  // suggestion/docsUrl fields. A manifest written BEFORE the shape change
+  // (same pkgVersion — think repo devs or same-version CI caches, whom
+  // pkgVersion invalidation does not save) must be treated as cold, or the
+  // stale entries would be served verbatim and json output would silently
+  // drop the keys.
+  describe('cache schema versioning (stale Diagnostic shape)', () => {
+    // Trips madr/required-sections three times.
+    const BARE = '# Just a heading\n\nNo sections here.\n';
+
+    function cacheConfig(): CacheConfig {
+      return {
+        dir: join(dir, '.madr-lint', 'cache'),
+        configHash: 'h',
+        pkgVersion: '0.0.0-test',
+      };
+    }
+
+    function lintBare(cache: CacheConfig) {
+      const file = join(dir, '0001-a.md');
+      writeFileSync(file, BARE);
+      return lintFiles({
+        rules: [requiredSections],
+        ruleSeverity: { 'madr/required-sections': 'error' },
+        files: [file],
+        cwd: dir,
+        cache,
+      });
+    }
+
+    it('treats a pre-schema manifest as cold — stale-shape diagnostics never leak', () => {
+      const cache = cacheConfig();
+      // Hand-write an OLD-shape manifest: matching version + configHash +
+      // contentHash, but no schemaVersion and cached diagnostics lacking
+      // suggestion/docsUrl (the pre-#67 Diagnostic shape).
+      const stale = {
+        version: cache.pkgVersion,
+        configHash: cache.configHash,
+        files: {
+          '0001-a.md': {
+            contentHash: computeContentHash(BARE),
+            perFileDiagnostics: [
+              {
+                ruleName: 'madr/required-sections',
+                messageId: 'missingSection',
+                severity: 'error',
+                path: '0001-a.md',
+                data: { section: 'Context and Problem Statement' },
+              },
+            ],
+          },
+        },
+      };
+      mkdirSync(cache.dir, { recursive: true });
+      writeFileSync(manifestPath(cache.dir), JSON.stringify(stale), 'utf8');
+
+      const result = lintBare(cache);
+      // The old manifest must be discarded, not served.
+      expect(result.filesFromCache).toBe(0);
+      expect(result.diagnostics).toHaveLength(3);
+      for (const d of result.diagnostics) {
+        expect(d.suggestion).toContain('heading');
+        expect(d.docsUrl).toContain('required-sections');
+      }
+    });
+
+    it('warm cache round-trips suggestion and docsUrl intact', () => {
+      const cache = cacheConfig();
+      const cold = lintBare(cache);
+      expect(cold.filesFromCache).toBe(0);
+
+      const warm = lintBare(cache);
+      expect(warm.filesFromCache).toBe(1);
+      expect(warm.diagnostics).toHaveLength(3);
+      for (const d of warm.diagnostics) {
+        expect(d.suggestion).toContain('heading');
+        expect(d.docsUrl).toBe(
+          'https://knktkc.github.io/madr-lint/rules/required-sections/',
+        );
       }
     });
   });
