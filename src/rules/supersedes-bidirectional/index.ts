@@ -35,7 +35,10 @@ function escapeRegExp(s: string): string {
  * serialization (which would reflow the block). Guard rails:
  *   - no frontmatter block (v2 list-sourced or bare body) → null;
  *   - `key` already present as a top-level frontmatter key → null (rewriting a
- *     wrong value, or appending to an existing key, is out of scope);
+ *     wrong value, or appending to an existing key, is out of scope). Matched
+ *     CASE-INSENSITIVELY: inserting `superseded-by:` next to an existing
+ *     `Superseded-By:` would be valid YAML but reads as contradictory
+ *     duplicates to a human;
  *   - the byte slice at the computed offset must be the closing fence.
  * The file's newline style (LF vs CRLF) is preserved. See #29 / ADR-0008.
  */
@@ -58,10 +61,11 @@ function frontmatterInsertEdit(
   // Slice-verification: the computed offset must sit exactly on the `---` fence.
   if (content.slice(offset, offset + 3) !== '---') return null;
 
-  // The key must not already exist as a top-level frontmatter key. `content`
-  // up to the fence is `---<eol>...keys...`; the opening fence cannot match a
-  // `key:` line, so scanning the whole prefix is safe.
-  const keyPattern = new RegExp(`(^|\\r?\\n)${escapeRegExp(key)}[ \\t]*:`);
+  // The key must not already exist as a top-level frontmatter key (any case
+  // variant counts — see the guard-rail note above). `content` up to the fence
+  // is `---<eol>...keys...`; the opening fence cannot match a `key:` line, so
+  // scanning the whole prefix is safe.
+  const keyPattern = new RegExp(`(^|\\r?\\n)${escapeRegExp(key)}[ \\t]*:`, 'i');
   if (keyPattern.test(content.slice(0, offset))) return null;
 
   const eol = fenceLine.endsWith('\r\n') ? '\r\n' : '\n';

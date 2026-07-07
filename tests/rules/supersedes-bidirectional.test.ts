@@ -331,6 +331,27 @@ describe('madr/supersedes-bidirectional', () => {
       expect(d?.fix).toBeUndefined();
     });
 
+    it('declines when a CASE VARIANT of the key already exists (no contradictory duplicate)', () => {
+      // `Superseded-By:` is a case variant of the field the fix would insert.
+      // A second, lowercase `superseded-by:` line would be valid YAML but read
+      // as contradictory duplicates to a human — the existing-key guard must
+      // match case-insensitively.
+      const target = buildProjectFile({
+        path: '0001-old.md',
+        content: '---\nSuperseded-By: ADR-0099\n---\n\n# B\n',
+      });
+      const source = buildProjectFile({
+        path: '0042-new.md',
+        content: '---\nsupersedes: ADR-0001\n---\n\n# A\n',
+      });
+      const d = runRulesOnProject([rule], [target, source]).find(
+        (x) => x.messageId === 'missingBackReference',
+      );
+      expect(d).toBeDefined();
+      expect(d?.fixable).toBe(false);
+      expect(d?.fix).toBeUndefined();
+    });
+
     it('unknownReference is never fixable', () => {
       const source = buildProjectFile({
         path: '0042-x.md',

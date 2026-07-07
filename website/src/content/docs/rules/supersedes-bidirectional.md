@@ -87,7 +87,7 @@ superseded-by: ADR-0042
 `unknownReference` is **not** fixable (it is contextual — only you know the correct ADR number). A `missingBackReference` is **not** fixed when:
 
 - **The target has no frontmatter** — a v2 body-list ADR or a bare file. A frontmatter block is never created.
-- **The key already exists** — if the target already declares `superseded-by:` (or `supersedes:`) with a different or partial value, the fix declines rather than duplicate the key or rewrite/append a value (out of scope). The diagnostic remains for you to resolve by hand.
+- **The key already exists** — if the target already declares `superseded-by:` (or `supersedes:`) with a different or partial value, the fix declines rather than duplicate the key or rewrite/append a value (out of scope). The check is case-insensitive: an existing `Superseded-By:` also blocks the insertion, so the fix never adds a second, contradictory-looking variant of the key. The diagnostic remains for you to resolve by hand.
 - **Many-to-one, same pass** — when two source ADRs both need a back-reference in the *same* target, one insertion is applied per pass; the remaining one is reported (it needs an array value, which is a manual edit).
 
 ## Options
