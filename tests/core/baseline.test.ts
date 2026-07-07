@@ -20,6 +20,7 @@ function diag(partial: Partial<Diagnostic> & Pick<Diagnostic, 'ruleName' | 'mess
     severity: 'error',
     suggestion: null,
     docsUrl: '',
+    fixable: false,
     ...partial,
   };
 }

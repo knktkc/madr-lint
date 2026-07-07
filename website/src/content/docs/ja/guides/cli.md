@@ -37,6 +37,8 @@ madr-lint docs/adr docs/decisions/0007-use-x.md
 | `--cache-dir <dir>` | `.madr-lint/cache` | キャッシュディレクトリ。 |
 | `--baseline` / `--no-baseline` | `--baseline` | 存在する場合に `.madr-lint/baseline.json` を差し引きます。 |
 | `--update-baseline` | | 完全な lint から `.madr-lint/baseline.json` を書き直し、`0` で終了します。 |
+| `--fix` | オフ | 自動修正をその場で適用し、残った問題を報告します。 |
+| `--fix-dry-run` | オフ | `--fix` が適用する修正の統合 diff を表示します。ファイルには書き込みません。 |
 | `--help` | | ヘルプを表示します。 |
 | `--version` | | バージョンを出力します。 |
 
@@ -112,12 +114,61 @@ npx madr-lint init --json
 `filesChecked`、`errors`、`warnings`、`suggestUpdateBaseline`、
 `docsUrl`（はじめるガイドの URL）を報告します。
 
+## 自動修正
+
+一部の診断は**機械的に修正可能**です。`madr-lint` はそれらを `text` 出力では淡色の
+`🔧 fixable` タグで、`json` では `"fixable": true` フィールドで示します。
+
+```bash
+# その場で修正を適用し、残った問題を報告する
+madr-lint --fix
+
+# ファイルに触れずに、適用される変更をプレビューする
+madr-lint --fix-dry-run
+```
+
+`--fix` はファイルを書き換え（実際に変わるものだけ）、修正後の内容を再 lint して
+**残った**問題を報告します。終了コードは残った内容を反映するため、CI での `--fix` は
+修正しきれなかったものがあれば依然として失敗します。`--fix-dry-run` は同じ修正を
+メモリ上で適用し、ファイルごとの統合 diff を表示するだけで、何も書き込みません。
+その終了コードは `--fix` が返したであろう値と同じです。両方のフラグを指定した場合は
+`--fix-dry-run` が優先されます（何も書き込まれません）。
+
+ドライラン diff の出力先は `--format` によって決まり、機械可読な標準出力が汚れる
+ことはありません。`text` は標準出力に表示（下記）、`json` はペイロードのトップレベル
+`diffs` 配列に埋め込み（[`json`](#json) を参照）、`sarif` / `github` は標準出力を
+パース可能に保つため標準エラー出力（stderr）に送ります。
+
+```text
+--- a/docs/adr/0003-use-postgres.md
++++ b/docs/adr/0003-use-postgres.md
+@@ -1,3 +1,3 @@
+ # ADR-0003
+
+-- Status: Accepted
++- Status: accepted
+✓ All clear.
+1 problem fixable (dry run; no files written)
+```
+
+修正は他のフラグと組み合わせられます。
+
+- `--fix` と `--quiet` / `--max-warnings` は**残った**診断に対して動作します。
+- **抑制**された（[`madr-lint-disable`](/ja/guides/suppressing-rules/)）診断や、
+  **ベースライン**化された（[`.madr-lint/baseline.json`](/ja/guides/adopting-existing-repo/)）
+  診断は決して書き換えられません。残すと選んだ問題はそのまま残ります。
+- `--update-baseline` は `--fix` / `--fix-dry-run` と併用できません（ファイルを書き換えるか、
+  違反をスナップショットするか、意図が曖昧なため）。併用すると `2` で終了します。
+- 修正中はキャッシュがバイパスされます。修正されたファイルは次回の実行で新しい
+  コンテンツハッシュとして通常のパイプラインに戻ります。
+
 ## レポーター
 
 ### `text`（デフォルト）
 
 人間が読みやすい形式で、ファイルごとにグループ化されます。ルールが具体的な修正方法を
-提示できる場合はインデントされた `→` 行で表示し、ルールのドキュメント URL は
+提示できる場合はインデントされた `→` 行で表示し、`--fix` で修正できる診断には
+`🔧 fixable` タグが付き、ルールのドキュメント URL は
 ファイルグループごとにルール単位で 1 回だけ出力されます（診断ごとには繰り返さず、
 出力をコンパクトに保ちます）。
 
@@ -136,8 +187,12 @@ docs/adr/0003-use-postgres.md
 ### `json`
 
 ツール向けの構造化された出力です。各 result は `suggestion`（機械的に適用できる
-修正内容。ルールがそのメッセージに対して定義していない場合は `null`）と、ルールの
-ドキュメント URL である `docsUrl` を持ちます。
+修正内容。ルールがそのメッセージに対して定義していない場合は `null`）、ルールの
+ドキュメント URL である `docsUrl`、そして `--fix` で修正できるかを示す `fixable` を
+持ちます。修正パスが実行された場合、`summary` には適用された修正件数 `fixed` も含まれます。
+`--fix-dry-run` の場合、ペイロードにはさらにトップレベルの `diffs` 配列が含まれます
+（変更されたファイルごとに `{ "path", "diff" }` エントリ 1 つ。`diff` は統合 diff の
+テキスト）。これにより標準出力は純粋な JSON のまま保たれます。
 
 ```bash
 madr-lint --format json
@@ -156,6 +211,7 @@ madr-lint --format json
       "message": "Missing required section: \"Consequences\"",
       "suggestion": "add a \"## Consequences\" heading to the document body",
       "docsUrl": "https://knktkc.github.io/madr-lint/rules/required-sections/",
+      "fixable": false,
       "data": { "section": "Consequences", "found": ["Context and Problem Statement", "Decision Outcome"] }
     }
   ]
@@ -176,8 +232,8 @@ madr-lint --format sarif > madr-lint.sarif
 | 終了コード | 意味 |
 |---|---|
 | `0` | エラーなし。`--max-warnings` を設定している場合は警告数が上限以内 |
-| `1` | 1 件以上の `error` 重大度の診断、または警告数が `--max-warnings` を超過 |
-| `2` | 使用法または設定エラー（`--max-warnings` の値が不正、`--config` ファイルが存在しない、無効なルールオプション、未知の `--format`、`--force` なしの `madr-lint init` で既存の設定ファイルがある場合） |
+| `1` | 1 件以上の `error` 重大度の診断、または警告数が `--max-warnings` を超過。`--fix` / `--fix-dry-run` の場合は、修正後に**残った**問題を反映 |
+| `2` | 使用法または設定エラー（`--max-warnings` の値が不正、`--config` ファイルが存在しない、無効なルールオプション、未知の `--format`、`--update-baseline` と `--fix` の併用、`--force` なしの `madr-lint init` で既存の設定ファイルがある場合） |
 
 ## キャッシュ
 

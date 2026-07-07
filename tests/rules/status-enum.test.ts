@@ -2,7 +2,17 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, it, expect } from 'vitest';
 import { runRule } from '../helpers/run-rule.js';
+import { applyEdits, makeFixer } from '../../src/core/fix.js';
+import { frontmatterOffset } from '../../src/core/parser.js';
 import rule from '../../src/rules/status-enum/index.js';
+
+/** Apply a fixable diagnostic's fix thunk to the source and return the result. */
+function applyFix(content: string, d: { fix?: (f: ReturnType<typeof makeFixer>) => unknown }): string {
+  const fixer = makeFixer(frontmatterOffset(content));
+  const edit = d.fix?.(fixer);
+  const edits = Array.isArray(edit) ? edit : edit ? [edit] : [];
+  return applyEdits(content, edits as never);
+}
 
 const fixturesDir = join(import.meta.dirname, '../fixtures/status-enum');
 
@@ -220,6 +230,51 @@ describe('madr/status-enum', () => {
       const content =
         '# Title\n\n<!-- madr-lint-disable-next-line madr/status-enum -->\n- Status: totally-wrong\n';
       expect(runRule(rule, { content, path: 'v2.md' })).toEqual([]);
+    });
+  });
+
+  // Autofix (#28): the ONLY mechanical status-enum fix is a pure case
+  // normalization of a v2 list-sourced value whose lowercase equals an allowed
+  // value. Everything else (real typos, frontmatter-sourced values) is left to
+  // #29 / manual repair — fix omitted, fixable:false.
+  describe('autofix (case-only, v2 list-sourced)', () => {
+    it('offers a fix for a plain-key list value that differs only by case (caseSensitive)', () => {
+      const content = '# Title\n\n- Status: Accepted\n';
+      const d = runRule(rule, { content, path: 'v2.md' }, { options: { caseSensitive: true } })[0];
+      expect(d?.messageId).toBe('invalidStatus');
+      expect(d?.fixable).toBe(true);
+      expect(applyFix(content, d!)).toBe('# Title\n\n- Status: accepted\n');
+    });
+
+    it('offers a fix for a bold-key list value that differs only by case', () => {
+      const content = '# Title\n\n- **Status**: Accepted\n';
+      const d = runRule(rule, { content, path: 'v2.md' }, { options: { caseSensitive: true } })[0];
+      expect(d?.fixable).toBe(true);
+      expect(applyFix(content, d!)).toBe('# Title\n\n- **Status**: accepted\n');
+    });
+
+    it('translates the value offset past frontmatter (frontmatter + v2 list status)', () => {
+      const content = '---\ndate: 2026-01-01\n---\n# Title\n\n- Status: Accepted\n';
+      const d = runRule(rule, { content, path: 'mixed.md' }, { options: { caseSensitive: true } })[0];
+      expect(d?.fixable).toBe(true);
+      expect(applyFix(content, d!)).toBe(
+        '---\ndate: 2026-01-01\n---\n# Title\n\n- Status: accepted\n',
+      );
+    });
+
+    it('does NOT offer a fix for a frontmatter-sourced value (YAML-aware, out of scope)', () => {
+      const content = '---\nstatus: Accepted\n---\n# Title\n';
+      const d = runRule(rule, { content, path: 'fm.md' }, { options: { caseSensitive: true } })[0];
+      expect(d?.messageId).toBe('invalidStatus');
+      expect(d?.fixable).toBe(false);
+      expect(d?.fix).toBeUndefined();
+    });
+
+    it('does NOT offer a fix for a genuine typo that does not case-fold to an allowed value', () => {
+      const content = '# Title\n\n- Status: acccepted\n';
+      const d = runRule(rule, { content, path: 't.md' })[0];
+      expect(d?.messageId).toBe('invalidStatus');
+      expect(d?.fixable).toBe(false);
     });
   });
 });

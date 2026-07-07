@@ -3,13 +3,14 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { computeContentHash, manifestPath } from '../../src/core/cache.js';
-import { lintFiles, type CacheConfig } from '../../src/core/lint.js';
+import { lintFiles, lintAndFix, type CacheConfig } from '../../src/core/lint.js';
 import { RuleOptionsError } from '../../src/core/runner.js';
 import type { ProjectRule } from '../../src/core/types.js';
 import filenameFormat from '../../src/rules/filename-format/index.js';
 import noBrokenLinks from '../../src/rules/no-broken-links/index.js';
 import noDuplicateNumbering from '../../src/rules/no-duplicate-numbering/index.js';
 import requiredSections from '../../src/rules/required-sections/index.js';
+import statusEnum from '../../src/rules/status-enum/index.js';
 
 // A custom project rule with an option, used to prove lintFiles threads
 // per-rule options through the PROJECT pass (no built-in project rule has
@@ -477,6 +478,91 @@ describe('core/lint', () => {
           'https://knktkc.github.io/madr-lint/rules/required-sections/',
         );
       }
+    });
+  });
+
+  // Autofix orchestration (#28): lintAndFix runs the per-file fixpoint (with
+  // suppression + baseline applied to REPORTED diagnostics only), then the
+  // project pass on the FIXED contents.
+  describe('lintAndFix', () => {
+    const csTrue = {
+      'madr/status-enum': ['error', { caseSensitive: true }] as const,
+    };
+
+    it('fixes a v2 list-sourced case-only status and returns clean remaining', () => {
+      const file = join(dir, '0001-a.md');
+      writeFileSync(file, '# T\n\n- Status: Accepted\n');
+      const res = lintAndFix({
+        rules: [statusEnum],
+        ruleSeverity: csTrue,
+        files: [file],
+        cwd: dir,
+      });
+      expect(res.files[0]?.changed).toBe(true);
+      expect(res.files[0]?.fixed).toBe('# T\n\n- Status: accepted\n');
+      expect(res.diagnostics).toEqual([]);
+      expect(res.fixed).toBe(1);
+    });
+
+    it('never rewrites a SUPPRESSED diagnostic', () => {
+      const file = join(dir, '0001-a.md');
+      writeFileSync(
+        file,
+        '# T\n\n<!-- madr-lint-disable madr/status-enum -->\n- Status: Accepted\n',
+      );
+      const res = lintAndFix({
+        rules: [statusEnum],
+        ruleSeverity: csTrue,
+        files: [file],
+        cwd: dir,
+      });
+      expect(res.files[0]?.changed).toBe(false);
+      expect(res.diagnostics).toEqual([]);
+      expect(res.fixed).toBe(0);
+    });
+
+    it('never rewrites a BASELINED diagnostic', () => {
+      const file = join(dir, '0001-a.md');
+      writeFileSync(file, '# T\n\n- Status: Accepted\n');
+      const baseline = {
+        version: 1,
+        entries: { '0001-a.md': { 'madr/status-enum': { invalidStatus: 1 } } },
+      };
+      const res = lintAndFix({
+        rules: [statusEnum],
+        ruleSeverity: csTrue,
+        files: [file],
+        cwd: dir,
+        baseline,
+      });
+      expect(res.files[0]?.changed).toBe(false);
+      expect(res.diagnostics).toEqual([]);
+      expect(res.baselineHidden).toBe(1);
+      expect(res.fixed).toBe(0);
+    });
+
+    it('runs project rules on the FIXED contents (clean seam for #29)', () => {
+      const a = join(dir, '0001-a.md');
+      const b = join(dir, '0001-b.md');
+      writeFileSync(a, '# A\n\n- Status: Accepted\n');
+      writeFileSync(b, '# B\n\n- Status: accepted\n');
+      const res = lintAndFix({
+        rules: [statusEnum, noDuplicateNumbering],
+        ruleSeverity: {
+          ...csTrue,
+          'madr/no-duplicate-numbering': 'error',
+        },
+        files: [a, b],
+        cwd: dir,
+      });
+      // Per-file fix applied to a.md.
+      expect(res.files.find((f) => f.path === '0001-a.md')?.fixed).toBe(
+        '# A\n\n- Status: accepted\n',
+      );
+      // The duplicate-numbering project rule still fires on the fixed set.
+      expect(
+        res.diagnostics.some((d) => d.ruleName === 'madr/no-duplicate-numbering'),
+      ).toBe(true);
     });
   });
 });

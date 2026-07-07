@@ -37,6 +37,8 @@ madr-lint docs/adr docs/decisions/0007-use-x.md
 | `--cache-dir <dir>` | `.madr-lint/cache` | Cache directory. |
 | `--baseline` / `--no-baseline` | `--baseline` | Subtract `.madr-lint/baseline.json` when present. |
 | `--update-baseline` | | Rewrite `.madr-lint/baseline.json` from a full lint, then exit `0`. |
+| `--fix` | off | Apply autofixes in place, then report the problems that remain. |
+| `--fix-dry-run` | off | Print a unified diff of the fixes `--fix` would apply; write nothing. |
 | `--help` | | Show help. |
 | `--version` | | Print the version. |
 
@@ -118,13 +120,62 @@ The `--json` payload reports `written`, `configPath`, `configFormat`,
 `madrVersion`, `filesChecked`, `errors`, `warnings`,
 `suggestUpdateBaseline`, and `docsUrl` (the getting-started guide).
 
+## Autofix
+
+Some diagnostics are **mechanically fixable**. `madr-lint` marks them with a dim
+`🔧 fixable` tag in `text` output and a `"fixable": true` field in `json`.
+
+```bash
+# apply fixes in place, then report anything left over
+madr-lint --fix
+
+# preview the exact changes without touching any file
+madr-lint --fix-dry-run
+```
+
+`--fix` rewrites files (only those that actually change), then re-lints the fixed
+content and reports the **remaining** problems — the exit code reflects what is
+left, so `--fix` in CI still fails on anything a fix could not resolve.
+`--fix-dry-run` applies the same fixes in memory and shows a per-file unified
+diff, writing nothing; its exit code is what `--fix` would have produced. If both
+flags are given, `--fix-dry-run` wins (nothing is written).
+
+Where the dry-run diff goes depends on `--format`, so machine-readable stdout is
+never polluted: `text` prints it to stdout (below); `json` embeds it in the
+payload as a top-level `diffs` array (see [`json`](#json)); `sarif` / `github`
+send it to stderr so their stdout stays parseable.
+
+```text
+--- a/docs/adr/0003-use-postgres.md
++++ b/docs/adr/0003-use-postgres.md
+@@ -1,3 +1,3 @@
+ # ADR-0003
+
+-- Status: Accepted
++- Status: accepted
+✓ All clear.
+1 problem fixable (dry run; no files written)
+```
+
+Fixing composes with the other flags:
+
+- `--fix` + `--quiet` / `--max-warnings` operate on the **remaining** diagnostics.
+- **Suppressed** ([`madr-lint-disable`](/guides/suppressing-rules/)) and
+  **baselined** ([`.madr-lint/baseline.json`](/guides/adopting-existing-repo/))
+  problems are never rewritten — a fix you chose to keep stays put.
+- `--update-baseline` cannot be combined with `--fix` / `--fix-dry-run` (ambiguous
+  intent — rewrite files vs snapshot violations); the combination exits `2`.
+- The cache is bypassed while fixing; a fixed file re-enters the normal pipeline
+  on the next run with a fresh content hash.
+
 ## Reporters
 
 ### `text` (default)
 
 Human-readable, grouped by file. Where a rule offers a concrete fix, an indented
-`→` line shows it; the rule's documentation URL is printed once per rule per file
-group (never per diagnostic, so output stays compact):
+`→` line shows it; a `🔧 fixable` tag flags a diagnostic that `--fix` can repair;
+the rule's documentation URL is printed once per rule per file group (never per
+diagnostic, so output stays compact):
 
 ```text
 docs/adr/0003-use-postgres.md
@@ -142,7 +193,11 @@ docs/adr/0003-use-postgres.md
 
 Structured output for tooling. Each result carries `suggestion` — a
 machine-actionable fix, or `null` when the rule defines none for that message —
-and `docsUrl`, the rule's documentation URL:
+`docsUrl`, the rule's documentation URL, and `fixable`, whether `--fix` can
+repair it. When a fix pass ran, `summary` also carries `fixed` (the number of
+fixes applied). Under `--fix-dry-run`, the payload additionally carries a
+top-level `diffs` array — one `{ "path", "diff" }` entry per changed file, with
+`diff` holding the unified diff text — so stdout stays pure JSON:
 
 ```bash
 madr-lint --format json
@@ -161,6 +216,7 @@ madr-lint --format json
       "message": "Missing required section: \"Consequences\"",
       "suggestion": "add a \"## Consequences\" heading to the document body",
       "docsUrl": "https://knktkc.github.io/madr-lint/rules/required-sections/",
+      "fixable": false,
       "data": { "section": "Consequences", "found": ["Context and Problem Statement", "Decision Outcome"] }
     }
   ]
@@ -181,8 +237,8 @@ madr-lint --format sarif > madr-lint.sarif
 | Exit code | Meaning |
 |---|---|
 | `0` | No errors; warning count within `--max-warnings` limit (if set) |
-| `1` | One or more `error`-severity diagnostics, or warning count exceeds `--max-warnings` |
-| `2` | Usage or configuration error (invalid `--max-warnings` value, missing `--config` file, invalid rule options, unknown `--format`, existing config on `madr-lint init` without `--force`) |
+| `1` | One or more `error`-severity diagnostics, or warning count exceeds `--max-warnings`. With `--fix` / `--fix-dry-run`, this reflects the problems that **remain** after fixing |
+| `2` | Usage or configuration error (invalid `--max-warnings` value, missing `--config` file, invalid rule options, unknown `--format`, `--update-baseline` combined with `--fix`, existing config on `madr-lint init` without `--force`) |
 
 ## Caching
 

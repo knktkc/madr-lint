@@ -1,5 +1,5 @@
-import { execFileSync } from 'node:child_process';
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -21,18 +21,15 @@ interface CliResult {
   stderr: string;
 }
 
+// spawnSync (not execFileSync) so stderr is captured on SUCCESS runs too —
+// e.g. --fix-dry-run routes the diff to stderr for structured formats while
+// exiting 0. Exec's success path only returns stdout.
 function runCli(cwd: string, args: string[]): CliResult {
-  try {
-    const stdout = execFileSync(
-      NODE,
-      [`--import=${TSX_ESM}`, CLI, ...args],
-      { cwd, encoding: 'utf8' },
-    );
-    return { status: 0, stdout, stderr: '' };
-  } catch (err) {
-    const e = err as { status?: number; stdout?: string; stderr?: string };
-    return { status: e.status ?? 1, stdout: e.stdout ?? '', stderr: e.stderr ?? '' };
-  }
+  const r = spawnSync(NODE, [`--import=${TSX_ESM}`, CLI, ...args], {
+    cwd,
+    encoding: 'utf8',
+  });
+  return { status: r.status ?? 1, stdout: r.stdout ?? '', stderr: r.stderr ?? '' };
 }
 
 // Helper: write a JSON config and a file that violates filename-format at the
@@ -44,6 +41,18 @@ function setupWarnFixture(dir: string, severity: 'warn' | 'error' = 'warn') {
     JSON.stringify({ rules: { 'madr/filename-format': severity } }),
   );
   writeFileSync(join(dir, 'wrong.md'), '# x\n');
+}
+
+// status-enum under caseSensitive:true flags `Accepted` and can mechanically
+// lowercase a v2 list-sourced value — the seed for the --fix e2e tests.
+function setupFixable(d: string) {
+  writeFileSync(
+    join(d, '.madrlintrc.json'),
+    JSON.stringify({
+      rules: { 'madr/status-enum': ['error', { caseSensitive: true }] },
+    }),
+  );
+  writeFileSync(join(d, '0001-a.md'), '# T\n\n- Status: Accepted\n');
 }
 
 describe('cli (end-to-end)', () => {
@@ -437,6 +446,84 @@ describe('cli (end-to-end)', () => {
       ]);
       expect(r.status).toBe(0);
       expect(r.stderr).not.toMatch(/exceeds --max-warnings/);
+    }, 30_000);
+  });
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // --fix / --fix-dry-run (autofix framework, #28)
+  // ──────────────────────────────────────────────────────────────────────────
+
+  describe('--fix', () => {
+    it('rewrites the file in place and exits 0 (remaining clean)', () => {
+      setupFixable(dir);
+      const r = runCli(dir, ['0001-a.md', '--fix', '--no-cache']);
+      expect(r.status).toBe(0);
+      expect(readFileSync(join(dir, '0001-a.md'), 'utf8')).toBe(
+        '# T\n\n- Status: accepted\n',
+      );
+    }, 30_000);
+
+    it('--fix-dry-run prints a diff, writes nothing, and exits as if applied', () => {
+      setupFixable(dir);
+      const r = runCli(dir, ['0001-a.md', '--fix-dry-run', '--no-cache']);
+      expect(r.status).toBe(0);
+      // File is untouched on disk.
+      expect(readFileSync(join(dir, '0001-a.md'), 'utf8')).toBe(
+        '# T\n\n- Status: Accepted\n',
+      );
+      // A unified diff is printed.
+      expect(r.stdout).toContain('--- a/0001-a.md');
+      expect(r.stdout).toContain('+- Status: accepted');
+    }, 30_000);
+
+    it('--update-baseline --fix is a usage error (exit 2)', () => {
+      setupFixable(dir);
+      const r = runCli(dir, ['0001-a.md', '--fix', '--update-baseline', '--no-cache']);
+      expect(r.status).toBe(2);
+      expect(r.stderr).toMatch(/--fix/);
+    }, 30_000);
+
+    it('fix → warm run: a stale cached diagnostic never leaks after --fix', () => {
+      setupFixable(dir);
+      // 1) Cold run (cache ON): records the invalid file's diagnostics.
+      const r1 = runCli(dir, ['0001-a.md']);
+      expect(r1.status).toBe(1);
+      // 2) --fix rewrites the file (new content hash).
+      const r2 = runCli(dir, ['0001-a.md', '--fix']);
+      expect(r2.status).toBe(0);
+      expect(readFileSync(join(dir, '0001-a.md'), 'utf8')).toContain('accepted');
+      // 3) Warm run: the old-hash cache entry must not be served for new content.
+      const r3 = runCli(dir, ['0001-a.md']);
+      expect(r3.status).toBe(0);
+    }, 30_000);
+
+    // Machine-readable stdout must stay parseable under --fix-dry-run: the raw
+    // diff is embedded in the json payload (top-level `diffs`) and routed to
+    // stderr for the other structured formats — never mixed into their stdout.
+    it('--fix-dry-run --format json keeps stdout pure JSON and embeds the diff', () => {
+      setupFixable(dir);
+      const r = runCli(dir, ['0001-a.md', '--fix-dry-run', '--no-cache', '--format', 'json']);
+      expect(r.status).toBe(0);
+      const parsed = JSON.parse(r.stdout) as {
+        summary: { fixed: number };
+        diffs: Array<{ path: string; diff: string }>;
+      };
+      expect(parsed.summary.fixed).toBe(1);
+      expect(parsed.diffs).toHaveLength(1);
+      expect(parsed.diffs[0]?.path).toBe('0001-a.md');
+      expect(parsed.diffs[0]?.diff).toContain('+- Status: accepted');
+      // File is untouched on disk.
+      expect(readFileSync(join(dir, '0001-a.md'), 'utf8')).toBe(
+        '# T\n\n- Status: Accepted\n',
+      );
+    }, 30_000);
+
+    it('--fix-dry-run --format sarif keeps stdout parseable; the diff goes to stderr', () => {
+      setupFixable(dir);
+      const r = runCli(dir, ['0001-a.md', '--fix-dry-run', '--no-cache', '--format', 'sarif']);
+      expect(() => JSON.parse(r.stdout)).not.toThrow();
+      expect(r.stdout).not.toContain('--- a/0001-a.md');
+      expect(r.stderr).toContain('+- Status: accepted');
     }, 30_000);
   });
 });

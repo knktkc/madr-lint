@@ -121,6 +121,10 @@ class PerFileRuleContext implements RuleContext {
   get metadataLoc(): Record<string, { line: number; column: number }> | null {
     return this.ensureParsed().metadataLoc;
   }
+
+  get metadataValueLoc(): Record<string, { start: number; end: number }> | null {
+    return this.ensureParsed().metadataValueLoc;
+  }
 }
 
 /**
@@ -203,18 +207,33 @@ export function runRulesOnFile(
     const ruleName = rule.meta.name;
     const suggestions = rule.meta.suggestions;
     const docsUrl = rule.meta.docs.url ?? '';
+    // Autofix (#28): only a `meta.fixable: 'code'` rule may attach a fix. The
+    // flag is captured per rule (a const) so the report closure stays hot —
+    // `hasFix` short-circuits to false for the non-fixable common case.
+    const fixableRule = rule.meta.fixable === 'code';
     const context: RuleContext = new PerFileRuleContext(
       file,
       mergedOptions,
       ensureParsed,
       (d) => {
         const template = suggestions?.[d.messageId];
+        // A fix from a non-fixable rule is a rule bug: throw so the create() /
+        // handler isolation converts it to core/internal-error (the misused
+        // diagnostic never surfaces). After this guard, `hasFix ⟹ fixableRule`,
+        // so `fixable` equals `hasFix`.
+        const hasFix = d.fix !== undefined;
+        if (hasFix && !fixableRule) {
+          throw new Error(
+            `Rule "${ruleName}" attached a fix but meta.fixable is not 'code'`,
+          );
+        }
         diagnostics.push({
           ruleName,
           severity,
           path: file.path,
           suggestion: template === undefined ? null : interpolate(template, d.data ?? {}),
           docsUrl,
+          fixable: hasFix,
           ...d,
         });
       },
@@ -280,6 +299,7 @@ function internalErrorDiagnostic(
     path,
     suggestion: null,
     docsUrl: INTERNAL_ERROR_DOCS_URL,
+    fixable: false,
     data: {
       rule: ruleName,
       operation,
@@ -403,11 +423,14 @@ export function runRulesOnProject(
       fileExists: runtime.fileExists,
       report(d) {
         const template = suggestions?.[d.messageId];
+        // Project-rule fixes are #29's concern; the v1 framework never applies
+        // them, so every project diagnostic is fixable:false.
         diagnostics.push({
           ruleName,
           severity,
           suggestion: template === undefined ? null : interpolate(template, d.data ?? {}),
           docsUrl,
+          fixable: false,
           ...d,
         });
       },

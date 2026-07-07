@@ -1,10 +1,22 @@
-import type { Rule } from '../../core/types.js';
+import type { Fixer, Rule, TextEdit } from '../../core/types.js';
 import schema from './schema.json' with { type: 'json' };
 
 interface StatusEnumOptions extends Record<string, unknown> {
   values: string[];
   prefixValues: string[];
   caseSensitive: boolean;
+}
+
+/**
+ * The unique allowed value whose lowercase equals the status's — i.e. the
+ * status differs from an allowed value ONLY by case. Returns undefined when
+ * there is no match or the match is ambiguous (two allowed values collide on
+ * lowercase), so autofix never guesses.
+ */
+function caseFoldMatch(status: string, values: string[]): string | undefined {
+  const lower = status.toLowerCase();
+  const matches = values.filter((v) => v.toLowerCase() === lower);
+  return matches.length === 1 ? matches[0] : undefined;
 }
 
 const rule: Rule<StatusEnumOptions> = {
@@ -28,6 +40,9 @@ const rule: Rule<StatusEnumOptions> = {
       missingStatus:
         'add a "status" field to the frontmatter (for MADR v2, a "* Status: ..." list item) — allowed values: {{allowed}}',
     },
+    // Autofix (#28): the ONLY mechanical fix is a pure case normalization of a
+    // v2 list-sourced value (see create()). Everything else is left to #29.
+    fixable: 'code',
     defaultOptions: {
       values: ['proposed', 'rejected', 'accepted', 'deprecated'],
       prefixValues: ['superseded by'],
@@ -67,10 +82,22 @@ const rule: Rule<StatusEnumOptions> = {
       // line to point at — inline suppression directives (which live in the
       // body) can only silence it file-wide, never per line.
       const loc = context.metadataLoc?.status;
+      // Autofix (#28): offer a fix ONLY for a pure case difference from an
+      // allowed value that is v2 list-sourced (we then have its exact body
+      // offset range). Frontmatter-sourced values have no body offset and need
+      // YAML-aware rewriting — out of scope, so no fix is attached there.
+      const canonical = caseFoldMatch(status, values);
+      const valueRange = context.metadataValueLoc?.status;
+      const fix =
+        canonical !== undefined && canonical !== status && valueRange
+          ? (fixer: Fixer): TextEdit =>
+              fixer.replaceRange([valueRange.start, valueRange.end], canonical)
+          : undefined;
       context.report({
         messageId: 'invalidStatus',
         ...(loc ? { loc } : {}),
         data: { status, allowed },
+        ...(fix ? { fix } : {}),
       });
     }
   },

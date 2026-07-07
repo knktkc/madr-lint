@@ -61,6 +61,8 @@ interface Diagnostic {
   data?: Record<string, unknown>;
   suggestion: string | null;  // 具体的な修正内容。ルールが定義していなければ null
   docsUrl: string;            // rule.meta.docs.url（core/internal-error はリポジトリ）
+  fixable: boolean;           // この diagnostic に自動修正があるか
+  fix?: (fixer: Fixer) => TextEdit | TextEdit[] | null; // 一時的。「自動修正」を参照
 }
 ```
 
@@ -68,6 +70,11 @@ interface Diagnostic {
 `meta.docs.url` から、ランナーがレポート時に解決します。`suggestion` はメッセージと
 同じく diagnostic の `data` で補間されます。ルールがこれらの文字列を手続き的に
 組み立てることはありません。
+
+`fixable` は永続的な真偽値です。キャッシュや `json` 出力にシリアライズされ、text
+レポーターは `🔧 fixable` マーカーを表示します。`fix` サンクは**一時的**です。JSON
+シリアライズで失われる（そのためキャッシュから復元した diagnostic には存在しない）
+クロージャで、自動修正のアプライアが消費します。[自動修正](#自動修正)を参照してください。
 
 ## ファイル単位のルールをまとめて実行する
 
@@ -144,12 +151,56 @@ writeBaseline(baselinePath(process.cwd()), baseline);
 const { kept, hidden } = applyBaseline(newDiagnostics, baseline);
 ```
 
+## 自動修正
+
+ルールは `meta.fixable: 'code'` を宣言し、`context.report(...)` に遅延評価の `fix`
+サンクを添えることで自動修正に対応します。サンクは**本文**（mdast）座標
+（`node.position.*.offset` と同じ空間）で動作し、`Fixer` がファイル全体のオフセットへ
+変換します。そのため frontmatter が除去されていても修正は正しく適用されます。
+
+```typescript
+context.report({
+  messageId: 'invalidStatus',
+  data: { status, allowed },
+  // 修正が機械的なときだけ添付する。見送る場合は null を返す。
+  fix: (fixer) => fixer.replaceRange([valueStart, valueEnd], 'accepted'),
+});
+```
+
+アプライアのプリミティブはツールやファイル間修正のためにエクスポートされています。
+
+```typescript
+import {
+  applyEdits,
+  makeFixer,
+  fixFileContent,
+  frontmatterOffset,
+} from 'madr-lint';
+
+// 本文オフセットを除去済み frontmatter の分だけずらし、差し替える。
+const fixer = makeFixer(frontmatterOffset(content)); // fileOffset = body + frontmatter
+const edit = fixer.replaceRange([start, end], 'accepted'); // TextEdit（ファイル全体）
+const fixed = applyEdits(content, [edit]); // ソートし、重複を除去し、1 パスで適用
+```
+
+`fixFileContent(content, lint)` は 1 ファイルの不動点ループを実行します。`lint`
+コールバックが返す診断（抑制・ベースライン適用済みであるべき）から編集を収集し、適用して
+再 lint し、`MAX_FIX_PASSES`（10）まで繰り返します。戻り値は `{ fixedContent,
+remaining, changed, passes, applied }` です。
+
 ## エクスポート
 
 | エクスポート | 説明 |
 |---|---|
 | `parseFile` | コンテンツをパース → frontmatter、metadata、mdast、body |
 | `extractListMetadata` | mdast ツリーから v2 の本文リストメタデータを抽出 |
+| `frontmatterOffset` | gray-matter が除去する長さ（`fileOffset = bodyOffset + this`） |
+| `applyEdits` | `TextEdit` を文字列に適用（ソート、重複除去、1 パス） |
+| `makeFixer` | 本文オフセットをファイル全体の `TextEdit` に変換する `Fixer` を生成 |
+| `collectFixes` | 診断の `fix` サンクを呼び出し → ファイル全体の `TextEdit[]` |
+| `fixFileContent` | `lint` コールバックに対しファイル単位の自動修正不動点を実行 |
+| `unifiedDiff` | 2 つの文字列間の統合 diff を生成（`--fix-dry-run` が使用） |
+| `MAX_FIX_PASSES` | 不動点の反復上限（10） |
 | `runRule` | 単一のファイル単位ルールを実行 |
 | `runRulesOnFile` | ファイル単位ルールを 1 回の AST 走査で実行 |
 | `runRulesOnProject` | ファイル間（プロジェクト）ルールを実行 |

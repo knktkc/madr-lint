@@ -32,10 +32,30 @@ export interface ParsedFile {
    * effective value is list-sourced.
    */
   metadataLoc: Record<string, MetadataPosition> | null;
+  /**
+   * Body-coordinate offset RANGE of the effective value for keys whose value
+   * came from the v2 leading list AND was a single contiguous text token (no
+   * inline markup), verified to slice back to the exact value. Autofix targets
+   * the value precisely with this. Frontmatter-won keys are absent (frontmatter
+   * is stripped before parsing → no body offset). null when nothing qualifies.
+   */
+  metadataValueLoc: Record<string, { start: number; end: number }> | null;
   /** mdast root of the body (frontmatter stripped). */
   ast: Root;
   /** Body content with frontmatter stripped. */
   body: string;
+}
+
+/**
+ * Character length of the frontmatter block that gray-matter strips from the
+ * front of `content` — i.e. the offset at which the body begins in the whole
+ * file. mdast positions are body-relative, so `fileOffset = bodyOffset +
+ * frontmatterOffset(content)`. gray-matter never mutates the body, so the body
+ * is always an exact suffix and this length is exact (verified across CRLF and
+ * leading-newline inputs). Used by the autofix fixer. See ADR-0008.
+ */
+export function frontmatterOffset(content: string): number {
+  return content.length - grayMatter(content).content.length;
 }
 
 /**
@@ -50,13 +70,17 @@ export function parseFile(content: string): ParsedFile {
   const data = matter.data as Record<string, unknown>;
   const frontmatter = Object.keys(data).length > 0 ? data : null;
   const ast = fromMarkdown(matter.content);
-  const listResult = extractListMetadataWithLoc(ast);
+  const listResult = extractListMetadataWithLoc(ast, matter.content);
   const listMetadata = listResult?.values ?? null;
 
   let metadata: Record<string, unknown> | null = null;
   let metadataLoc: Record<string, MetadataPosition> | null =
     listResult && Object.keys(listResult.loc).length > 0
       ? { ...listResult.loc }
+      : null;
+  let metadataValueLoc: Record<string, { start: number; end: number }> | null =
+    listResult && Object.keys(listResult.valueOffsets).length > 0
+      ? { ...listResult.valueOffsets }
       : null;
   if (frontmatter && listMetadata) {
     // Frontmatter wins on conflict, BUT explicit null/undefined are
@@ -68,10 +92,14 @@ export function parseFile(content: string): ParsedFile {
     }
     metadata = { ...listMetadata, ...frontmatterDefined };
     // A frontmatter-won key's effective value is not in the body, so it
-    // must not advertise the (shadowed) list item's position.
+    // must not advertise the (shadowed) list item's position or value range.
     if (metadataLoc) {
       for (const k of Object.keys(frontmatterDefined)) delete metadataLoc[k];
       if (Object.keys(metadataLoc).length === 0) metadataLoc = null;
+    }
+    if (metadataValueLoc) {
+      for (const k of Object.keys(frontmatterDefined)) delete metadataValueLoc[k];
+      if (Object.keys(metadataValueLoc).length === 0) metadataValueLoc = null;
     }
   } else if (frontmatter) {
     metadata = frontmatter;
@@ -84,6 +112,7 @@ export function parseFile(content: string): ParsedFile {
     listMetadata,
     metadata,
     metadataLoc,
+    metadataValueLoc,
     ast,
     body: matter.content,
   };
@@ -140,9 +169,13 @@ export function extractListMetadata(
  * list-sourced metadata can carry a line — which is what makes inline
  * suppression directives able to target them.
  */
-function extractListMetadataWithLoc(ast: Root): {
+function extractListMetadataWithLoc(
+  ast: Root,
+  body?: string,
+): {
   values: Record<string, unknown>;
   loc: Record<string, MetadataPosition>;
+  valueOffsets: Record<string, { start: number; end: number }>;
 } | null {
   let firstList: List | null = null;
   for (const child of ast.children) {
@@ -165,19 +198,30 @@ function extractListMetadataWithLoc(ast: Root): {
 
   const values: Record<string, unknown> = {};
   const loc: Record<string, MetadataPosition> = {};
+  const valueOffsets: Record<string, { start: number; end: number }> = {};
   for (const item of firstList.children) {
     const pair = extractListItemKV(item);
     if (pair && !(pair.key in values)) {
       values[pair.key] = pair.value;
       const start = item.position?.start;
       if (start) loc[pair.key] = { line: start.line, column: start.column };
+      // Record the value offset only when it slices back to the exact value —
+      // this rejects any misalignment from escapes / entities, keeping autofix
+      // edits precise. Only available when the body text is supplied.
+      if (
+        body !== undefined &&
+        pair.valueOffset &&
+        body.slice(pair.valueOffset.start, pair.valueOffset.end) === pair.value
+      ) {
+        valueOffsets[pair.key] = pair.valueOffset;
+      }
     }
   }
 
   const hasRecognizedKey = Object.keys(values).some((k) =>
     RECOGNIZED_METADATA_KEYS.has(k),
   );
-  return hasRecognizedKey ? { values, loc } : null;
+  return hasRecognizedKey ? { values, loc, valueOffsets } : null;
 }
 
 const KEY_PATTERN = /^[A-Za-z][A-Za-z0-9 \-_]*$/;
@@ -201,7 +245,12 @@ function normalizeKey(rawKey: string): string {
  */
 function extractListItemKV(
   item: ListItem,
-): { key: string; value: string } | null {
+): {
+  key: string;
+  value: string;
+  /** Body offset range of a single-text-token value (no inline tail). */
+  valueOffset?: { start: number; end: number };
+} | null {
   const para = item.children[0];
   if (para?.type !== 'paragraph') return null;
 
@@ -227,7 +276,21 @@ function extractListItemKV(
     const value = (valueHead + valueTail).trim();
     if (value === '') return null;
 
-    return { key: normalizeKey(keyNode.value), value };
+    // Precise offset only for a tail-free value (`**Key**: value` and nothing
+    // else) — the value then sits contiguously inside `sep`.
+    let valueOffset: { start: number; end: number } | undefined;
+    const sepStart = sep.position?.start.offset;
+    if (
+      paragraph.children.length === 2 &&
+      typeof sepStart === 'number' &&
+      valueHead !== ''
+    ) {
+      const sepMatch = SEPARATOR_PATTERN.exec(sep.value);
+      const vStart = sepStart + (sepMatch ? sepMatch[0].length : 0);
+      valueOffset = { start: vStart, end: vStart + value.length };
+    }
+
+    return { key: normalizeKey(keyNode.value), value, valueOffset };
   }
 
   // Plain key (canonical MADR v2.1.2): first text node holds `Key: value`.
@@ -238,7 +301,8 @@ function extractListItemKV(
     const rawKey = first.value.slice(0, colonIdx);
     if (!KEY_PATTERN.test(rawKey)) return null;
 
-    const valueHead = first.value.slice(colonIdx + 1).replace(/^\s+/, '');
+    const afterColon = first.value.slice(colonIdx + 1);
+    const valueHead = afterColon.replace(/^\s+/, '');
     const valueTail = paragraph.children
       .slice(1)
       .map((n) => toString(n))
@@ -246,7 +310,20 @@ function extractListItemKV(
     const value = (valueHead + valueTail).trim();
     if (value === '') return null;
 
-    return { key: normalizeKey(rawKey), value };
+    // Precise offset only for a tail-free value (`Key: value` in one text node).
+    let valueOffset: { start: number; end: number } | undefined;
+    const nodeStart = first.position?.start.offset;
+    if (
+      paragraph.children.length === 1 &&
+      typeof nodeStart === 'number' &&
+      valueHead !== ''
+    ) {
+      const leadingWs = afterColon.length - valueHead.length;
+      const vStart = nodeStart + colonIdx + 1 + leadingWs;
+      valueOffset = { start: vStart, end: vStart + value.length };
+    }
+
+    return { key: normalizeKey(rawKey), value, valueOffset };
   }
 
   return null;
