@@ -9,6 +9,12 @@ import type { AnyRule, Diagnostic } from './types.js';
 export interface ReporterMeta {
   /** Diagnostics absorbed by .madr-lint/baseline.json. Absent ⇒ 0. */
   baselineHidden?: number;
+  /**
+   * How many fixes were applied this run (autofix, #28). Present only when a
+   * fix pass ran (`--fix` / `--fix-dry-run`); absent on a plain lint. json
+   * surfaces it as `summary.fixed`.
+   */
+  fixed?: number;
 }
 
 export interface Reporter {
@@ -54,7 +60,9 @@ export const textReporter: Reporter = {
             : pc.yellow('  warn   ');
         const ruleId = pc.dim(d.ruleName.padEnd(28));
         const message = renderMessage(d, rulesByName);
-        lines.push(`${sev}${ruleId}  ${message}`);
+        // Autofix (#28): a dim marker tells the reader `--fix` can repair this.
+        const fixTag = d.fixable ? pc.dim(' 🔧 fixable') : '';
+        lines.push(`${sev}${ruleId}  ${message}${fixTag}`);
         if (d.suggestion) {
           lines.push(`${gutter}${pc.cyan(`→ ${d.suggestion}`)}`);
         }
@@ -121,6 +129,9 @@ export const jsonReporter: Reporter = {
         // Always present (0 when no baseline) so CI consumers can detect an
         // active baseline without probing for the key. SARIF stays untouched.
         baselineHidden: meta?.baselineHidden ?? 0,
+        // `fixed` appears ONLY when a fix pass ran (#28) — a plain lint keeps
+        // the summary shape it always had.
+        ...(meta?.fixed !== undefined ? { fixed: meta.fixed } : {}),
       },
       results: diagnostics.map((d) => ({
         path: d.path,
@@ -132,6 +143,8 @@ export const jsonReporter: Reporter = {
         // rely on the keys — `suggestion` is null when the rule declares none.
         suggestion: d.suggestion,
         docsUrl: d.docsUrl,
+        // Autofix (#28): whether `--fix` can repair this diagnostic.
+        fixable: d.fixable,
         data: d.data ?? {},
       })),
     };

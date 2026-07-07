@@ -22,6 +22,46 @@ export type MdastNode = Root | Nodes;
 /** Severity levels supported by every rule. */
 export type Severity = 'error' | 'warn';
 
+// ──────────────────────────────────────────────────────────────────
+// Autofix (see ADR-0008). Fixes are raw-text offset edits, never AST
+// serialization — round-trips lose formatting.
+// ──────────────────────────────────────────────────────────────────
+
+/**
+ * A raw-text edit: replace `content.slice(range[0], range[1])` with `text`.
+ * Offsets are into the ORIGINAL WHOLE-FILE content (frontmatter included) —
+ * the applier's coordinate space. Rules never build these directly; they call
+ * the `Fixer` helpers, which translate body (mdast) offsets to whole-file
+ * offsets. See ADR-0008.
+ */
+export interface TextEdit {
+  range: readonly [number, number];
+  text: string;
+}
+
+/**
+ * Helpers handed to a rule's `fix` thunk. Range / offset arguments are in
+ * BODY (mdast) coordinates — the same space as `node.position.*.offset` — and
+ * the fixer adds the stripped-frontmatter length so the returned `TextEdit`
+ * carries whole-file offsets. Keep the surface minimal: replace, insert, remove.
+ */
+export interface Fixer {
+  /** Replace the body range with `text`. */
+  replaceRange(range: readonly [number, number], text: string): TextEdit;
+  /** Insert `text` at a body offset (zero-width edit). */
+  insertAt(offset: number, text: string): TextEdit;
+  /** Delete the body range. */
+  remove(range: readonly [number, number]): TextEdit;
+}
+
+/**
+ * A lazy fix producer. Invoked ONLY when fixing is requested (zero cost on a
+ * normal lint). Returns one edit, several, or `null` to decline (e.g. the
+ * concrete fix is not mechanically safe for this occurrence). A rule may only
+ * attach a fix when its `meta.fixable === 'code'`.
+ */
+export type FixFn = (fixer: Fixer) => TextEdit | TextEdit[] | null;
+
 /**
  * The reserved rule name used for internal-error diagnostics. A real rule
  * cannot register with this name (the registry should reject collisions).
@@ -64,6 +104,13 @@ export interface RuleMeta<TOptions = Record<string, unknown>> {
    * `Diagnostic.suggestion` (null when absent). See issue #67.
    */
   suggestions?: Record<string, string>;
+  /**
+   * Whether this rule can produce autofixes. `'code'` = the rule may attach a
+   * `fix` thunk to `context.report(...)`; the runner honors it only for
+   * fixable rules and routes a fix from a non-fixable rule through
+   * `core/internal-error` (a rule bug). Defaults to `false`. See ADR-0008.
+   */
+  fixable?: 'code' | false;
   /** Default options merged with user config. */
   defaultOptions: TOptions;
   /** AJV JSON Schema for options. Validated at runRule time. */
@@ -106,6 +153,20 @@ export interface Diagnostic {
    * diagnostics point at the repository; a rule without a docs URL yields `''`.
    */
   docsUrl: string;
+  /**
+   * Whether an autofix is available for THIS diagnostic — the rule is
+   * `meta.fixable: 'code'` AND attached a `fix` thunk here. Durable (serialized
+   * to the cache and json output; reporters render a 🔧 marker). Every
+   * runner-produced diagnostic sets this. See ADR-0008 / issue #28.
+   */
+  fixable: boolean;
+  /**
+   * The live fix producer, present only when `fixable` is true. TRANSIENT — a
+   * closure, so it is dropped by JSON serialization (cache / json output) and
+   * absent on cache-hydrated diagnostics. Consumed by the autofix applier
+   * (`src/core/fix.ts`) after suppression + baseline filtering. See ADR-0008.
+   */
+  fix?: FixFn;
 }
 
 export interface RuleContext<TOptions = Record<string, unknown>> {
@@ -130,13 +191,27 @@ export interface RuleContext<TOptions = Record<string, unknown>> {
    * diagnostics so inline suppression directives can target them by line.
    */
   metadataLoc: Record<string, { line: number; column: number }> | null;
+  /**
+   * Body-coordinate offset RANGE of the effective value for `metadata` keys
+   * whose value came from the v2 leading list AND was a single contiguous text
+   * token (no inline markup). Autofix uses this to target the value precisely
+   * (e.g. rewrite the status value in place). Frontmatter-sourced keys are
+   * absent — frontmatter is stripped before mdast parsing, so it has no body
+   * offset and needs YAML-aware rewriting instead. null when nothing qualifies.
+   * See ADR-0008.
+   */
+  metadataValueLoc: Record<string, { start: number; end: number }> | null;
   /** User-merged options for this rule (validated against rule.meta.schema). */
   options: TOptions;
-  /** Emit a diagnostic. `suggestion` / `docsUrl` are resolved by the runner. */
+  /**
+   * Emit a diagnostic. `suggestion` / `docsUrl` / `fixable` are resolved by the
+   * runner. A rule may pass a `fix` thunk ONLY when its `meta.fixable` is
+   * `'code'` (otherwise the runner routes it through `core/internal-error`).
+   */
   report(
     diagnostic: Omit<
       Diagnostic,
-      'ruleName' | 'severity' | 'path' | 'suggestion' | 'docsUrl'
+      'ruleName' | 'severity' | 'path' | 'suggestion' | 'docsUrl' | 'fixable'
     >,
   ): void;
 }
@@ -218,7 +293,7 @@ export interface ProjectRuleContext<TOptions = Record<string, unknown>> {
   report(
     diagnostic: Omit<
       Diagnostic,
-      'ruleName' | 'severity' | 'suggestion' | 'docsUrl'
+      'ruleName' | 'severity' | 'suggestion' | 'docsUrl' | 'fixable'
     >,
   ): void;
 }

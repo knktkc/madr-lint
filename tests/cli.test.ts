@@ -46,6 +46,18 @@ function setupWarnFixture(dir: string, severity: 'warn' | 'error' = 'warn') {
   writeFileSync(join(dir, 'wrong.md'), '# x\n');
 }
 
+// status-enum under caseSensitive:true flags `Accepted` and can mechanically
+// lowercase a v2 list-sourced value — the seed for the --fix e2e tests.
+function setupFixable(d: string) {
+  writeFileSync(
+    join(d, '.madrlintrc.json'),
+    JSON.stringify({
+      rules: { 'madr/status-enum': ['error', { caseSensitive: true }] },
+    }),
+  );
+  writeFileSync(join(d, '0001-a.md'), '# T\n\n- Status: Accepted\n');
+}
+
 describe('cli (end-to-end)', () => {
   let dir: string;
 
@@ -445,18 +457,6 @@ describe('cli (end-to-end)', () => {
   // ──────────────────────────────────────────────────────────────────────────
 
   describe('--fix', () => {
-    // status-enum under caseSensitive:true flags `Accepted` and can mechanically
-    // lowercase a v2 list-sourced value.
-    function setupFixable(d: string) {
-      writeFileSync(
-        join(d, '.madrlintrc.json'),
-        JSON.stringify({
-          rules: { 'madr/status-enum': ['error', { caseSensitive: true }] },
-        }),
-      );
-      writeFileSync(join(d, '0001-a.md'), '# T\n\n- Status: Accepted\n');
-    }
-
     it('rewrites the file in place and exits 0 (remaining clean)', () => {
       setupFixable(dir);
       const r = runCli(dir, ['0001-a.md', '--fix', '--no-cache']);

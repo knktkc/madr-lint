@@ -10,6 +10,7 @@ import {
   type CacheEntry,
   type CacheManifest,
 } from './cache.js';
+import { fixFileContent } from './fix.js';
 import {
   buildProjectFile,
   runRulesOnFile,
@@ -184,80 +185,14 @@ export function lintFiles(opts: LintOptions): LintResult {
     const projectFiles = fileEntries.map((f) =>
       buildProjectFile({ path: f.relativePath, content: f.content }),
     );
-
-    // Does a path exist as a regular file WITHIN the project root? Lets
-    // project rules verify link targets that are not in the linted .md set
-    // (non-Markdown assets, files outside the scanned paths). Contract:
-    //   - a target that resolves at or above the root escapes the project →
-    //     false (path traversal cannot reach above the root);
-    //   - directories are not files → false (a link must point at a file);
-    //   - results are memoized per lint run (repeated targets cost one stat).
-    // The containment test compares the resolved absolute path to the root
-    // rather than a lexical prefix on `resolvedPath`, which may be
-    // un-normalized (e.g. a `/`-rooted link resolving to `foo/../../x`).
-    // NOTE: statSync follows symlinks, so a symlink that lives inside the root
-    // but points outside it is accepted — it is a real entry in the project
-    // tree. `resolvedPath` is POSIX; node's path.resolve accepts forward
-    // slashes on all platforms.
-    const projectRoot = resolve(opts.cwd);
-    const existsCache = new Map<string, boolean>();
-    const fileExists = (resolvedPath: string): boolean => {
-      const cached = existsCache.get(resolvedPath);
-      if (cached !== undefined) return cached;
-      const abs = resolve(projectRoot, resolvedPath);
-      const rel = relative(projectRoot, abs);
-      const escapesRoot =
-        rel === '' || rel === '..' || rel.startsWith(`..${sep}`) || isAbsolute(rel);
-      let result: boolean;
-      if (escapesRoot) {
-        result = false;
-      } else {
-        try {
-          result = statSync(abs, { throwIfNoEntry: false })?.isFile() ?? false;
-        } catch {
-          // ELOOP / EACCES / invalid path → cannot confirm a regular file.
-          result = false;
-        }
-      }
-      existsCache.set(resolvedPath, result);
-      return result;
-    };
-
-    const errorRules: ProjectRule[] = [];
-    const warnRules: ProjectRule[] = [];
-    for (const rule of enabledProjectRules) {
-      const sev = resolveSeverity(opts.ruleSeverity[rule.meta.name]);
-      if (sev === 'error') errorRules.push(rule);
-      else if (sev === 'warn') warnRules.push(rule);
-    }
-
-    const projectDiagnostics: Diagnostic[] = [];
-    if (errorRules.length > 0) {
-      projectDiagnostics.push(
-        ...runRulesOnProject(errorRules, projectFiles, {
-          severity: 'error',
-          fileExists,
-          optionsByRule,
-        }),
-      );
-    }
-    if (warnRules.length > 0) {
-      projectDiagnostics.push(
-        ...runRulesOnProject(warnRules, projectFiles, {
-          severity: 'warn',
-          fileExists,
-          optionsByRule,
-        }),
-      );
-    }
-
-    // Inline suppression for project diagnostics (issue #23): a directive
-    // lives in the file the diagnostic is attributed to (project rules report
-    // an explicit `path`). File-scoped directives (disable-file, or an
-    // open-ended disable) suppress line-less project diagnostics; line-scoped
-    // directives apply when the diagnostic carries a line.
     allDiagnostics.push(
-      ...filterSuppressedProjectDiagnostics(projectDiagnostics, projectFiles),
+      ...runProjectPass(
+        projectFiles,
+        enabledProjectRules,
+        opts.ruleSeverity,
+        optionsByRule,
+        opts.cwd,
+      ),
     );
   }
 
@@ -285,6 +220,132 @@ export function lintFiles(opts: LintOptions): LintResult {
     diagnostics: applied.kept,
     baselineHidden: applied.hidden,
   };
+}
+
+// ──────────────────────────────────────────────────────────────────
+// Autofix orchestration (issue #28). Kept OUT of lintFiles so the linting
+// hot path gains no branch. The cache is intentionally not consulted here:
+// fixes need live `fix` thunks, which cache-hydrated diagnostics lack, and a
+// fixed file re-enters the normal pipeline on the next run with a fresh hash.
+// ──────────────────────────────────────────────────────────────────
+
+export interface FixedFile {
+  /** POSIX relative path (diagnostics + diff header). */
+  path: string;
+  /** Absolute path (for writing). */
+  absPath: string;
+  /** Original on-disk content. */
+  original: string;
+  /** Content after the fixpoint loop. */
+  fixed: string;
+  /** Whether `fixed` differs from `original`. */
+  changed: boolean;
+}
+
+export interface LintAndFixResult {
+  files: FixedFile[];
+  /** Remaining diagnostics on the FIXED contents (per-file + project). */
+  diagnostics: Diagnostic[];
+  /** Count of edits applied across every file/pass. */
+  fixed: number;
+  /** Diagnostics the baseline absorbed on the final contents. */
+  baselineHidden: number;
+}
+
+export interface LintAndFixOptions {
+  rules: readonly AnyRule[];
+  ruleSeverity: Record<string, RuleSeverity>;
+  files: readonly string[];
+  cwd: string;
+  baseline?: Baseline | null;
+  /** Fixpoint pass cap; defaults to the applier's MAX_FIX_PASSES. */
+  maxPasses?: number;
+}
+
+/**
+ * Lint AND autofix: run the per-file fixpoint on every file (fixes are
+ * collected from REPORTED diagnostics only — suppression + baseline already
+ * subtracted, so suppressed/baselined problems are never rewritten), then run
+ * the project pass on the FIXED contents for the final diagnostic set. Files
+ * are returned with their fixed content; the caller writes them (or prints a
+ * diff for a dry run). Per-file only — project-rule fixes are #29.
+ */
+export function lintAndFix(opts: LintAndFixOptions): LintAndFixResult {
+  const perFileRules: Rule[] = [];
+  const projectRules: ProjectRule[] = [];
+  for (const rule of opts.rules) {
+    if (isProjectRule(rule)) projectRules.push(rule);
+    else perFileRules.push(rule);
+  }
+  const optionsByRule = extractOptionsByRule(opts.ruleSeverity);
+  const baseline = opts.baseline ?? null;
+
+  const files: FixedFile[] = [];
+  const remaining: Diagnostic[] = [];
+  let fixed = 0;
+  let baselineHidden = 0;
+
+  for (const absPath of opts.files) {
+    const relativePath = toPosix(relative(opts.cwd, absPath));
+    const original = readFileSync(absPath, 'utf8');
+
+    // `lint` returns the REPORTED (post-suppression, post-baseline) diagnostics
+    // for the given content, carrying live fix thunks. `lastHidden` tracks the
+    // final pass's baseline absorption for the summary.
+    let lastHidden = 0;
+    const lint = (content: string): Diagnostic[] => {
+      const raw = runPerFileRulesForFile(
+        perFileRules,
+        opts.ruleSeverity,
+        optionsByRule,
+        { relativePath, content },
+      );
+      if (!baseline) {
+        lastHidden = 0;
+        return raw;
+      }
+      const sub = applyBaseline(raw, baseline);
+      lastHidden = sub.hidden;
+      return sub.kept;
+    };
+
+    const res = fixFileContent(original, lint, opts.maxPasses);
+    files.push({
+      path: relativePath,
+      absPath,
+      original,
+      fixed: res.fixedContent,
+      changed: res.changed,
+    });
+    remaining.push(...res.remaining);
+    fixed += res.applied;
+    baselineHidden += lastHidden;
+  }
+
+  // Project pass on the FIXED contents.
+  const enabledProjectRules = projectRules.filter(
+    (rule) => resolveSeverity(opts.ruleSeverity[rule.meta.name]) !== 'off',
+  );
+  if (enabledProjectRules.length > 0) {
+    const projectFiles = files.map((f) =>
+      buildProjectFile({ path: f.path, content: f.fixed }),
+    );
+    let projectDiags = runProjectPass(
+      projectFiles,
+      enabledProjectRules,
+      opts.ruleSeverity,
+      optionsByRule,
+      opts.cwd,
+    );
+    if (baseline) {
+      const sub = applyBaseline(projectDiags, baseline);
+      projectDiags = sub.kept;
+      baselineHidden += sub.hidden;
+    }
+    remaining.push(...projectDiags);
+  }
+
+  return { files, diagnostics: remaining, fixed, baselineHidden };
 }
 
 function runPerFileRulesForFile(
@@ -325,6 +386,98 @@ function runPerFileRulesForFile(
     );
   }
   return diagnostics;
+}
+
+/**
+ * Build the `fileExists` predicate exposed to project rules. Does a path exist
+ * as a regular file WITHIN the project root? Lets project rules verify link
+ * targets not in the linted .md set (non-Markdown assets, files outside the
+ * scanned paths). Contract:
+ *   - a target that resolves at or above the root escapes the project →
+ *     false (path traversal cannot reach above the root);
+ *   - directories are not files → false (a link must point at a file);
+ *   - results are memoized per lint run (repeated targets cost one stat).
+ * The containment test compares the resolved absolute path to the root rather
+ * than a lexical prefix on `resolvedPath`, which may be un-normalized (e.g. a
+ * `/`-rooted link resolving to `foo/../../x`). NOTE: statSync follows symlinks,
+ * so a symlink that lives inside the root but points outside it is accepted —
+ * it is a real entry in the project tree. `resolvedPath` is POSIX; node's
+ * path.resolve accepts forward slashes on all platforms.
+ */
+function makeFileExists(cwd: string): (resolvedPath: string) => boolean {
+  const projectRoot = resolve(cwd);
+  const existsCache = new Map<string, boolean>();
+  return (resolvedPath: string): boolean => {
+    const cached = existsCache.get(resolvedPath);
+    if (cached !== undefined) return cached;
+    const abs = resolve(projectRoot, resolvedPath);
+    const rel = relative(projectRoot, abs);
+    const escapesRoot =
+      rel === '' || rel === '..' || rel.startsWith(`..${sep}`) || isAbsolute(rel);
+    let result: boolean;
+    if (escapesRoot) {
+      result = false;
+    } else {
+      try {
+        result = statSync(abs, { throwIfNoEntry: false })?.isFile() ?? false;
+      } catch {
+        // ELOOP / EACCES / invalid path → cannot confirm a regular file.
+        result = false;
+      }
+    }
+    existsCache.set(resolvedPath, result);
+    return result;
+  };
+}
+
+/**
+ * Run enabled project rules over the given (already-built) project files and
+ * return suppression-filtered, PRE-baseline diagnostics. Shared by `lintFiles`
+ * (files as read) and `lintAndFix` (files after autofix). Baseline subtraction
+ * is the caller's job.
+ */
+function runProjectPass(
+  projectFiles: readonly ProjectFile[],
+  enabledProjectRules: readonly ProjectRule[],
+  ruleSeverity: Record<string, RuleSeverity>,
+  optionsByRule: Record<string, Record<string, unknown>>,
+  cwd: string,
+): Diagnostic[] {
+  const fileExists = makeFileExists(cwd);
+  const errorRules: ProjectRule[] = [];
+  const warnRules: ProjectRule[] = [];
+  for (const rule of enabledProjectRules) {
+    const sev = resolveSeverity(ruleSeverity[rule.meta.name]);
+    if (sev === 'error') errorRules.push(rule);
+    else if (sev === 'warn') warnRules.push(rule);
+  }
+
+  const projectDiagnostics: Diagnostic[] = [];
+  if (errorRules.length > 0) {
+    projectDiagnostics.push(
+      ...runRulesOnProject(errorRules, projectFiles, {
+        severity: 'error',
+        fileExists,
+        optionsByRule,
+      }),
+    );
+  }
+  if (warnRules.length > 0) {
+    projectDiagnostics.push(
+      ...runRulesOnProject(warnRules, projectFiles, {
+        severity: 'warn',
+        fileExists,
+        optionsByRule,
+      }),
+    );
+  }
+
+  // Inline suppression for project diagnostics (issue #23): a directive lives
+  // in the file the diagnostic is attributed to (project rules report an
+  // explicit `path`). File-scoped directives (disable-file, or an open-ended
+  // disable) suppress line-less project diagnostics; line-scoped directives
+  // apply when the diagnostic carries a line.
+  return filterSuppressedProjectDiagnostics(projectDiagnostics, projectFiles);
 }
 
 /**

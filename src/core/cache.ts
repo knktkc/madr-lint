@@ -21,11 +21,12 @@ export interface CacheEntry {
  * pkgVersion invalidation only saves npm upgraders; repo devs and
  * same-version CI caches would otherwise be served stale-shape entries
  * verbatim (e.g. diagnostics missing the #67 `suggestion`/`docsUrl` keys,
- * silently dropped from json output). History: 2 = Diagnostic gained
- * `suggestion` + `docsUrl` (#67); 1 (implicit) = pre-schema manifests, which
- * carry no `schemaVersion` field at all.
+ * silently dropped from json output). History: 3 = Diagnostic gained the
+ * `fixable` boolean (#28); 2 = Diagnostic gained `suggestion` + `docsUrl`
+ * (#67); 1 (implicit) = pre-schema manifests, which carry no `schemaVersion`
+ * field at all.
  */
-export const CACHE_SCHEMA_VERSION = 2;
+export const CACHE_SCHEMA_VERSION = 3;
 
 export interface CacheManifest {
   /** Manifest schema version. Missing or mismatched ⇒ the cache is cold. */

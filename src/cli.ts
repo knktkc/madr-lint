@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { relative, resolve, sep } from 'node:path';
 import { defineCommand, runMain } from 'citty';
 import { initCommand } from './commands/init.js';
@@ -20,11 +20,12 @@ import {
   type ResolvedConfig,
 } from './core/config.js';
 import { findAdrFiles } from './core/discover.js';
+import { unifiedDiff } from './core/fix.js';
 import { shouldIgnore } from './core/ignore.js';
-import { lintFiles, type CacheConfig } from './core/lint.js';
+import { lintAndFix, lintFiles, type CacheConfig } from './core/lint.js';
 import { reporters, type ReporterFormat } from './core/reporter.js';
 import { RuleOptionsError } from './core/runner.js';
-import type { AnyRule } from './core/types.js';
+import type { AnyRule, Diagnostic } from './core/types.js';
 import * as builtinRules from './rules/index.js';
 
 function toPosix(p: string): string {
@@ -92,6 +93,16 @@ const main = defineCommand({
       type: 'string',
       description: 'Path to config file, bypassing auto-discovery',
       required: false,
+    },
+    fix: {
+      type: 'boolean',
+      description: 'Apply autofixes in place; exit code reflects remaining problems',
+      default: false,
+    },
+    'fix-dry-run': {
+      type: 'boolean',
+      description: 'Show a diff of the fixes that --fix would apply; write nothing',
+      default: false,
     },
   },
   run({ args }) {
@@ -206,6 +217,115 @@ const main = defineCommand({
     }
 
     const allRulesArray: AnyRule[] = Object.values(builtinRules);
+    const format = (args.format ?? 'text') as ReporterFormat;
+
+    // Shared "report the resulting diagnostics and exit" tail. `fixedCount` is
+    // undefined on a plain lint (no fix footer / summary), a number when a fix
+    // pass ran. Diagnostics are POST-baseline, so baselined warnings never
+    // count toward --max-warnings — inherited debt does not fail CI.
+    const reportAndExit = (
+      diagnostics: readonly Diagnostic[],
+      baselineHidden: number,
+      fixedCount: number | undefined,
+      dryRun: boolean,
+    ): never => {
+      const rulesByName = new Map<string, AnyRule>(
+        allRulesArray.map((r) => [r.meta.name, r]),
+      );
+      const reporter = reporters[format];
+      if (!reporter) {
+        console.error(
+          `Unknown --format "${format}". Available: ${Object.keys(reporters).join(', ')}`,
+        );
+        process.exit(2);
+      }
+      const warningCount = diagnostics.filter((d) => d.severity === 'warn').length;
+      const errorCount = diagnostics.filter((d) => d.severity === 'error').length;
+      const overWarningLimit = maxWarnings >= 0 && warningCount > maxWarnings;
+
+      // --quiet filters warnings from OUTPUT but the original warning count is
+      // still used for --max-warnings (mirrors ESLint). The threshold verdict
+      // goes to stderr so `--quiet --max-warnings 0` still fails loudly.
+      const reported = args.quiet
+        ? diagnostics.filter((d) => d.severity !== 'warn')
+        : diagnostics;
+
+      // Text-only: a "✓ All clear." banner beside exit 1 would lie, so suppress
+      // it when the run fails purely on the warning threshold.
+      const suppressAllClear =
+        format === 'text' && reported.length === 0 && overWarningLimit;
+      if (!suppressAllClear) {
+        console.log(
+          reporter.format(reported, rulesByName, {
+            baselineHidden,
+            ...(fixedCount !== undefined ? { fixed: fixedCount } : {}),
+          }),
+        );
+      }
+      if (format === 'text' && baselineHidden > 0) {
+        console.log(baselineHiddenSummary(baselineHidden));
+      }
+      // Text-only autofix footer (json carries summary.fixed instead).
+      if (format === 'text' && fixedCount !== undefined && fixedCount > 0) {
+        const noun = fixedCount === 1 ? 'problem' : 'problems';
+        console.log(
+          dryRun
+            ? `${fixedCount} ${noun} fixable (dry run; no files written)`
+            : `Fixed ${fixedCount} ${noun}`,
+        );
+      }
+      if (overWarningLimit) {
+        console.error(
+          `madr-lint: ${warningCount} warning(s) found, exceeds --max-warnings ${maxWarnings}`,
+        );
+      }
+      process.exit(errorCount > 0 || overWarningLimit ? 1 : 0);
+    };
+
+    // ── Autofix path (--fix / --fix-dry-run) ─────────────────────────
+    const fixMode = args.fix === true || args['fix-dry-run'] === true;
+    if (fixMode && updateBaseline) {
+      // Ambiguous intent: rewrite files vs snapshot the current violations.
+      console.error(
+        'madr-lint: --update-baseline cannot be combined with --fix or --fix-dry-run',
+      );
+      process.exit(2);
+    }
+    if (fixMode) {
+      // --fix-dry-run wins if both are given: never write on a dry run.
+      const dryRun = args['fix-dry-run'] === true;
+      let fixResult: ReturnType<typeof lintAndFix>;
+      try {
+        // The cache is intentionally bypassed while fixing (fixes need live
+        // thunks); fixed files re-enter the normal pipeline on the next run.
+        fixResult = lintAndFix({
+          rules: allRulesArray,
+          ruleSeverity: config.rules,
+          files,
+          cwd,
+          baseline,
+        });
+      } catch (err) {
+        if (err instanceof RuleOptionsError) {
+          console.error(`Invalid rule options in config: ${err.message}`);
+          process.exit(2);
+        }
+        throw err;
+      }
+
+      if (dryRun) {
+        for (const f of fixResult.files) {
+          if (f.changed) process.stdout.write(unifiedDiff(f.path, f.original, f.fixed));
+        }
+      } else {
+        for (const f of fixResult.files) {
+          if (f.changed) writeFileSync(f.absPath, f.fixed, 'utf8');
+        }
+      }
+      reportAndExit(fixResult.diagnostics, fixResult.baselineHidden, fixResult.fixed, dryRun);
+    }
+
+    // ── Normal lint path ─────────────────────────────────────────────
     let result: ReturnType<typeof lintFiles>;
     try {
       result = lintFiles({
@@ -235,62 +355,7 @@ const main = defineCommand({
       process.exit(0);
     }
 
-    const rulesByName = new Map<string, AnyRule>(
-      allRulesArray.map((r) => [r.meta.name, r]),
-    );
-    const format = (args.format ?? 'text') as ReporterFormat;
-    const reporter = reporters[format];
-    if (!reporter) {
-      console.error(
-        `Unknown --format "${format}". Available: ${Object.keys(reporters).join(', ')}`,
-      );
-      process.exit(2);
-    }
-    // result.diagnostics is POST-baseline (lintFiles subtracts before
-    // returning), so baselined warnings never count toward --max-warnings —
-    // the whole point of a baseline is that inherited debt does not fail CI.
-    const allDiagnostics = result.diagnostics;
-    const warningCount = allDiagnostics.filter((d) => d.severity === 'warn').length;
-    const errorCount = allDiagnostics.filter((d) => d.severity === 'error').length;
-    const overWarningLimit = maxWarnings >= 0 && warningCount > maxWarnings;
-
-    // --quiet filters warnings from OUTPUT but the original warning count is
-    // still used for --max-warnings (mirrors ESLint: "warnings still run, not
-    // reported"). So `--quiet --max-warnings 0` keeps the log free of warning
-    // noise while still failing the build — the threshold verdict below goes
-    // to stderr so the failure is never mute.
-    const reported = args.quiet
-      ? allDiagnostics.filter((d) => d.severity !== 'warn')
-      : allDiagnostics;
-
-    // Text-only: a "✓ All clear." banner beside exit 1 would lie, so suppress
-    // it when the run fails purely on the warning threshold. json/sarif
-    // payloads still print — machine consumers read stdout + stderr + exit.
-    const suppressAllClear =
-      format === 'text' && reported.length === 0 && overWarningLimit;
-    if (!suppressAllClear) {
-      console.log(
-        reporter.format(reported, rulesByName, {
-          baselineHidden: result.baselineHidden,
-        }),
-      );
-    }
-    // Text-only footer: JSON carries the count in its summary; SARIF stays
-    // schema-clean. Printed even when --quiet or the banner is suppressed —
-    // knowing the baseline absorbed diagnostics is never noise.
-    if (format === 'text' && result.baselineHidden > 0) {
-      console.log(baselineHiddenSummary(result.baselineHidden));
-    }
-
-    // The threshold verdict goes to stderr for every format so it survives
-    // --quiet and machine-readable stdout alike.
-    if (overWarningLimit) {
-      console.error(
-        `madr-lint: ${warningCount} warning(s) found, exceeds --max-warnings ${maxWarnings}`,
-      );
-    }
-
-    process.exit(errorCount > 0 || overWarningLimit ? 1 : 0);
+    reportAndExit(result.diagnostics, result.baselineHidden, undefined, false);
   },
 });
 
