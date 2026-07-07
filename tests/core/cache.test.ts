@@ -82,6 +82,7 @@ describe('core/cache', () => {
                 data: { section: 'Context' },
                 suggestion: 'add a "## Context" heading to the document body',
                 docsUrl: 'https://knktkc.github.io/madr-lint/rules/required-sections/',
+                fixable: false,
               },
             ],
           },
@@ -155,6 +156,18 @@ describe('core/cache', () => {
       writeFileSync(
         path,
         JSON.stringify({ schemaVersion: 1, version: '1', configHash: 'h', files: {} }),
+        'utf8',
+      );
+      expect(loadManifest(path)).toBeNull();
+    });
+
+    // #28 bumped the schema (Diagnostic gained `fixable`): a v2 manifest's
+    // cached diagnostics lack the key and must not be served.
+    it('returns null for a schemaVersion-2 manifest (pre-#28 fixable shape)', () => {
+      const path = manifestPath(tmp);
+      writeFileSync(
+        path,
+        JSON.stringify({ schemaVersion: 2, version: '1', configHash: 'h', files: {} }),
         'utf8',
       );
       expect(loadManifest(path)).toBeNull();

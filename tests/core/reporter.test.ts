@@ -26,15 +26,15 @@ function makeRule(name: string, messages: Record<string, string>): Rule {
   };
 }
 
-// Build a Diagnostic with the runner-resolved fields (`suggestion`, `docsUrl`)
-// defaulted so the reporters — which read them off the diagnostic — can be
-// exercised without hand-writing them in every case. Reporters treat a null
-// suggestion / empty docsUrl as "absent".
+// Build a Diagnostic with the runner-resolved fields (`suggestion`, `docsUrl`,
+// `fixable`) defaulted so the reporters — which read them off the diagnostic —
+// can be exercised without hand-writing them in every case. Reporters treat a
+// null suggestion / empty docsUrl as "absent" and fixable:false as "no fix".
 function diag(
-  d: Omit<Diagnostic, 'suggestion' | 'docsUrl'> &
-    Partial<Pick<Diagnostic, 'suggestion' | 'docsUrl'>>,
+  d: Omit<Diagnostic, 'suggestion' | 'docsUrl' | 'fixable'> &
+    Partial<Pick<Diagnostic, 'suggestion' | 'docsUrl' | 'fixable'>>,
 ): Diagnostic {
-  return { suggestion: null, docsUrl: '', ...d };
+  return { suggestion: null, docsUrl: '', fixable: false, ...d };
 }
 
 describe('core/reporter — text', () => {
@@ -183,6 +183,27 @@ describe('core/reporter — text', () => {
     ];
     expect(textReporter.format(diagnostics, rules)).not.toContain('http');
   });
+
+  // ── autofix (#28): fixable diagnostics carry a dim 🔧 marker ───────────
+  it('marks a fixable diagnostic with a 🔧 fixable tag', () => {
+    const rules = new Map<string, AnyRule>([
+      ['test/r', makeRule('test/r', { x: 'msg' })],
+    ]);
+    const diagnostics: Diagnostic[] = [
+      diag({ ruleName: 'test/r', messageId: 'x', severity: 'error', path: 'a.md', fixable: true }),
+    ];
+    expect(textReporter.format(diagnostics, rules)).toContain('🔧 fixable');
+  });
+
+  it('does not add a 🔧 tag to a non-fixable diagnostic', () => {
+    const rules = new Map<string, AnyRule>([
+      ['test/r', makeRule('test/r', { x: 'msg' })],
+    ]);
+    const diagnostics: Diagnostic[] = [
+      diag({ ruleName: 'test/r', messageId: 'x', severity: 'error', path: 'a.md' }),
+    ];
+    expect(textReporter.format(diagnostics, rules)).not.toContain('🔧');
+  });
 });
 
 describe('core/reporter — json', () => {
@@ -271,6 +292,27 @@ describe('core/reporter — json', () => {
     // Keys are ALWAYS present — pin the machine-readable shape.
     expect(out.results[1]).toHaveProperty('suggestion', null);
     expect(out.results[1]).toHaveProperty('docsUrl', '');
+  });
+
+  // ── autofix (#28) ────────────────────────────────────────────────────
+  it('every result carries a fixable boolean', () => {
+    const rules = new Map<string, AnyRule>([
+      ['test/r', makeRule('test/r', { x: 'msg' })],
+    ]);
+    const diagnostics: Diagnostic[] = [
+      diag({ ruleName: 'test/r', messageId: 'x', severity: 'error', path: 'a.md', fixable: true }),
+      diag({ ruleName: 'test/r', messageId: 'x', severity: 'warn', path: 'b.md' }),
+    ];
+    const out = JSON.parse(jsonReporter.format(diagnostics, rules));
+    expect(out.results[0]).toHaveProperty('fixable', true);
+    expect(out.results[1]).toHaveProperty('fixable', false);
+  });
+
+  it('adds summary.fixed only when the caller passes a fixed count', () => {
+    const withFixed = JSON.parse(jsonReporter.format([], new Map(), { fixed: 4 }));
+    expect(withFixed.summary.fixed).toBe(4);
+    const without = JSON.parse(jsonReporter.format([], new Map()));
+    expect(without.summary).not.toHaveProperty('fixed');
   });
 });
 
