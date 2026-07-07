@@ -221,13 +221,16 @@ const main = defineCommand({
 
     // Shared "report the resulting diagnostics and exit" tail. `fixedCount` is
     // undefined on a plain lint (no fix footer / summary), a number when a fix
-    // pass ran. Diagnostics are POST-baseline, so baselined warnings never
-    // count toward --max-warnings — inherited debt does not fail CI.
+    // pass ran. `fixDiffs` carries dry-run diffs for the json reporter to embed
+    // (undefined otherwise). Diagnostics are POST-baseline, so baselined
+    // warnings never count toward --max-warnings — inherited debt does not
+    // fail CI.
     const reportAndExit = (
       diagnostics: readonly Diagnostic[],
       baselineHidden: number,
       fixedCount: number | undefined,
       dryRun: boolean,
+      fixDiffs?: readonly { path: string; diff: string }[],
     ): never => {
       const rulesByName = new Map<string, AnyRule>(
         allRulesArray.map((r) => [r.meta.name, r]),
@@ -259,6 +262,7 @@ const main = defineCommand({
           reporter.format(reported, rulesByName, {
             baselineHidden,
             ...(fixedCount !== undefined ? { fixed: fixedCount } : {}),
+            ...(fixDiffs !== undefined ? { fixDiffs } : {}),
           }),
         );
       }
@@ -313,16 +317,38 @@ const main = defineCommand({
         throw err;
       }
 
+      // Dry-run diff routing: raw diff on stdout is only safe for the human
+      // `text` format. json embeds it (top-level `diffs`, via reportAndExit);
+      // sarif/github get it on stderr so their stdout stays machine-parseable.
+      let fixDiffs: { path: string; diff: string }[] | undefined;
       if (dryRun) {
-        for (const f of fixResult.files) {
-          if (f.changed) process.stdout.write(unifiedDiff(f.path, f.original, f.fixed));
+        const changed = fixResult.files.filter((f) => f.changed);
+        if (format === 'text') {
+          for (const f of changed) {
+            process.stdout.write(unifiedDiff(f.path, f.original, f.fixed));
+          }
+        } else if (format === 'json') {
+          fixDiffs = changed.map((f) => ({
+            path: f.path,
+            diff: unifiedDiff(f.path, f.original, f.fixed),
+          }));
+        } else {
+          for (const f of changed) {
+            process.stderr.write(unifiedDiff(f.path, f.original, f.fixed));
+          }
         }
       } else {
         for (const f of fixResult.files) {
           if (f.changed) writeFileSync(f.absPath, f.fixed, 'utf8');
         }
       }
-      reportAndExit(fixResult.diagnostics, fixResult.baselineHidden, fixResult.fixed, dryRun);
+      reportAndExit(
+        fixResult.diagnostics,
+        fixResult.baselineHidden,
+        fixResult.fixed,
+        dryRun,
+        fixDiffs,
+      );
     }
 
     // ── Normal lint path ─────────────────────────────────────────────

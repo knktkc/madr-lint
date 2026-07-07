@@ -15,6 +15,14 @@ export interface ReporterMeta {
    * surfaces it as `summary.fixed`.
    */
   fixed?: number;
+  /**
+   * Per-file unified diffs of a dry run (`--fix-dry-run`). Present only then.
+   * json embeds them as a top-level `diffs` array so machine consumers get the
+   * dry run's output in-band — the raw diff must never pollute a structured
+   * format's stdout. Other reporters ignore this (the CLI prints/routes the
+   * raw diff itself for text / sarif / github).
+   */
+  fixDiffs?: readonly { path: string; diff: string }[];
 }
 
 export interface Reporter {
@@ -133,6 +141,9 @@ export const jsonReporter: Reporter = {
         // the summary shape it always had.
         ...(meta?.fixed !== undefined ? { fixed: meta.fixed } : {}),
       },
+      // Dry-run diffs (#28): embedded so `--fix-dry-run --format json` keeps
+      // stdout pure JSON while still delivering the diff. Absent otherwise.
+      ...(meta?.fixDiffs !== undefined ? { diffs: meta.fixDiffs } : {}),
       results: diagnostics.map((d) => ({
         path: d.path,
         ruleName: d.ruleName,

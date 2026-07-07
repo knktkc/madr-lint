@@ -47,6 +47,18 @@ export function makeFixer(base: number): Fixer {
  * Whole-file offsets in, new string out.
  */
 export function applyEdits(content: string, edits: readonly TextEdit[]): string {
+  return applyEditsCounted(content, edits).text;
+}
+
+/**
+ * Counting variant of `applyEdits`: `applied` is the number of edits that
+ * actually LANDED (post overlap/bounds filtering) — the honest source for
+ * `summary.fixed`, which must not count dropped edits.
+ */
+function applyEditsCounted(
+  content: string,
+  edits: readonly TextEdit[],
+): { text: string; applied: number } {
   const valid = edits.filter((e) => {
     const [start, end] = e.range;
     return (
@@ -64,13 +76,15 @@ export function applyEdits(content: string, edits: readonly TextEdit[]): string 
 
   let out = '';
   let cursor = 0;
+  let applied = 0;
   for (const edit of sorted) {
     const [start, end] = edit.range;
     if (start < cursor) continue; // overlaps an already-applied edit — drop
     out += content.slice(cursor, start) + edit.text;
     cursor = end;
+    applied++;
   }
-  return out + content.slice(cursor);
+  return { text: out + content.slice(cursor), applied };
 }
 
 /**
@@ -104,7 +118,7 @@ export interface FixFileResult {
   changed: boolean;
   /** Number of applied passes (0 when nothing was fixed). */
   passes: number;
-  /** Count of edits applied across all passes. */
+  /** Edits that actually LANDED across all passes (dropped edits excluded). */
   applied: number;
 }
 
@@ -139,10 +153,12 @@ export function fixFileContent(
     const edits = collectFixes(diagnostics, content);
     if (edits.length === 0) return done();
 
-    const next = applyEdits(content, edits);
+    const { text: next, applied: landed } = applyEditsCounted(content, edits);
     if (next === content) return done(); // no progress — avoid an infinite loop
 
-    applied += edits.length;
+    // Count edits that LANDED, not edits collected — overlap-dropped and
+    // out-of-bounds edits never touched the content.
+    applied += landed;
     content = next;
     passes++;
   }
