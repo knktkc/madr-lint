@@ -40,6 +40,10 @@ ISO‑8601 の日付、ファイル名フォーマット、そして番号の一
     コマンドラインから実行したり、プログラムから呼び出したり、GitHub Action として
     CI に組み込んだりできます。text・JSON・SARIF・GitHub アノテーションのレポーターに対応しています。
   </Card>
+  <Card title="オートフィックス" icon="pencil">
+    `--fix` / `--fix-dry-run` が、安全で一意な修正が可能な違反を機械的に修復します —
+    誤字ったステータス、不正な形式の日付、片側だけの `supersedes` リンクなど。
+  </Card>
   <Card title="段階的な導入" icon="add-document">
     一時的な例外にはインラインの `madr-lint-disable` 抑制コメントを、既存の違反には
     ベースラインファイルでスナップショットを取り、新規の違反だけを CI で失敗させられます。
@@ -49,11 +53,17 @@ ISO‑8601 の日付、ファイル名フォーマット、そして番号の一
 ## クイックルック
 
 ```bash
+# scaffold a config — detects your ADR directory and MADR version
+npx madr-lint init
+
 # lint the ADRs in your configured adrDir (default: docs/adr)
 npx madr-lint
 
 # or point it at explicit paths
 npx madr-lint docs/adr
+
+# auto-repair what's mechanically fixable
+npx madr-lint --fix
 
 # machine-readable output for CI
 npx madr-lint --format sarif

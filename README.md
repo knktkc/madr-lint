@@ -31,12 +31,12 @@ A fast, configurable linter for [MADR](https://adr.github.io/madr/) (Markdown Ar
 
 [MADR](https://github.com/adr/madr) ships no official linter, and the general-purpose tools each cover only part of what an ADR collection needs:
 
-| Tool | Markdown style | Inter-doc links | ADR numbering | Status enum | Date format | Supersedes graph | v2 bold-list |
-|---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
-| [markdownlint-cli2](https://github.com/DavidAnson/markdownlint-cli2) | ✅ | — | — | — | — | — | n/a |
-| [lychee](https://github.com/lycheeverse/lychee) | — | ✅ | — | — | — | — | n/a |
-| [adrs (rust)](https://crates.io/crates/adrs) | — | — | ✅&nbsp;(init) | — | — | ~ | — |
-| **madr-lint** | —¹ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Tool | Markdown style | Inter-doc links | ADR numbering | Status enum | Date format | Supersedes graph | v2 bold-list | Autofix |
+|---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
+| [markdownlint-cli2](https://github.com/DavidAnson/markdownlint-cli2) | ✅ | — | — | — | — | — | n/a | ✅ |
+| [lychee](https://github.com/lycheeverse/lychee) | — | ✅ | — | — | — | — | n/a | — |
+| [adrs (rust)](https://crates.io/crates/adrs) | — | — | ✅&nbsp;(init) | — | — | ~ | — | — |
+| **madr-lint** | —¹ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ~&nbsp;(3/8&nbsp;rules) |
 
 ¹ Deliberately *not* Markdown style — pair it with `markdownlint-cli2` if you want both. `madr-lint` owns the ADR-specific semantics.
 
@@ -44,6 +44,7 @@ A fast, configurable linter for [MADR](https://adr.github.io/madr/) (Markdown Ar
 - **ESLint-style rules** — named `madr/*` rules with `error` / `warn` / `off` and per-rule options validated by a JSON Schema.
 - **Per-file & cross-file** — fast single-pass checks plus project rules for unique numbering, the supersedes graph, and link rot.
 - **CLI, library & CI** — `text` / `json` / `sarif` / `github` reporters, a programmatic API, and a drop-in GitHub Actions step.
+- **Autofix** — `--fix` / `--fix-dry-run` mechanically repair the violations that have a safe, unambiguous correction (3 of 8 rules today); everything else still reports with a `suggestion`.
 - **Gradual adoption** — [inline suppression comments](https://knktkc.github.io/madr-lint/guides/suppressing-rules/) for one-off exceptions and a [baseline file](https://knktkc.github.io/madr-lint/guides/adopting-existing-repo/) to snapshot legacy debt so only new violations fail the build.
 
 ## Install
@@ -57,8 +58,14 @@ Node.js 22+. ESM-only. Ships TypeScript types.
 ## Quick start
 
 ```bash
+# Scaffold a config — detects your ADR directory and MADR version
+npx madr-lint init
+
 # Lint the configured adrDir (default: docs/adr)
 npx madr-lint
+
+# Auto-repair what's mechanically fixable, then re-lint
+npx madr-lint --fix
 
 # Explicit paths (files or directories; directories are searched recursively)
 npx madr-lint docs/adr libs/x/adr
@@ -92,17 +99,17 @@ Rule values are a severity (`'error' | 'warn' | 'off'`) or a `[severity, options
 
 ## Rules
 
-8 rules — 7 enabled by `recommended`, 1 opt-in. Each page documents its options, examples, and MADR-version compatibility.
+8 rules — 7 enabled by `recommended`, 1 opt-in. 🔧 marks the 3 rules `--fix` can repair. Each page documents its options, examples, and MADR-version compatibility.
 
 | Rule | Type | Default | Checks |
 |---|---|:---:|---|
 | [`madr/required-sections`](https://knktkc.github.io/madr-lint/rules/required-sections/) | per-file | `error` | Required heading sections are present |
-| [`madr/status-enum`](https://knktkc.github.io/madr-lint/rules/status-enum/) | per-file | `error` | `status` is one of the allowed values |
-| [`madr/date-iso8601`](https://knktkc.github.io/madr-lint/rules/date-iso8601/) | per-file | `error` | `date` is a valid ISO-8601 calendar date |
+| [`madr/status-enum`](https://knktkc.github.io/madr-lint/rules/status-enum/) 🔧 | per-file | `error` | `status` is one of the allowed values |
+| [`madr/date-iso8601`](https://knktkc.github.io/madr-lint/rules/date-iso8601/) 🔧 | per-file | `error` | `date` is a valid ISO-8601 calendar date |
 | [`madr/filename-format`](https://knktkc.github.io/madr-lint/rules/filename-format/) | per-file | `error` | Filename matches the ADR convention |
 | [`madr/no-broken-links`](https://knktkc.github.io/madr-lint/rules/no-broken-links/) | project | `error` | Relative links resolve to existing files |
 | [`madr/no-duplicate-numbering`](https://knktkc.github.io/madr-lint/rules/no-duplicate-numbering/) | project | `error` | ADR numbers are unique |
-| [`madr/supersedes-bidirectional`](https://knktkc.github.io/madr-lint/rules/supersedes-bidirectional/) | project | `error` | `supersedes` / `superseded-by` agree |
+| [`madr/supersedes-bidirectional`](https://knktkc.github.io/madr-lint/rules/supersedes-bidirectional/) 🔧 | project | `error` | `supersedes` / `superseded-by` agree |
 | [`madr/no-numbering-gap`](https://knktkc.github.io/madr-lint/rules/no-numbering-gap/) | project | `off` | ADR numbers are contiguous (opt-in) |
 
 ## Use in CI
@@ -125,7 +132,7 @@ jobs:
 ```
 
 > The floating `v0` tag tracks the latest v0.x release; for stricter
-> reproducibility, pin an exact tag like `@v0.3.0`.
+> reproducibility, pin an exact tag like `@v0.4.0`.
 
 Or run it via `npx` in any CI provider:
 

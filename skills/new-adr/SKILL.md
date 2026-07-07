@@ -6,7 +6,7 @@ allowed-tools: Bash(npx:*), Bash(ls:*), Bash(find:*), Bash(cat:*), Bash(grep:*),
 
 # new-adr — author a new MADR ADR that lints clean
 
-Grounded against **madr-lint@0.3.0** (the latest published npm release) and
+Grounded against **madr-lint@0.4.0** (the latest published npm release) and
 the upstream MADR templates
 ([v4](https://github.com/adr/madr/blob/develop/template/adr-template.md),
 [v2.1.2](https://github.com/adr/madr/blob/2.1.2/template/template.md)).
@@ -202,12 +202,26 @@ Step 5 before adding any inline suppression comment near them.
 npx madr-lint --format json <adrDir>/<new-file>.md
 ```
 
+If the first pass reports anything, try `--fix` before hand-editing —
+`madr/status-enum` and `madr/date-iso8601` autofix, so a curated typo like
+`depricated` (→ `deprecated`) can repair itself:
+
+```bash
+npx madr-lint --fix <adrDir>/<new-file>.md
+```
+
+Note `madr/status-enum`'s fix only applies to a v2 body-list `* Status:`
+value — a frontmatter `status:` typo (the default v4 template from Step 4)
+has no body offset to rewrite, so it always needs a manual edit regardless
+of `--fix`.
+
 Read `summary.total`. If it's `0`, you're done. Otherwise, read
 `results[]` — each entry has `messageId`, `message`, `data`, `suggestion`
-(a machine-actionable fix, or `null` when the rule has none), and `docsUrl`
-— prefer `suggestion` over hand-rolling a fix from `data` when it's
-present — fix the file, and re-run. Do not stop until `summary.total` is
-`0` for this file, or exit code is `0` for a plain `npx madr-lint <file>`
+(a machine-actionable fix, or `null` when the rule has none), `docsUrl`, and
+`fixable` (whether `--fix` could repair it — `false` here means it needs a
+manual edit) — prefer `suggestion` over hand-rolling a fix from `data` when
+it's present — fix the file, and re-run. Do not stop until `summary.total`
+is `0` for this file, or exit code is `0` for a plain `npx madr-lint <file>`
 run.
 
 Two things that commonly trip this up, both confirmed during dogfooding:
@@ -250,4 +264,5 @@ documents.
 |---|---|
 | `npx madr-lint --format json <file>` | validate one new file |
 | `npx madr-lint --format json <adrDir>` | validate the whole collection (needed for cross-file rules) |
+| `npx madr-lint --fix <file>` | auto-repair what's mechanically fixable before hand-editing the rest |
 | `npx madr-lint <file>` | human-readable re-check before finishing |

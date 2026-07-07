@@ -40,6 +40,11 @@ non‑broken links.
     Run it from the command line, call it programmatically, or drop it into CI
     as a GitHub Action. Text, JSON, SARIF, and GitHub annotation reporters.
   </Card>
+  <Card title="Autofix" icon="pencil">
+    `--fix` / `--fix-dry-run` mechanically repair the violations that have a
+    safe, unambiguous correction — a misspelled status, a malformed date, a
+    one-sided `supersedes` link.
+  </Card>
   <Card title="Gradual adoption" icon="add-document">
     Inline `madr-lint-disable` suppression comments for one-off exceptions, and
     a baseline file to snapshot legacy violations so only new ones fail CI.
@@ -49,11 +54,17 @@ non‑broken links.
 ## Quick look
 
 ```bash
+# scaffold a config — detects your ADR directory and MADR version
+npx madr-lint init
+
 # lint the ADRs in your configured adrDir (default: docs/adr)
 npx madr-lint
 
 # or point it at explicit paths
 npx madr-lint docs/adr
+
+# auto-repair what's mechanically fixable
+npx madr-lint --fix
 
 # machine-readable output for CI
 npx madr-lint --format sarif

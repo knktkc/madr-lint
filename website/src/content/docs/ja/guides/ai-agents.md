@@ -105,19 +105,26 @@ npx madr-lint --format json
       "message": "Missing required section: \"Consequences\"",
       "suggestion": "add a \"## Consequences\" heading to the document body",
       "docsUrl": "https://knktkc.github.io/madr-lint/rules/required-sections/",
+      "fixable": false,
       "data": { "section": "Consequences", "found": ["Context and Problem Statement", "Decision Outcome"] }
     }
   ]
 }
 ```
 
-上記は、本稿執筆時点で最新の公開バージョンである **v0.3.0** が実際に出力する形です —
+上記は、本稿執筆時点で最新の公開バージョンである **v0.4.0** が実際に出力する形です —
 `path`、`ruleName`、`messageId`、`severity`、`message`、ルール固有の `data`
-オブジェクトに加え、各 result にさらに 2 つのフィールドが含まれます:
-`suggestion`（機械的に適用できる修正内容。ルールが定義していない場合は `null`）と
-`docsUrl`（ルールのドキュメントページ）です。`data` から自前で修正メッセージを
-組み立てるより `suggestion` を読む方を優先してください。上記の 2 つのスキルは
-いずれもこの現在公開されている形に基づいて書かれています。
+オブジェクトに加え、各 result にさらに 3 つのフィールドが含まれます:
+`suggestion`（機械的に適用できる修正内容。ルールが定義していない場合は `null`）、
+`docsUrl`（ルールのドキュメントページ）、そして `fixable`（`--fix` でこの診断を
+機械的に修復できるかどうか — `madr/required-sections` にはオートフィックスがないため
+上記の例では `false`）です。`data` から自前で修正メッセージを組み立てるより
+`suggestion` を読む方を優先してください。上記の 2 つのスキルはいずれもこの現在
+公開されている形に基づいて書かれています。
+
+`--fix`（または `--fix-dry-run` でのプレビュー）を付けて実行すると、`summary` に
+今回の実行で修復した診断の件数を表す `fixed` が追加されます。例:
+`"summary": { "total": 1, "errors": 1, "warnings": 0, "baselineHidden": 0, "fixed": 1 }`。
 
 詳しいレポーターのリファレンスは [CLI](/ja/guides/cli/#json) ガイド、
 CLI を呼び出す代わりにライブラリとして使う方法は
