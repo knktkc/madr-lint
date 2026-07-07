@@ -107,9 +107,10 @@ npx madr-lint init --dir services/api/docs/adr
 npx madr-lint init --json
 ```
 
-`--json` のペイロードは `configPath`、`configFormat`、`adrDir`、
+`--json` のペイロードは `written`、`configPath`、`configFormat`、`adrDir`、
 `adrDirSource`（`detected` / `fallback` / `override`）、`madrVersion`、
-`filesChecked`、`errors`、`warnings`、`suggestUpdateBaseline` を報告します。
+`filesChecked`、`errors`、`warnings`、`suggestUpdateBaseline`、
+`docsUrl`（はじめるガイドの URL）を報告します。
 
 ## レポーター
 

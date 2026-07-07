@@ -113,9 +113,10 @@ npx madr-lint init --dir services/api/docs/adr
 npx madr-lint init --json
 ```
 
-The `--json` payload reports `configPath`, `configFormat`, `adrDir`,
-`adrDirSource` (`detected` / `fallback` / `override`), `madrVersion`,
-`filesChecked`, `errors`, `warnings`, and `suggestUpdateBaseline`.
+The `--json` payload reports `written`, `configPath`, `configFormat`,
+`adrDir`, `adrDirSource` (`detected` / `fallback` / `override`),
+`madrVersion`, `filesChecked`, `errors`, `warnings`,
+`suggestUpdateBaseline`, and `docsUrl` (the getting-started guide).
 
 ## Reporters
 
