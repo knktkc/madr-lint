@@ -68,10 +68,12 @@ Fixed — normalized to the canonical configured value:
 
 | Before | After | Kind |
 |---|---|---|
-| `- Status: Accepted` | `- Status: accepted` | case difference |
+| `- Status: Accepted` | `- Status: accepted` | case difference † |
 | `- Status: depricated` | `- Status: deprecated` | curated misspelling |
 | `- Status: superceded by ADR-0042` | `- Status: superseded by ADR-0042` | prefix typo (tail preserved) |
-| `- Status: Superseded By ADR-0042` | `- Status: superseded by ADR-0042` | prefix case (tail preserved) |
+| `- Status: Superseded By ADR-0042` | `- Status: superseded by ADR-0042` | prefix case (tail preserved) † |
+
+† Case-only corrections apply under `caseSensitive: true`. With the default `caseSensitive: false`, a value that differs only by case is **valid** — it is never flagged, so there is nothing to fix. The misspelling rows (`depricated`, `superceded by …`) are invalid regardless of case setting and are fixed by default.
 
 **Not** fixed (reported, never rewritten):
 

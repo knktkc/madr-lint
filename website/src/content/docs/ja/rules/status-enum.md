@@ -68,10 +68,12 @@ status: pending
 
 | 修正前 | 修正後 | 種類 |
 |---|---|---|
-| `- Status: Accepted` | `- Status: accepted` | 大文字小文字の違い |
+| `- Status: Accepted` | `- Status: accepted` | 大文字小文字の違い † |
 | `- Status: depricated` | `- Status: deprecated` | 収録済みのスペルミス |
 | `- Status: superceded by ADR-0042` | `- Status: superseded by ADR-0042` | プレフィックスの誤字（末尾は保持） |
-| `- Status: Superseded By ADR-0042` | `- Status: superseded by ADR-0042` | プレフィックスの大文字小文字（末尾は保持） |
+| `- Status: Superseded By ADR-0042` | `- Status: superseded by ADR-0042` | プレフィックスの大文字小文字（末尾は保持） † |
+
+† 大文字小文字のみの修正は `caseSensitive: true` の場合に適用されます。デフォルトの `caseSensitive: false` では、大文字小文字だけが異なる値は**有効**であり、そもそも報告されないため修正の対象になりません。スペルミスの行（`depricated`, `superceded by …`）は大文字小文字の設定に関係なく無効な値なので、デフォルトのまま修正されます。
 
 修正され**ない**（報告のみ、決して書き換えない）:
 
