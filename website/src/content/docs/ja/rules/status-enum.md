@@ -60,6 +60,26 @@ status: pending
 
 `invalidStatus` を発行します（`pending` は許可された列挙値に含まれません）。
 
+## 🔧 自動修正
+
+このルールは **自動修正可能**（`madr-lint --fix`）ですが、対象は **v2 本文リスト**の status 値のみで、値が**設定された列挙値**へ曖昧さなく対応づけられる場合に限ります。frontmatter の値は書き換えません（YAML を意識した編集は対象外）。
+
+修正される（設定された正規の値に正規化）:
+
+| 修正前 | 修正後 | 種類 |
+|---|---|---|
+| `- Status: Accepted` | `- Status: accepted` | 大文字小文字の違い |
+| `- Status: depricated` | `- Status: deprecated` | 収録済みのスペルミス |
+| `- Status: superceded by ADR-0042` | `- Status: superseded by ADR-0042` | プレフィックスの誤字（末尾は保持） |
+| `- Status: Superseded By ADR-0042` | `- Status: superseded by ADR-0042` | プレフィックスの大文字小文字（末尾は保持） |
+
+修正され**ない**（報告のみ、決して書き換えない）:
+
+- **曖昧な修正** — ある値が 2 つの設定値に case-fold で一致する、または 2 つのプレフィックスに一致する場合は修正しません。
+- **未設定のターゲット** — シノニムは `values` / `prefixValues` に実在する値・プレフィックスにのみ対応づけます。`superseded by` を外していれば `superceded by …` は修正しません。
+- **一意なターゲットのない純粋な誤字** — 例: `acccepted`（どの許可値にも case-fold で一致しない）。
+- **frontmatter 由来の値** — YAML frontmatter 内の `status:`（手動で修正してください）。
+
 ## オプション
 
 | オプション | 型 | デフォルト | 説明 |

@@ -168,6 +168,20 @@ Fixing composes with the other flags:
 - The cache is bypassed while fixing; a fixed file re-enters the normal pipeline
   on the next run with a fresh content hash.
 
+Rules that currently offer fixes:
+
+- [`madr/status-enum`](/rules/status-enum/) — normalizes a v2 body-list status
+  onto the configured enum (case, curated misspellings, prefix case/typo).
+- [`madr/date-iso8601`](/rules/date-iso8601/) — normalizes an unambiguous v2
+  body-list date (year-first numeric, English named-month) to `YYYY-MM-DD`.
+- [`madr/supersedes-bidirectional`](/rules/supersedes-bidirectional/) — inserts a
+  missing back-reference into the target ADR's existing frontmatter (the one
+  cross-file fix).
+
+Each rule fixes only the unambiguous cases and leaves the rest reported — the
+rule's page spells out exactly what it will and will not touch. In particular,
+values in YAML **frontmatter** are never rewritten today.
+
 ## Reporters
 
 ### `text` (default)
