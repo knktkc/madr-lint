@@ -8,7 +8,7 @@ This file is auto-attached to every Claude Code session in this repository. It c
 
 - **Distribution**: npm CLI, library, GitHub Action
 - **License**: MIT
-- **Status**: Pre-1.0 development. Currently Private repo, going Public at v0.1.0.
+- **Status**: Pre-1.0 development. Public repo, published to npm since v0.1.0.
 
 ## Architecture principles (locked since v0.1.0)
 
@@ -70,6 +70,7 @@ Linters live or die by speed. Performance is treated as a feature, not an aftert
 - **Severity**: every rule supports `error | warn | off`. Defaults set in `recommended` preset.
 - **Options**: every rule accepts an options object validated by an AJV schema (`strict: true`). Every key in `defaultOptions` MUST be declared in `schema.json` `properties` (we use `additionalProperties: false`).
 - **Suggestions**: `meta.suggestions` is a declarative map parallel to `meta.messages`, keyed by the same messageIds and interpolated identically (same `{{placeholder}}` + `data`). Add a suggestion wherever a mechanical remediation exists; omit the messageId when the fix is contextual (e.g., `invalidStatus` already lists the allowed values in its message, so it has none).
+- **Fixable rules** (ADR-0008): a rule that can mechanically repair a violation declares `meta.fixable: 'code'` and attaches a lazy `fix: (fixer) => TextEdit | TextEdit[] | null` thunk to `context.report(...)`. Fixes are raw-text offset edits in body coordinates — `context.metadataValueLoc[field]` supplies the exact value range for v2 list-sourced metadata values; frontmatter-sourced values get no fix (no body offset). Attach a fix only when the repair is unambiguous; decline by omitting `fix` or returning `null`. Project rules may attach fixes too — the diagnostic's `path` names the target file. Examples: `madr/status-enum`, `madr/date-iso8601`, `madr/supersedes-bidirectional`.
 - **MADR version awareness**: rules respect the configured `madrVersion` (`v2 | v3 | v4 | auto`). Use `versionMap[version]` for spec lookup. Cite the actual MADR template URL in `spec.md` per version — do not infer section names from memory.
 - **Rule shapes**: a rule has one of four shapes — pick the simplest that fits. Shapes A/B/C are per-file rules (`Rule<TOptions>` with `create()`); Shape D is the cross-file project rule (`ProjectRule<TOptions>` with `check()`):
   - **A. filename / metadata-only** — `create()` reports directly from `context.file.path`, returns void. Example: `madr/filename-format`.
@@ -82,7 +83,7 @@ Linters live or die by speed. Performance is treated as a feature, not an aftert
 
 ```
 src/
-├── core/          # Runner, parser, reporter, cache, baseline, suppression, severity resolver
+├── core/          # Runner, parser, reporter, cache, baseline, suppression, fix (autofix applier), init, severity resolver
 ├── rules/         # One subdir per rule: index.ts + schema.json + spec.md
 ├── configs/       # Preset configs (recommended.ts)
 ├── versions/      # MADR v2/v3/v4 spec maps
@@ -156,3 +157,4 @@ ADRs use **MADR v4 frontmatter** format (this project's recommended target).
 - ADR-0005: Project rule API design (M2)
 - ADR-0006: v2 bold-list metadata bridge (M4)
 - ADR-0007: Baseline fingerprint design (M2)
+- ADR-0008: Autofix via raw-text offset edits (v0.4.0)

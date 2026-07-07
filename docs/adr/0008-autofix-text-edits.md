@@ -65,6 +65,11 @@ Adopted: **Option 1 — raw-text offset edits.**
   and gray-matter never mutates the body, so the body is always an exact suffix
   (verified across CRLF and leading-newline inputs). The `Fixer` is the single
   translation point — rules and the applier never mix coordinate systems.
+- The parser is the source of the body offsets a fix targets: `ParsedFile.metadataValueLoc`
+  (exposed to rules as `context.metadataValueLoc`) gives the exact `{ start, end }`
+  body range of a `metadata` value, when that value is v2-list-sourced and a
+  single contiguous text token — the offset a rule's `fix` thunk passes to
+  `fixer.replaceRange`.
 - `Diagnostic.fixable: boolean` is a required, **durable** field (serialized to
   the cache and json output; the text reporter renders a dim `🔧 fixable`
   marker). The live `fix` thunk is **transient** — a closure, dropped by JSON

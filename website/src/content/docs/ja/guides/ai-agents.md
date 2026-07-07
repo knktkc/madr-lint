@@ -79,11 +79,11 @@ curl -fsSL -o .claude/skills/new-adr/SKILL.md --create-dirs \
 
 長期的な自然な解は `npx madr-lint init --skills` で、設定をスキャフォールドする際に
 両方の `SKILL.md` を導入先リポジトリの `.claude/skills/` にコピーするという形です。
-これは [#30](https://github.com/knktkc/madr-lint/issues/30)（`madr-lint init`、
-未実装）に紐づいています。`init` 自体がまだ存在しない以上、`--skills` フラグを
-生やす土台がないため、その依存関係の完了を待つのではなく、当面はこのリポジトリの
+[`madr-lint init`](/ja/guides/getting-started/) 自体は実装済みです
+（[#30](https://github.com/knktkc/madr-lint/issues/30)）— ただし `--skills`
+フラグはまだないため、そのフラグの完成を待つのではなく、当面はこのリポジトリの
 `skills/` 配下に単純にコピー可能なファイルとして公開しています。これは専用の ADR を
-起こすほどではない小さな決定なので、この場に記録しておきます。`init` が実装された
+起こすほどではない小さな決定なので、この場に記録しておきます。`--skills` が実装された
 時点で見直してください。
 
 ## プログラムから利用するための `--format json`

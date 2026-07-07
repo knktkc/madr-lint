@@ -80,13 +80,12 @@ agent harness supports loading skills from an arbitrary path instead of only
 
 The natural long-term answer is `npx madr-lint init --skills`, copying both
 `SKILL.md` files into the consumer's `.claude/skills/` as part of scaffolding
-the config — tracked under
-[#30](https://github.com/knktkc/madr-lint/issues/30) (`madr-lint init`, not
-yet shipped). Until `init` exists at all, there is nothing for a `--skills`
-flag to hang off, so this repo ships the skills as plain, copyable files
-under `skills/` in the meantime rather than blocking on that dependency. This
+the config. [`madr-lint init`](/guides/getting-started/) itself has shipped
+([#30](https://github.com/knktkc/madr-lint/issues/30)) — but without a
+`--skills` flag, so this repo ships the skills as plain, copyable files
+under `skills/` in the meantime rather than blocking on that flag. This
 is a small enough decision to record here rather than in a dedicated ADR:
-revisit it when `init` lands.
+revisit it when `--skills` lands.
 
 ## `--format json` for programmatic consumption
 

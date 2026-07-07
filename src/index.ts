@@ -28,7 +28,9 @@ export type {
 // and #29's project-rule fixes reuse `applyEdits` + `makeFixer`.
 export {
   applyEdits,
+  applyEditsCounted,
   collectFixes,
+  collectProjectFixes,
   fixFileContent,
   makeFixer,
   unifiedDiff,

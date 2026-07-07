@@ -34,6 +34,10 @@ Per-rule deliverables:
   remediation — a map parallel to `meta.messages`, keyed the same way and
   interpolated identically. Omit a messageId when the fix is contextual
   (see `CLAUDE.md` "Rule authoring conventions").
+- Where a violation is mechanically repairable, `meta.fixable: 'code'` plus a
+  lazy `fix` thunk on `context.report(...)` (raw-text offset edits — see
+  `docs/adr/0008-autofix-text-edits.md`). Attach a fix only when the repair
+  is unambiguous; a diagnostic without a fix is fine, a wrong fix is not.
 - `tests/rules/<name>.test.ts` with hard assertions on diagnostic data shape (NEVER bare `toMatchInlineSnapshot()`)
 - `tests/fixtures/<name>/{valid,invalid}/*.md` (per-file rules) or inline files (project rules)
 - `benchmarks/<name>/bench.ts`
@@ -79,6 +83,7 @@ Existing ADRs:
 - ADR-0005: Project rule API design (cross-file rules)
 - ADR-0006: v2 bold-list metadata bridge (combined `context.metadata` field)
 - ADR-0007: Baseline fingerprint design (gradual adoption)
+- ADR-0008: Autofix via raw-text offset edits (`--fix`)
 
 ## Sign-off (DCO)
 

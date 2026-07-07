@@ -159,14 +159,29 @@ A rule opts into autofix by declaring `meta.fixable: 'code'` and attaching a laz
 `fix` thunk to `context.report(...)`. The thunk works in **body** (mdast)
 coordinates — the same space as `node.position.*.offset` — and the `Fixer`
 translates to whole-file offsets, so a fix is correct even when frontmatter was
-stripped:
+stripped.
+
+The offset range a fix targets usually comes from `context.metadataValueLoc`:
+`context.metadataValueLoc[field]` yields a body-coordinate `{ start, end }` for
+a `metadata` key whose effective value came from the v2 leading list **and**
+was a single contiguous text token (no inline markup) — verified by slicing
+the body back to the exact value. A key whose effective value came from
+frontmatter instead is **absent** (frontmatter is stripped before parsing, so
+it has no body offset and needs YAML-aware rewriting instead) — so a fix
+should only attach when the range exists:
 
 ```typescript
+const valueRange = context.metadataValueLoc?.status;
+
 context.report({
   messageId: 'invalidStatus',
   data: { status, allowed },
-  // Only attach a fix when the repair is mechanical; return null to decline.
-  fix: (fixer) => fixer.replaceRange([valueStart, valueEnd], 'accepted'),
+  // Only attach a fix when metadataValueLoc has a range to target;
+  // omit `fix` (or return null from the thunk) to decline.
+  ...(valueRange && {
+    fix: (fixer) =>
+      fixer.replaceRange([valueRange.start, valueRange.end], 'accepted'),
+  }),
 });
 ```
 
@@ -192,6 +207,14 @@ suppression- and baseline-filtered), applies them, re-lints, and repeats up to
 `MAX_FIX_PASSES` (10). It returns `{ fixedContent, remaining, changed, passes,
 applied }`.
 
+For **cross-file** (project-rule) fixes, `collectProjectFixes(diagnostics,
+contentByPath)` groups the fix edits by the target file's `path` — project
+fixes operate in whole-file coordinates (they may edit YAML frontmatter), and
+at most one fix lands per file per pass. `applyEditsCounted(content, edits)`
+is the counting variant of `applyEdits`, returning `{ text, applied }` where
+`applied` is the number of edits that actually landed after overlap and
+bounds filtering.
+
 ## Exports
 
 | Export | Description |
@@ -200,8 +223,10 @@ applied }`.
 | `extractListMetadata` | Extract v2 body-list metadata from an mdast tree |
 | `frontmatterOffset` | Length gray-matter strips (`fileOffset = bodyOffset + this`) |
 | `applyEdits` | Apply `TextEdit`s to a string (sorted, overlaps dropped, one pass) |
+| `applyEditsCounted` | `applyEdits` variant returning `{ text, applied }` (edits that landed) |
 | `makeFixer` | Build a `Fixer` that translates body offsets to whole-file `TextEdit`s |
 | `collectFixes` | Invoke diagnostics' `fix` thunks → whole-file `TextEdit[]` |
+| `collectProjectFixes` | Collect project-rule (cross-file) fixes, grouped by target file path |
 | `fixFileContent` | Run the per-file autofix fixpoint against a `lint` callback |
 | `unifiedDiff` | Render a unified diff between two strings (used by `--fix-dry-run`) |
 | `MAX_FIX_PASSES` | Fixpoint iteration cap (10) |
