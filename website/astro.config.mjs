@@ -66,9 +66,10 @@ export default defineConfig({
         // plugin filters content-collection docs by Starlight's `defaultLocale`
         // (`root` = English here), so llms-full.txt is EN-only: the /ja/ tree is
         // a translation of the same content, and duplicating it would bloat the
-        // file without adding information for an LLM. Pinned to 0.10.x (last
-        // release supporting Astro 6 / Starlight 0.40 — 0.11.0 requires Astro 7
-        // / Starlight >=0.41).
+        // file without adding information for an LLM. Pinned to 0.11.x, which
+        // requires Astro ^7.0.0 / Starlight >=0.41 — bumped in lockstep with
+        // astro + @astrojs/starlight in the Astro 7 upgrade (superseded
+        // dependabot #81, which bumped astro alone and broke the build).
         starlightLlmsTxt({
           projectName: 'madr-lint',
           description:
