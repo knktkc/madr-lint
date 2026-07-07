@@ -30,6 +30,24 @@ yarn add -D madr-lint
 npx madr-lint --help
 ```
 
+## 設定ファイルをスキャフォールドする
+
+最も手早く始める方法は `init` です。ADR ディレクトリ（`docs/adr`、
+`docs/decisions`、`doc/adr`、`adr`、`docs/architecture/decisions`）、既存
+ADR の主要な MADR バージョン、プロジェクトが TypeScript を使っているかどうかを
+検出し、`madr-lint:recommended` を継承する設定ファイルを書き出します。
+
+```bash
+npx madr-lint init
+```
+
+`init` は非対話型です。すべての判断はファイルシステムのヒューリスティック
+またはフラグで決まるため、CI やパイプの中でも安全に実行できます。既存の設定
+ファイルは上書きしません（置き換えるには `--force` を渡します）。また、検出
+したディレクトリの初回 lint で違反が見つかった場合は、レガシーな負債が導入の
+妨げにならないよう `--update-baseline` を案内します。`--dir` と `--json` に
+ついては [CLI ガイド](/ja/guides/cli/#madr-lint-init) を参照してください。
+
 ## 最初の lint を実行する
 
 デフォルトでは、`madr-lint` は `adrDir` として設定されたディレクトリ
@@ -59,8 +77,9 @@ docs/adr/0003-use-postgres.md
 ## 推奨ルールを有効にする
 
 初期状態では、ルールが設定されていない場合、CLI は `madr-lint:recommended`
-プリセットにフォールバックします。これを明示的にする（そしてカスタマイズを始める）
-には、設定ファイルを作成します。
+プリセットにフォールバックします。上記の `npx madr-lint init` はこれを明示的な
+設定として書き出します。手で設定ファイルを作成する（そしてカスタマイズを始める）
+場合は次のようにします。
 
 ```typescript
 // madr-lint.config.ts

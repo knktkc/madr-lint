@@ -27,7 +27,7 @@ export interface ResolvedConfig {
  * and dependency-free path. The other extensions go through `jiti`,
  * which transpiles TS/ESM/CJS on the fly.
  */
-const CONFIG_FILES = [
+export const CONFIG_FILES = [
   '.madrlintrc.json',
   '.madrlintrc.ts',
   '.madrlintrc.mts',

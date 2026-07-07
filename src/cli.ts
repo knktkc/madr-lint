@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { relative, resolve, sep } from 'node:path';
 import { defineCommand, runMain } from 'citty';
+import { initCommand } from './commands/init.js';
 import {
   baselineHiddenSummary,
   baselineMalformedWarning,
@@ -293,4 +294,15 @@ const main = defineCommand({
   },
 });
 
-await runMain(main);
+// Manual subcommand dispatch. citty's `subCommands` field cannot coexist with
+// the free-form `paths` positional: runCommand() treats ANY leading non-flag
+// token as a subcommand name once `subCommands` is set, so `madr-lint docs/adr`
+// would die with "Unknown command docs/adr" (verified against citty 0.2.2).
+// Only the literal first raw arg `init` selects the subcommand; every other
+// invocation flows to the default lint command exactly as before.
+const rawArgs = process.argv.slice(2);
+if (rawArgs[0] === 'init') {
+  await runMain(initCommand, { rawArgs: rawArgs.slice(1) });
+} else {
+  await runMain(main);
+}

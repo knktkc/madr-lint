@@ -86,6 +86,7 @@ src/
 ├── rules/         # One subdir per rule: index.ts + schema.json + spec.md
 ├── configs/       # Preset configs (recommended.ts)
 ├── versions/      # MADR v2/v3/v4 spec maps
+├── commands/      # citty subcommands (init)
 └── cli.ts         # citty entry point
 
 tests/
