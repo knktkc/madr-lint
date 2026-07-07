@@ -1,16 +1,17 @@
 ---
 name: adopt-madr-lint
-description: Roll out madr-lint on an existing repository that already has (or is about to have) Architecture Decision Records. Detects the ADR directory, installs madr-lint, writes a config, runs a first lint pass, snapshots legacy debt into a baseline so only new violations fail the build, wires up the GitHub Action, and optionally triages the worst offenders with inline suppression. Use for phrases like "adopt madr-lint", "add ADR linting to this repo", "roll out madr-lint", "set up madr-lint in CI", "onboard madr-lint gradually", "baseline our ADR violations", or "wire up madr-lint on GitHub Actions".
+description: Roll out madr-lint on an existing repository that already has (or is about to have) Architecture Decision Records. Installs madr-lint, scaffolds a config with `madr-lint init`, runs a first lint pass, autofixes what's mechanically safe, snapshots remaining legacy debt into a baseline so only new violations fail the build, wires up the GitHub Action, and optionally triages the worst offenders with inline suppression. Use for phrases like "adopt madr-lint", "add ADR linting to this repo", "roll out madr-lint", "set up madr-lint in CI", "onboard madr-lint gradually", "baseline our ADR violations", or "wire up madr-lint on GitHub Actions".
 allowed-tools: Bash(npm:*), Bash(pnpm:*), Bash(yarn:*), Bash(npx:*), Bash(node:*), Bash(git add:*), Bash(git status:*), Bash(git commit:*), Bash(ls:*), Bash(find:*), Bash(grep:*), Bash(mkdir:*), Bash(cat:*), Read, Write, Edit
 ---
 
 # adopt-madr-lint — roll out madr-lint on an existing repo
 
-Grounded against **madr-lint@0.3.0** (the latest published npm release as of
-this writing). `madr-lint init` (tracked as
-[#30](https://github.com/knktkc/madr-lint/issues/30)) has not shipped yet, so
-this skill writes the config file by hand — step 3 becomes a single command
-once `init` ships. See "What changes once #30 ships" at the end.
+Grounded against **madr-lint@0.4.0** (the latest published npm release as of
+this writing). `madr-lint init`
+([#30](https://github.com/knktkc/madr-lint/issues/30)) has shipped — it
+auto-detects the ADR directory and dominant MADR version, writes the config,
+and runs an initial lint pass in one command, so this skill invokes it
+directly instead of hand-writing a config file.
 
 This procedure is mechanical: follow it top to bottom. The only judgment
 calls are explicitly marked **DECISION POINT**.
@@ -42,42 +43,7 @@ node --version
 If it's below 22, stop and tell the user to upgrade (or use whatever
 Node-version manager the repo already uses) before continuing.
 
-### Step 1: Detect the ADR directory
-
-Scan for files matching the `NNNN-*.md` convention in common locations first,
-then fall back to a repo-wide scan. Use `find`, not a raw shell glob, for the
-per-directory check — under zsh (the macOS default shell, `NOMATCH` is on by
-default) a glob like `ls "$d"/[0-9][0-9][0-9][0-9]-*.md` throws `no matches
-found` and aborts instead of silently failing, even with `2>/dev/null` on the
-command, because the shell errors while *expanding* the glob, before `ls`
-ever runs. `find` does its own pattern matching and stays silent either way:
-
-```bash
-for d in docs/adr docs/decisions adr; do
-  if [ -d "$d" ] && find "$d" -maxdepth 1 -type f -name '[0-9][0-9][0-9][0-9]-*.md' 2>/dev/null | grep -q .; then
-    echo "found: $d"
-  fi
-done
-
-# Fallback: scan the whole tree (skip dependency/VCS dirs) if none of the
-# common locations hit.
-find . -not -path '*/node_modules/*' -not -path '*/.git/*' -type f \
-  | grep -E '/[0-9]{4}-.*\.md$' \
-  | sed 's#/[^/]*$##' \
-  | sort -u
-```
-
-**DECISION POINT**:
-- Exactly one directory found → that's `adrDir`.
-- Multiple directories found (monorepo) → note all of them; you'll either
-  pick the primary one for `adrDir` and pass the rest as explicit CLI paths,
-  or lint them as separate config roots. Ask the user if it's not obvious
-  from the repo layout.
-- None found → this is a **greenfield** adoption, not a legacy one. Default
-  `adrDir` to `docs/adr` (madr-lint's own default) and skip straight to
-  Step 3; there's no "legacy debt" step to run.
-
-### Step 2: Detect the package manager and install
+### Step 1: Detect the package manager and install
 
 ```bash
 if [ -f pnpm-lock.yaml ]; then PM=pnpm
@@ -107,27 +73,93 @@ Verify it landed and check the version actually installed:
 npx madr-lint --version
 ```
 
-### Step 3: Write a minimal config
+### Step 2: Scaffold the config with `madr-lint init`
 
-Until `madr-lint init` ships (#30), write `.madrlintrc.json` by hand at the
-repo root, using the `adrDir` from Step 1:
+```bash
+npx madr-lint init
+```
+
+This detects the ADR directory (checking `docs/adr`, `docs/decisions`, and
+`adr` first, then falling back to a repo-wide scan), infers the dominant
+MADR version from whatever ADRs it finds, writes `.madrlintrc.json` (or a TS
+config if the repo looks TS-first), and runs an initial lint pass:
+
+```text
+Wrote .madrlintrc.json
+
+  ADR directory: docs/adr (detected)
+
+Next steps:
+  - Lint your ADRs: npx madr-lint
+  - The initial lint found 342 error(s) and 17 warning(s) across 53 file(s).
+    Adopting on a legacy repo? Snapshot the debt so only new violations fail the build:
+      npx madr-lint --update-baseline
+  - Docs: https://knktkc.github.io/madr-lint/guides/getting-started/
+```
+
+Machine-readable variant (`--json`) — useful for deciding programmatically
+whether this is a legacy-debt adoption:
+
+```bash
+npx madr-lint init --json
+```
 
 ```json
 {
-  "extends": ["madr-lint:recommended"],
-  "madrVersion": "auto",
-  "adrDir": "docs/adr"
+  "written": true,
+  "configPath": ".madrlintrc.json",
+  "configFormat": "json",
+  "adrDir": "docs/adr",
+  "adrDirSource": "detected",
+  "madrVersion": "v3",
+  "filesChecked": 53,
+  "errors": 342,
+  "warnings": 17,
+  "suggestUpdateBaseline": true,
+  "docsUrl": "https://knktkc.github.io/madr-lint/guides/getting-started/"
 }
 ```
 
-Replace `"docs/adr"` with the directory actually detected. `madrVersion:
-"auto"` is safe by default — it detects v2 (body-list) vs v3/v4 (frontmatter)
-per file, so a repo with mixed-vintage ADRs doesn't need a single global
-setting.
+`adrDirSource` is `"detected"` when it found ADRs at a known location,
+`"fallback"` when it defaulted to `docs/adr` without finding any (greenfield,
+or a directory layout it doesn't recognize — see the monorepo case below).
+`madrVersion` is the concrete version it inferred from existing files
+(`v2`/`v3`/`v4`), or `auto` when there was nothing to infer from yet.
 
-### Step 4: Run the first lint pass
+**DECISION POINT — single directory vs. monorepo:** `init`'s detection only
+checks the common top-level locations; it does **not** search nested
+per-service directories, and it silently falls back to the `docs/adr`
+default rather than erroring when it can't find a single canonical one.
+Before running it, do a quick repo-wide scan so a monorepo that actually
+keeps ADRs elsewhere doesn't get a config pointing at a directory that
+doesn't exist:
 
-Run both a human-readable pass and a JSON pass — JSON is what you parse
+```bash
+find . -not -path '*/node_modules/*' -not -path '*/.git/*' -type f \
+  | grep -E '/[0-9]{4}-.*\.md$' \
+  | sed 's#/[^/]*$##' \
+  | sort -u
+```
+
+- **Exactly one directory, or none at all** (a greenfield adoption with no
+  ADRs yet) → bare `npx madr-lint init` is correct; it detects the same
+  answer (or the `docs/adr` default when there's nothing to find yet).
+- **Multiple directories found (monorepo)** → pick the primary one and pass
+  it explicitly so `init` doesn't fall back to the default:
+  ```bash
+  npx madr-lint init --dir services/api/docs/adr
+  ```
+  Note the other directories; you'll lint them as explicit CLI paths (or
+  separate config roots — see Step 7's monorepo note) later. Ask the user
+  if the primary isn't obvious from the repo layout.
+- **A config already exists** (re-running this skill, or the repo already
+  has one) → `init` refuses to overwrite it and exits non-zero; pass
+  `--force` if you deliberately want to regenerate it.
+
+### Step 3: Run the full first lint pass
+
+`init`'s own summary is a count, not the diagnostic detail. Run both a
+human-readable pass and a JSON pass — JSON is what you parse
 programmatically, text is what you show the user:
 
 ```bash
@@ -135,25 +167,51 @@ npx madr-lint
 npx madr-lint --format json
 ```
 
-> **0.3.0 JSON shape** — each entry in `results[]` has `path`, `ruleName`,
-> `messageId`, `severity`, `message`, `data`, and now `suggestion` (a
-> machine-actionable fix, or `null` when the rule has none) and `docsUrl`
-> (the rule's documentation page). Prefer surfacing `suggestion` to the user
-> over hand-rolling a fix message from `data`; fall back to looking the rule
-> up at `docsUrl` (or
+> **0.4.0 JSON shape** — each entry in `results[]` has `path`, `ruleName`,
+> `messageId`, `severity`, `message`, `data`, `suggestion` (a
+> machine-actionable fix, or `null` when the rule has none), `docsUrl` (the
+> rule's documentation page), and `fixable` (whether `--fix` can
+> mechanically repair this diagnostic). Prefer surfacing `suggestion` to the
+> user over hand-rolling a fix message from `data`; fall back to looking the
+> rule up at `docsUrl` (or
 > `https://knktkc.github.io/madr-lint/rules/<rule-name-without-madr/>/`) when
 > `suggestion` is `null`.
 
 Read `summary.total` (or the text reporter's final `N errors` / `N warnings`
 line).
 
+### Step 4: Run `--fix` before deciding what to do with the rest
+
+`madr-lint` can mechanically repair violations from 3 of the 8 rules today
+(`madr/status-enum`, `madr/date-iso8601`, `madr/supersedes-bidirectional`).
+Do this now, before the fix-or-baseline decision in Step 5 — it shrinks the
+legacy debt to only what genuinely needs a human judgment call, so there's
+nothing to baseline that autofix could've repaired for free:
+
+```bash
+# Preview first — writes nothing, just shows the diff
+npx madr-lint --fix-dry-run
+
+# Apply
+npx madr-lint --fix
+```
+
+`--fix` mutates files in place; its exit code reflects what's *left* unfixed,
+not what it repaired, so exit `1` here is normal and expected on a repo with
+real remaining debt. Re-run `npx madr-lint --format json` afterward —
+`summary.fixed` reports how many diagnostics this pass repaired, and
+`results[]` now holds only what autofix couldn't touch (`fixable: false`, or
+occasionally a rule that declined an ambiguous correction — see each rule's
+docs page for when that happens).
+
 ### Step 5: DECISION POINT — fix now or baseline
 
-- **`summary.total` is small enough to fix in this session (rule of thumb:
-  under ~50 violations, or the team explicitly wants everything green
-  immediately)** → fix the violations directly (edit the offending
-  frontmatter/headings/filenames), re-run `npx madr-lint` until it exits 0,
-  and skip to Step 7 (there's no legacy debt to baseline).
+- **`summary.total` (post-autofix) is small enough to fix in this session
+  (rule of thumb: under ~50 violations, or the team explicitly wants
+  everything green immediately)** → fix the remaining violations directly
+  (edit the offending frontmatter/headings/filenames), re-run
+  `npx madr-lint` until it exits 0, and skip to Step 7 (there's no legacy
+  debt to baseline).
 - **Otherwise, or if some violations are individually expensive to fix right
   now** (e.g. renaming a file that's linked from elsewhere, or correcting a
   historical `date` you don't want to rewrite) → baseline them (Step 6) and
@@ -213,7 +271,7 @@ default.
 ### Step 7: Wire up CI
 
 Add a workflow using the composite action, pointed at the `adrDir` from
-Step 1:
+Step 2:
 
 ```yaml
 # .github/workflows/adr-lint.yml
@@ -245,8 +303,8 @@ Notes:
 - `actions/setup-node` must come **before** `knktkc/madr-lint@v0` — the
   action does not install Node itself.
 - The floating `v0` tag tracks the latest v0.x release; pin an exact tag
-  (`@v0.3.0`) for stricter reproducibility.
-- For production CI, prefer pinning `version: '0.3.0'` under `with:` over the
+  (`@v0.4.0`) for stricter reproducibility.
+- For production CI, prefer pinning `version: '0.4.0'` under `with:` over the
   default `latest` dist-tag, to protect against a hijacked `latest` publish.
 - To fail CI on any warning too, add `args: '--max-warnings 0'`.
 - For a monorepo with multiple ADR directories, set `path` to a
@@ -299,19 +357,16 @@ If you're suppressing the same rule across many files, that's a signal to
 change the rule's severity/options in `.madrlintrc.json` instead — inline
 directives are for one-off exceptions, not policy.
 
-## What changes once #30 (`madr-lint init`) ships
-
-Step 3 (writing `.madrlintrc.json` by hand) becomes `npx madr-lint init`,
-which is expected to auto-detect the ADR dir and dominant MADR version and
-write the config for you — Steps 1 and 3 collapse into one command. Steps
-2 and 4–8 are unaffected.
-
 ## Reference: commands used in this skill
 
 | Command | Effect |
 |---|---|
 | `npx madr-lint --version` | confirm the installed version |
+| `npx madr-lint init` | detect adrDir/MADR version, write a config, run an initial lint |
+| `npx madr-lint init --dir <dir>` | scaffold with an explicit ADR directory (monorepo) |
 | `npx madr-lint` | text lint of the configured `adrDir` |
-| `npx madr-lint --format json` | machine-readable lint (includes `suggestion`/`docsUrl` per result) |
+| `npx madr-lint --format json` | machine-readable lint (`suggestion`/`docsUrl`/`fixable` per result) |
+| `npx madr-lint --fix-dry-run` | preview autofixes as a diff; writes nothing |
+| `npx madr-lint --fix` | apply autofixes in place (`summary.fixed` in `--format json`) |
 | `npx madr-lint --update-baseline` | snapshot current violations, exit 0 |
 | `npx madr-lint --no-baseline` | audit everything, ignoring the baseline |

@@ -106,19 +106,26 @@ npx madr-lint --format json
       "message": "Missing required section: \"Consequences\"",
       "suggestion": "add a \"## Consequences\" heading to the document body",
       "docsUrl": "https://knktkc.github.io/madr-lint/rules/required-sections/",
+      "fixable": false,
       "data": { "section": "Consequences", "found": ["Context and Problem Statement", "Decision Outcome"] }
     }
   ]
 }
 ```
 
-The shape above is what **v0.3.0** (the latest published release at the time
+The shape above is what **v0.4.0** (the latest published release at the time
 of writing) actually emits — `path`, `ruleName`, `messageId`, `severity`,
-`message`, a rule-specific `data` object, and two more fields on every
+`message`, a rule-specific `data` object, and three more fields on every
 result: `suggestion` (a machine-actionable fix, or `null` when the rule has
-none) and `docsUrl` (the rule's documentation page). Prefer reading
-`suggestion` over hand-rolling a fix message from `data`. Both skills above
-are written against this current, published shape.
+none), `docsUrl` (the rule's documentation page), and `fixable` (whether
+`--fix` can mechanically repair this diagnostic — `false` above, since
+`madr/required-sections` has no autofix). Prefer reading `suggestion` over
+hand-rolling a fix message from `data`. Both skills above are written
+against this current, published shape.
+
+Run with `--fix` (or preview with `--fix-dry-run`) and `summary` gains a
+`fixed` count of how many diagnostics were repaired in place this run, e.g.
+`"summary": { "total": 1, "errors": 1, "warnings": 0, "baselineHidden": 0, "fixed": 1 }`.
 
 See the [CLI](/guides/cli/#json) guide for the full reporter reference and
 the [Programmatic API](/guides/api/) guide for using `madr-lint` as a

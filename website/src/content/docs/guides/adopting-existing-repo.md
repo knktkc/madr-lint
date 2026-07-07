@@ -10,7 +10,7 @@ enforce the rules only on *new* ones. This is the same pattern as
 [`tsc-baseline`](https://github.com/tvsom/tsc-baseline), ESLint bulk
 suppressions, and Betterer.
 
-## The three-step adoption
+## The four-step adoption
 
 ### 1. See where you stand
 
@@ -19,16 +19,35 @@ madr-lint
 # → 342 errors, 17 warnings
 ```
 
-### 2. Snapshot the current violations
+### 2. Run `--fix` first
+
+Before snapshotting anything, repair what's mechanically safe to repair —
+there's no reason to freeze a violation into the baseline that autofix would
+otherwise have fixed for free:
+
+```bash
+madr-lint --fix
+# → Fixed 83 problems
+# → 259 errors, 17 warnings
+```
+
+`--fix` mutates files in place and its exit code reflects what's *left*
+unfixed, not what it repaired — a non-zero exit here is normal. Only 3 of
+`madr-lint`'s 8 rules are fixable today (`madr/status-enum`,
+`madr/date-iso8601`, `madr/supersedes-bidirectional`), so this is a dent, not
+a solution — the baseline in the next step absorbs the rest.
+
+### 3. Snapshot the remaining violations
 
 ```bash
 madr-lint --update-baseline
-# → Wrote 359 violations across 53 files to .madr-lint/baseline.json
+# → Wrote 276 violations across 53 files to .madr-lint/baseline.json
 ```
 
-This writes `.madr-lint/baseline.json` and exits `0`. **Commit that file.**
+This writes `.madr-lint/baseline.json` and exits `0`. **Commit that file**
+(and the fixes from step 2, if you haven't already).
 
-### 3. Enforce from here on out
+### 4. Enforce from here on out
 
 ```bash
 madr-lint
@@ -49,7 +68,7 @@ madr-lint
 #   exit code 1
 ```
 
-Wire step 3 into CI and you get "no new debt" enforcement from day one, while the
+Wire step 4 into CI and you get "no new debt" enforcement from day one, while the
 legacy debt waits to be paid down on your schedule.
 
 ## How the fingerprint works

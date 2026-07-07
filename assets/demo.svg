@@ -1,11 +1,11 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 820 356" width="820" height="356" role="img" aria-label="madr-lint terminal output showing two errors, one with a suggested fix, in an ADR">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 820 382" width="820" height="382" role="img" aria-label="madr-lint terminal output showing two errors in an ADR: an auto-fixable madr/status-enum error and a madr/required-sections error with a suggested fix">
   <defs>
     <style>
       text { font-family: ui-monospace, "SFMono-Regular", "SF Mono", Menlo, Consolas, "Liberation Mono", monospace; font-size: 15px; }
     </style>
   </defs>
   <!-- window -->
-  <rect x="0.5" y="0.5" width="819" height="355" rx="14" fill="#0c1020" stroke="#1e293b"/>
+  <rect x="0.5" y="0.5" width="819" height="381" rx="14" fill="#0c1020" stroke="#1e293b"/>
   <rect x="0.5" y="0.5" width="819" height="42" rx="14" fill="#0f1530"/>
   <rect x="0.5" y="28" width="819" height="15" fill="#0f1530"/>
   <circle cx="24" cy="21" r="6" fill="#ff5f56"/>
@@ -17,11 +17,12 @@
   <text xml:space="preserve" x="22" y="82"><tspan fill="#22c55e">$</tspan><tspan fill="#e2e8f0"> npx madr-lint</tspan></text>
 
   <text x="22" y="130" fill="#7dd3fc" font-weight="600">docs/adr/0003-use-postgres.md</text>
-  <text xml:space="preserve" x="22" y="156"><tspan fill="#f87171">  error</tspan><tspan fill="#94a3b8">  madr/status-enum        </tspan><tspan fill="#e2e8f0">Status "decided" is not a valid MADR status</tspan></text>
-  <text xml:space="preserve" x="22" y="182"><tspan fill="#f87171">  error</tspan><tspan fill="#94a3b8">  madr/required-sections  </tspan><tspan fill="#e2e8f0">Missing required section: "Consequences"</tspan></text>
-  <text xml:space="preserve" x="22" y="208"><tspan fill="#0c1020">  error  madr/required-sections  </tspan><tspan fill="#7dd3fc">→ add a "## Consequences" heading to the document body</tspan></text>
+  <text xml:space="preserve" x="22" y="156"><tspan fill="#f87171">  error</tspan><tspan fill="#94a3b8">  madr/status-enum        </tspan><tspan fill="#e2e8f0">Status "depricated" is not one of: proposed,rejected,</tspan></text>
+  <text xml:space="preserve" x="22" y="182"><tspan fill="#0c1020">  error  madr/status-enum        </tspan><tspan fill="#e2e8f0">accepted,deprecated,superseded by ...</tspan><tspan fill="#64748b"> 🔧 fixable</tspan></text>
+  <text xml:space="preserve" x="22" y="208"><tspan fill="#f87171">  error</tspan><tspan fill="#94a3b8">  madr/required-sections  </tspan><tspan fill="#e2e8f0">Missing required section: "Consequences"</tspan></text>
+  <text xml:space="preserve" x="22" y="234"><tspan fill="#0c1020">  error  madr/required-sections  </tspan><tspan fill="#7dd3fc">→ add a "## Consequences" heading to the document body</tspan></text>
 
-  <text xml:space="preserve" x="22" y="260"><tspan fill="#7dd3fc" font-weight="600">docs/adr/0007-event-sourcing.md</tspan><tspan fill="#22c55e">  ✓</tspan></text>
+  <text xml:space="preserve" x="22" y="286"><tspan fill="#7dd3fc" font-weight="600">docs/adr/0007-event-sourcing.md</tspan><tspan fill="#22c55e">  ✓</tspan></text>
 
-  <text xml:space="preserve" x="22" y="316"><tspan fill="#f87171" font-weight="700">✖ 2 errors</tspan><tspan fill="#64748b"> in 1 file  ·  1 file clean</tspan></text>
+  <text xml:space="preserve" x="22" y="342"><tspan fill="#f87171" font-weight="700">✖ 2 errors</tspan><tspan fill="#64748b"> in 1 file  ·  1 file clean</tspan></text>
 </svg>

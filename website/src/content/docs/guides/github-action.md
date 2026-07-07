@@ -36,7 +36,7 @@ jobs:
 ```
 
 > The floating `v0` tag tracks the latest v0.x release; for stricter
-> reproducibility, pin an exact tag like `@v0.3.0`.
+> reproducibility, pin an exact tag like `@v0.4.0`.
 
 The action exits non-zero when there are `error`-severity diagnostics, failing
 the job automatically.
@@ -60,7 +60,7 @@ workflows we recommend [pinning an exact `version:`](#examples) instead.
 ```yaml
       - uses: knktkc/madr-lint@v0
         with:
-          version: '0.3.0'
+          version: '0.4.0'
           path: docs/adr
 ```
 
