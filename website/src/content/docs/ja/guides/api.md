@@ -158,12 +158,26 @@ const { kept, hidden } = applyBaseline(newDiagnostics, baseline);
 （`node.position.*.offset` と同じ空間）で動作し、`Fixer` がファイル全体のオフセットへ
 変換します。そのため frontmatter が除去されていても修正は正しく適用されます。
 
+修正が対象とするオフセット範囲は、通常 `context.metadataValueLoc` から得ます。
+`context.metadataValueLoc[field]` は、`metadata` のキーのうち、実効値が v2 の先頭
+リストに由来し、かつ単一の連続したテキストトークン（インライン記法を含まない）
+だった場合に、本文座標での `{ start, end }` を返します — 本文をスライスして元の値と
+一致することを検証済みです。実効値が frontmatter に由来するキーは**存在しません**
+（frontmatter はパース前に除去されるため本文オフセットを持たず、YAML を踏まえた
+書き換えが必要になります）。そのため、範囲が存在するときだけ `fix` を添付します。
+
 ```typescript
+const valueRange = context.metadataValueLoc?.status;
+
 context.report({
   messageId: 'invalidStatus',
   data: { status, allowed },
-  // 修正が機械的なときだけ添付する。見送る場合は null を返す。
-  fix: (fixer) => fixer.replaceRange([valueStart, valueEnd], 'accepted'),
+  // metadataValueLoc に対象範囲があるときだけ fix を添付する。
+  // 見送る場合は fix を省略する（またはサンクから null を返す）。
+  ...(valueRange && {
+    fix: (fixer) =>
+      fixer.replaceRange([valueRange.start, valueRange.end], 'accepted'),
+  }),
 });
 ```
 

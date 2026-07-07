@@ -156,3 +156,4 @@ ADRs use **MADR v4 frontmatter** format (this project's recommended target).
 - ADR-0005: Project rule API design (M2)
 - ADR-0006: v2 bold-list metadata bridge (M4)
 - ADR-0007: Baseline fingerprint design (M2)
+- ADR-0008: Autofix via raw-text offset edits (v0.4.0)
