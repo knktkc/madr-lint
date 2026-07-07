@@ -219,12 +219,18 @@ export interface EpilogueInput {
  * `--update-baseline` so legacy debt does not block adoption.
  */
 export function buildEpilogue(input: EpilogueInput): string {
+  // The fallback note may only claim emptiness when the initial lint saw
+  // nothing: detection scans candidate top levels, but the lint is recursive,
+  // so a nested-only ADR tree is 'fallback' WITH filesChecked > 0 — claiming
+  // "created nothing yet" beside real findings would contradict itself.
   const dirNote =
     input.adrDirSource === 'detected'
       ? '(detected)'
       : input.adrDirSource === 'override'
         ? '(from --dir)'
-        : '(default — no existing ADRs found, so init created nothing yet; add your first ADR here)';
+        : input.filesChecked === 0
+          ? '(default — no existing ADRs found, so init created nothing yet; add your first ADR here)'
+          : '(default — no NNNN-*.md at its top level, though the initial lint found Markdown files nested inside)';
 
   const lines = [
     `Wrote ${input.configPath}`,

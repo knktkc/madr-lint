@@ -1,7 +1,7 @@
 import { writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { defineCommand } from 'citty';
-import { resolveExtends } from '../core/config.js';
+import { CONFIG_FILES, resolveExtends } from '../core/config.js';
 import { findAdrFiles } from '../core/discover.js';
 import {
   CONFIG_FILENAME_BY_FORMAT,
@@ -52,6 +52,15 @@ export const initCommand = defineCommand({
   run({ args }) {
     const cwd = process.cwd();
 
+    // Usage errors first. An empty --dir is falsy, so without this guard it
+    // would silently fall through to auto-detection (e.g. --dir "$UNSET_VAR")
+    // — the same footgun class --max-warnings "" guards against in cli.ts.
+    const rawDir = args.dir as string | undefined;
+    if (rawDir !== undefined && rawDir.trim() === '') {
+      console.error(`Invalid --dir "${rawDir}": must be a non-empty path.`);
+      process.exit(2);
+    }
+
     const existing = findExistingConfigFile(cwd);
     if (existing && args.force !== true) {
       console.error(
@@ -61,11 +70,10 @@ export const initCommand = defineCommand({
     }
 
     // ── Detection ────────────────────────────────────────────────────
-    const dirOverride = args.dir as string | undefined;
     let adrDir: string;
     let adrDirSource: AdrDirSource;
-    if (dirOverride) {
-      adrDir = dirOverride;
+    if (rawDir !== undefined) {
+      adrDir = rawDir;
       adrDirSource = 'override';
     } else {
       const detected = detectAdrDir(cwd);
@@ -83,10 +91,15 @@ export const initCommand = defineCommand({
     );
     // --force replaces the canonical file for the DETECTED format. A
     // pre-existing config under a different name would still win (or lose)
-    // discovery order silently — never leave that unsaid.
+    // discovery order silently — never leave that unsaid, and state the
+    // ACTUAL direction: CONFIG_FILES index order decides which file wins.
     if (existing && existing !== configPath) {
+      const oldWins =
+        CONFIG_FILES.indexOf(existing) < CONFIG_FILES.indexOf(configPath);
       console.error(
-        `Note: ${existing} still exists and precedes ${configPath} in config discovery — remove it to make the new config take effect.`,
+        oldWins
+          ? `Note: ${existing} still exists and precedes ${configPath} in config discovery — remove it to make the new config take effect.`
+          : `Note: the leftover ${existing} is now shadowed by ${configPath}, which precedes it in config discovery — you can delete it.`,
       );
     }
 
