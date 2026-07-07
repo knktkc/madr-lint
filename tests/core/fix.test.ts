@@ -31,6 +31,12 @@ function projDiag(path: string, fix?: FixFn): Diagnostic {
   return { ...diag(fix), path };
 }
 
+/** A whole-file content lookup keyed by path (for collectProjectFixes). */
+const lookup =
+  (m: Record<string, string>) =>
+  (p: string): string | undefined =>
+    m[p];
+
 describe('core/fix — applyEdits', () => {
   it('applies a single replacement', () => {
     expect(applyEdits('hello world', [{ range: [6, 11], text: 'there' }])).toBe(
@@ -121,10 +127,6 @@ describe('core/fix — collectFixes', () => {
 });
 
 describe('core/fix — collectProjectFixes (cross-file, per-path edit sets)', () => {
-  // A whole-file content lookup keyed by path. Project fixes edit the file at
-  // `diagnostic.path`; a path absent from this map is skipped.
-  const lookup = (m: Record<string, string>) => (p: string): string | undefined => m[p];
-
   it('groups edits by path in WHOLE-FILE coordinates (base 0, no frontmatter shift)', () => {
     const byPath = collectProjectFixes(
       [

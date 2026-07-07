@@ -7,16 +7,71 @@ interface StatusEnumOptions extends Record<string, unknown> {
   caseSensitive: boolean;
 }
 
+// A tiny, curated misspelling → canonical-spelling map, applied token-by-token.
+// Deliberately minimal and length-agnostic; a correction only lands if the
+// repaired string matches exactly ONE configured value/prefix (below), so this
+// table can never introduce an out-of-enum value. See #29.
+const TYPO_CORRECTIONS: Record<string, string> = {
+  superceded: 'superseded',
+  supercedes: 'supersedes',
+  depricated: 'deprecated',
+};
+
+/** Repair known misspelled tokens in a lowercased status string. */
+function repairTypos(lower: string): string {
+  return lower
+    .split(' ')
+    .map((tok) => TYPO_CORRECTIONS[tok] ?? tok)
+    .join(' ');
+}
+
+/** The substring of `s` after skipping its first `n` whitespace-delimited words. */
+function tailAfterWords(s: string, n: number): string {
+  let i = 0;
+  for (let w = 0; w < n; w++) {
+    while (i < s.length && /\s/.test(s[i]!)) i++; // skip separators
+    while (i < s.length && !/\s/.test(s[i]!)) i++; // skip the word
+  }
+  return s.slice(i);
+}
+
 /**
- * The unique allowed value whose lowercase equals the status's — i.e. the
- * status differs from an allowed value ONLY by case. Returns undefined when
- * there is no match or the match is ambiguous (two allowed values collide on
- * lowercase), so autofix never guesses.
+ * The unambiguous canonical replacement for an invalid `status`, or undefined
+ * when no safe one-to-one correction exists. Corrections are validated against
+ * the CONFIGURED enum, so autofix never guesses:
+ *   1. exact value — case-fold (+ token typo repair) onto exactly one `values`;
+ *   2. prefix value — repaired string starts with exactly one `prefixValues`
+ *      entry; the canonical prefix is spliced in and the original tail kept.
+ * A mapping that lands on two candidates (case collision, two prefixes) declines.
  */
-function caseFoldMatch(status: string, values: string[]): string | undefined {
-  const lower = status.toLowerCase();
-  const matches = values.filter((v) => v.toLowerCase() === lower);
-  return matches.length === 1 ? matches[0] : undefined;
+function correctStatus(
+  status: string,
+  values: string[],
+  prefixValues: string[],
+): string | undefined {
+  const repaired = repairTypos(status.toLowerCase());
+
+  // 1. Exact value.
+  const exact = [...new Set(values.filter((v) => v.toLowerCase() === repaired))];
+  if (exact.length === 1) {
+    return exact[0] !== status ? exact[0] : undefined;
+  }
+  if (exact.length > 1) return undefined; // ambiguous
+
+  // 2. Prefix value (canonical prefix + verbatim tail).
+  const prefixes = [
+    ...new Set(
+      prefixValues.filter((p) => {
+        const pl = p.toLowerCase();
+        return repaired === pl || repaired.startsWith(`${pl} `);
+      }),
+    ),
+  ];
+  if (prefixes.length !== 1) return undefined;
+  const prefix = prefixes[0]!;
+  const tail = tailAfterWords(status, prefix.split(' ').length);
+  const replacement = `${prefix}${tail}`;
+  return replacement !== status ? replacement : undefined;
 }
 
 const rule: Rule<StatusEnumOptions> = {
@@ -40,8 +95,10 @@ const rule: Rule<StatusEnumOptions> = {
       missingStatus:
         'add a "status" field to the frontmatter (for MADR v2, a "* Status: ..." list item) — allowed values: {{allowed}}',
     },
-    // Autofix (#28): the ONLY mechanical fix is a pure case normalization of a
-    // v2 list-sourced value (see create()). Everything else is left to #29.
+    // Autofix (#28/#29): normalize a v2 list-sourced value to the unique
+    // canonical enum entry — case difference, a curated misspelling, or a prefix
+    // case/typo — preserving any tail (see create()). Ambiguous or
+    // frontmatter-sourced values get no fix.
     fixable: 'code',
     defaultOptions: {
       values: ['proposed', 'rejected', 'accepted', 'deprecated'],
@@ -82,11 +139,11 @@ const rule: Rule<StatusEnumOptions> = {
       // line to point at — inline suppression directives (which live in the
       // body) can only silence it file-wide, never per line.
       const loc = context.metadataLoc?.status;
-      // Autofix (#28): offer a fix ONLY for a pure case difference from an
-      // allowed value that is v2 list-sourced (we then have its exact body
-      // offset range). Frontmatter-sourced values have no body offset and need
+      // Autofix (#28/#29): offer a fix ONLY for a v2 list-sourced value (we then
+      // have its exact body offset range) that maps unambiguously onto the
+      // CONFIGURED enum. Frontmatter-sourced values have no body offset and need
       // YAML-aware rewriting — out of scope, so no fix is attached there.
-      const canonical = caseFoldMatch(status, values);
+      const canonical = correctStatus(status, values, prefixValues);
       const valueRange = context.metadataValueLoc?.status;
       const fix =
         canonical !== undefined && canonical !== status && valueRange

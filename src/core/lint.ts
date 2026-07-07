@@ -10,7 +10,12 @@ import {
   type CacheEntry,
   type CacheManifest,
 } from './cache.js';
-import { fixFileContent } from './fix.js';
+import {
+  applyEditsCounted,
+  collectProjectFixes,
+  fixFileContent,
+  MAX_FIX_PASSES,
+} from './fix.js';
 import {
   buildProjectFile,
   runRulesOnFile,
@@ -322,25 +327,75 @@ export function lintAndFix(opts: LintAndFixOptions): LintAndFixResult {
     baselineHidden += lastHidden;
   }
 
-  // Project pass on the FIXED contents.
+  // ── Project pass + cross-file fix fixpoint on the FIXED contents ──
+  // Cross-file (project-rule) fixes reuse the applier through their own per-file
+  // edit collection (the #29 seam). The per-file fixpoint has already settled;
+  // project fixes only insert whole-file frontmatter keys (supersedes /
+  // superseded-by) that no per-file rule reads, so the per-file `remaining`
+  // captured above stays valid. See ADR-0008.
   const enabledProjectRules = projectRules.filter(
     (rule) => resolveSeverity(opts.ruleSeverity[rule.meta.name]) !== 'off',
   );
   if (enabledProjectRules.length > 0) {
-    const projectFiles = files.map((f) =>
-      buildProjectFile({ path: f.path, content: f.fixed }),
-    );
-    let projectDiags = runProjectPass(
-      projectFiles,
-      enabledProjectRules,
-      opts.ruleSeverity,
-      optionsByRule,
-      opts.cwd,
-    );
-    if (baseline) {
-      const sub = applyBaseline(projectDiags, baseline);
-      projectDiags = sub.kept;
-      baselineHidden += sub.hidden;
+    // Mutable per-path content, seeded from the per-file-fixed files.
+    const contentByPath = new Map(files.map((f) => [f.path, f.fixed]));
+    const maxPasses = opts.maxPasses ?? MAX_FIX_PASSES;
+
+    let projectDiags: Diagnostic[] = [];
+    let passes = 0;
+    for (;;) {
+      const projectFiles = files.map((f) =>
+        buildProjectFile({ path: f.path, content: contentByPath.get(f.path) ?? f.fixed }),
+      );
+      // runProjectPass returns suppression-filtered, PRE-baseline diagnostics.
+      // Subtract the baseline BEFORE collecting fixes so a baselined problem is
+      // never rewritten (parity with the per-file path). Only the pass we stop on
+      // contributes to `baselineHidden` — the loop recomputes it each iteration.
+      let diags = runProjectPass(
+        projectFiles,
+        enabledProjectRules,
+        opts.ruleSeverity,
+        optionsByRule,
+        opts.cwd,
+      );
+      let hiddenThisPass = 0;
+      if (baseline) {
+        const sub = applyBaseline(diags, baseline);
+        diags = sub.kept;
+        hiddenThisPass = sub.hidden;
+      }
+      projectDiags = diags;
+
+      if (passes >= maxPasses) {
+        baselineHidden += hiddenThisPass;
+        break;
+      }
+      const fixesByPath = collectProjectFixes(diags, (p) => contentByPath.get(p));
+      let progressed = false;
+      for (const [path, edits] of fixesByPath) {
+        const before = contentByPath.get(path);
+        if (before === undefined) continue;
+        const { text, applied } = applyEditsCounted(before, edits);
+        if (text !== before) {
+          contentByPath.set(path, text);
+          fixed += applied;
+          progressed = true;
+        }
+      }
+      if (!progressed) {
+        baselineHidden += hiddenThisPass;
+        break;
+      }
+      passes++;
+    }
+
+    // Fold the project-fixed contents back into the returned files.
+    for (const f of files) {
+      const c = contentByPath.get(f.path);
+      if (c !== undefined && c !== f.fixed) {
+        f.fixed = c;
+        f.changed = f.fixed !== f.original;
+      }
     }
     remaining.push(...projectDiags);
   }
