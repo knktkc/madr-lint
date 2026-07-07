@@ -5,6 +5,7 @@ description: The madr-lint command-line interface — arguments, flags, reporter
 
 ```bash
 madr-lint [OPTIONS] [PATHS...]
+madr-lint init [OPTIONS]
 ```
 
 ## Arguments
@@ -64,6 +65,57 @@ Warnings absorbed by the [baseline](/guides/adopting-existing-repo/) do **not**
 count toward `--max-warnings` — the baseline is subtracted before the threshold
 is checked, so inherited debt never fails CI. Only fresh warnings count.
 `--update-baseline` always exits 0, regardless of `--quiet` or `--max-warnings`.
+
+## `madr-lint init`
+
+Scaffold a config file. Non-interactive by design — every decision is a
+filesystem heuristic or a flag — so it is safe in CI and behind pipes:
+
+```bash
+npx madr-lint init
+```
+
+`init` detects three things and writes a config extending
+`madr-lint:recommended`:
+
+- **ADR directory** — the first of `docs/adr`, `docs/decisions`, `doc/adr`,
+  `adr`, `docs/architecture/decisions` whose top level contains at least one
+  `NNNN-*.md` file. When none qualifies it falls back to `docs/adr` (the
+  linter's default) and says so.
+- **MADR version** — samples up to 20 existing ADRs and lets the majority
+  win: YAML frontmatter with `decision-makers` counts as v4, other
+  frontmatter as v3, a v2 metadata list as v2. An empty directory, a tie, or
+  no recognizable metadata yields `auto` (the default, so it is omitted from
+  the written config).
+- **Config format** — `madr-lint.config.ts` when the project looks
+  TypeScript-ish (a `tsconfig.json`, or `typescript` among `package.json`
+  dependencies), `.madrlintrc.json` otherwise.
+
+`init` refuses to overwrite an existing config file (exit `2`); pass
+`--force` to replace it. After writing, it runs a cheap in-process lint of
+the detected directory — when that finds violations, the next-steps output
+suggests [`--update-baseline`](/guides/adopting-existing-repo/) so legacy
+debt does not block adoption.
+
+### Flags
+
+| Flag | Default | Description |
+|---|---|---|
+| `--force` | off | Overwrite an existing config file instead of exiting `2`. |
+| `--dir <path>` | (detected) | ADR directory to write into the config, overriding detection. |
+| `--json` | off | Emit a machine-readable JSON summary (what was detected and written) instead of text — for agents and scripts. |
+
+```bash
+# monorepo: point the config at a specific package's ADRs
+npx madr-lint init --dir services/api/docs/adr
+
+# machine-readable summary
+npx madr-lint init --json
+```
+
+The `--json` payload reports `configPath`, `configFormat`, `adrDir`,
+`adrDirSource` (`detected` / `fallback` / `override`), `madrVersion`,
+`filesChecked`, `errors`, `warnings`, and `suggestUpdateBaseline`.
 
 ## Reporters
 
@@ -129,7 +181,7 @@ madr-lint --format sarif > madr-lint.sarif
 |---|---|
 | `0` | No errors; warning count within `--max-warnings` limit (if set) |
 | `1` | One or more `error`-severity diagnostics, or warning count exceeds `--max-warnings` |
-| `2` | Usage or configuration error (invalid `--max-warnings` value, missing `--config` file, invalid rule options, unknown `--format`) |
+| `2` | Usage or configuration error (invalid `--max-warnings` value, missing `--config` file, invalid rule options, unknown `--format`, existing config on `madr-lint init` without `--force`) |
 
 ## Caching
 

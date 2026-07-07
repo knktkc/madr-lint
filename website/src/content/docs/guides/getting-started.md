@@ -30,6 +30,25 @@ You can also run it without installing:
 npx madr-lint --help
 ```
 
+## Scaffold a config
+
+The fastest way to get started is `init` — it detects your ADR directory
+(`docs/adr`, `docs/decisions`, `doc/adr`, `adr`, or
+`docs/architecture/decisions`), the dominant MADR version of your existing
+ADRs, and whether your project uses TypeScript, then writes a config
+extending `madr-lint:recommended`:
+
+```bash
+npx madr-lint init
+```
+
+`init` is non-interactive — every decision is a filesystem heuristic or a
+flag — so it is safe in CI and behind pipes. It refuses to overwrite an
+existing config (pass `--force` to replace it), and when the initial lint of
+the detected directory finds violations, it points you at
+`--update-baseline` so legacy debt does not block adoption. See the
+[CLI guide](/guides/cli/#madr-lint-init) for `--dir` and `--json`.
+
 ## Run your first lint
 
 By default `madr-lint` lints the directory configured as `adrDir`
@@ -59,7 +78,8 @@ docs/adr/0003-use-postgres.md
 ## Enable the recommended rules
 
 Out of the box, when no rules are configured, the CLI falls back to the
-`madr-lint:recommended` preset. To make that explicit — and to start
+`madr-lint:recommended` preset. `npx madr-lint init` (above) makes that
+explicit for you; to author the config by hand — and to start
 customizing — create a config file:
 
 ```typescript
