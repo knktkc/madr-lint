@@ -314,6 +314,18 @@ describe('core/reporter — json', () => {
     const without = JSON.parse(jsonReporter.format([], new Map()));
     expect(without.summary).not.toHaveProperty('fixed');
   });
+
+  it('embeds a top-level diffs array only when the caller passes fixDiffs (dry run)', () => {
+    const fixDiffs = [
+      { path: 'a.md', diff: '--- a/a.md\n+++ b/a.md\n@@ -1,1 +1,1 @@\n-x\n+y\n' },
+    ];
+    const withDiffs = JSON.parse(
+      jsonReporter.format([], new Map(), { fixed: 1, fixDiffs }),
+    );
+    expect(withDiffs.diffs).toEqual(fixDiffs);
+    const without = JSON.parse(jsonReporter.format([], new Map(), { fixed: 1 }));
+    expect(without).not.toHaveProperty('diffs');
+  });
 });
 
 describe('core/reporter — sarif', () => {

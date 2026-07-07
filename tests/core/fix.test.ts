@@ -181,6 +181,36 @@ describe('core/fix — fixFileContent (fixpoint loop)', () => {
     expect(res.changed).toBe(false);
     expect(res.fixedContent).toBe(content);
   });
+
+  // `applied` must count edits that actually LANDED — not every edit collected.
+  // Edits dropped by the overlap policy or bounds validation never touched the
+  // content, and `summary.fixed` is built from this number.
+  it('does not count an edit dropped by the overlap policy', () => {
+    const lint = (content: string): Diagnostic[] => {
+      if (content.startsWith('XYZ')) return []; // converged
+      return [
+        diag((f) => f.replaceRange([0, 3], 'XYZ')),
+        diag((f) => f.replaceRange([1, 4], '!!!')), // overlaps the first → dropped
+      ];
+    };
+    const res = fixFileContent('abcdef', lint);
+    expect(res.fixedContent).toBe('XYZdef');
+    expect(res.passes).toBe(1);
+    expect(res.applied).toBe(1); // 2 collected, 1 landed
+  });
+
+  it('does not count an out-of-bounds edit', () => {
+    const lint = (content: string): Diagnostic[] => {
+      if (content === 'aBc') return []; // converged
+      return [
+        diag((f) => f.replaceRange([1, 2], 'B')),
+        diag((f) => f.replaceRange([50, 60], 'oob')), // beyond length → dropped
+      ];
+    };
+    const res = fixFileContent('abc', lint);
+    expect(res.fixedContent).toBe('aBc');
+    expect(res.applied).toBe(1); // 2 collected, 1 landed
+  });
 });
 
 describe('core/fix — unifiedDiff', () => {
