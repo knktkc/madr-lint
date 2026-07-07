@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -11,6 +11,7 @@ import noBrokenLinks from '../../src/rules/no-broken-links/index.js';
 import noDuplicateNumbering from '../../src/rules/no-duplicate-numbering/index.js';
 import requiredSections from '../../src/rules/required-sections/index.js';
 import statusEnum from '../../src/rules/status-enum/index.js';
+import supersedesBidirectional from '../../src/rules/supersedes-bidirectional/index.js';
 
 // A custom project rule with an option, used to prove lintFiles threads
 // per-rule options through the PROJECT pass (no built-in project rule has
@@ -563,6 +564,99 @@ describe('core/lint', () => {
       expect(
         res.diagnostics.some((d) => d.ruleName === 'madr/no-duplicate-numbering'),
       ).toBe(true);
+    });
+
+    // Cross-file autofix (#29): a project-rule fix emits edits keyed by the
+    // target file's path. lintAndFix collects them, applies per-file, and
+    // re-runs the project pass to a fixpoint.
+    describe('cross-file supersedes back-reference (project-rule fix)', () => {
+      const sev = { 'madr/supersedes-bidirectional': 'error' as const };
+
+      it('inserts the missing back-reference into the target and re-lints clean', () => {
+        const a = join(dir, '0042-new.md');
+        const b = join(dir, '0001-old.md');
+        writeFileSync(a, '---\nsupersedes: ADR-0001\n---\n\n# A\n');
+        writeFileSync(b, '---\nstatus: accepted\n---\n\n# B\n');
+        const res = lintAndFix({
+          rules: [supersedesBidirectional],
+          ruleSeverity: sev,
+          files: [a, b],
+          cwd: dir,
+        });
+        const fixedB = res.files.find((f) => f.path === '0001-old.md');
+        expect(fixedB?.changed).toBe(true);
+        expect(fixedB?.fixed).toBe(
+          '---\nstatus: accepted\nsuperseded-by: ADR-0042\n---\n\n# B\n',
+        );
+        // Re-lint on the fixed contents is clean, and exactly one edit landed.
+        expect(res.diagnostics).toEqual([]);
+        expect(res.fixed).toBe(1);
+      });
+
+      it('leaves files on disk untouched (writing is the CLI’s job; dry-run safety)', () => {
+        const a = join(dir, '0042-new.md');
+        const b = join(dir, '0001-old.md');
+        const bOriginal = '---\nstatus: accepted\n---\n\n# B\n';
+        writeFileSync(a, '---\nsupersedes: ADR-0001\n---\n\n# A\n');
+        writeFileSync(b, bOriginal);
+        lintAndFix({
+          rules: [supersedesBidirectional],
+          ruleSeverity: sev,
+          files: [a, b],
+          cwd: dir,
+        });
+        // lintAndFix computes fixed content but never writes — the on-disk file
+        // is exactly what a --fix-dry-run would leave behind.
+        expect(readFileSync(b, 'utf8')).toBe(bOriginal);
+      });
+
+      it('never inserts for a SUPPRESSED back-reference diagnostic', () => {
+        const a = join(dir, '0042-new.md');
+        const b = join(dir, '0001-old.md');
+        writeFileSync(a, '---\nsupersedes: ADR-0001\n---\n\n# A\n');
+        writeFileSync(
+          b,
+          '---\nstatus: accepted\n---\n\n<!-- madr-lint-disable madr/supersedes-bidirectional -->\n\n# B\n',
+        );
+        const res = lintAndFix({
+          rules: [supersedesBidirectional],
+          ruleSeverity: sev,
+          files: [a, b],
+          cwd: dir,
+        });
+        expect(res.files.find((f) => f.path === '0001-old.md')?.changed).toBe(
+          false,
+        );
+        expect(res.diagnostics).toEqual([]);
+        expect(res.fixed).toBe(0);
+      });
+
+      it('two sources, one target: inserts once, leaves the second as a remaining diagnostic', () => {
+        const s1 = join(dir, '0001-a.md');
+        const s2 = join(dir, '0002-b.md');
+        const t = join(dir, '0003-c.md');
+        writeFileSync(s1, '---\nsupersedes: ADR-0003\n---\n\n# A\n');
+        writeFileSync(s2, '---\nsupersedes: ADR-0003\n---\n\n# B\n');
+        writeFileSync(t, '---\nstatus: accepted\n---\n\n# C\n');
+        const res = lintAndFix({
+          rules: [supersedesBidirectional],
+          ruleSeverity: sev,
+          files: [s1, s2, t],
+          cwd: dir,
+        });
+        // Exactly one insertion (the first source); a duplicate key is never
+        // written. The second back-reference cannot be added (value rewrite is
+        // out of scope) and stays as a remaining diagnostic.
+        expect(res.files.find((f) => f.path === '0003-c.md')?.fixed).toBe(
+          '---\nstatus: accepted\nsuperseded-by: ADR-0001\n---\n\n# C\n',
+        );
+        expect(res.fixed).toBe(1);
+        const remaining = res.diagnostics.filter(
+          (d) => d.ruleName === 'madr/supersedes-bidirectional',
+        );
+        expect(remaining).toHaveLength(1);
+        expect(remaining[0]?.data?.expected).toBe('ADR-0002');
+      });
     });
   });
 });

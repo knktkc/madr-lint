@@ -1,8 +1,23 @@
 import { describe, it, expect } from 'vitest';
+import { applyEdits, makeFixer } from '../../src/core/fix.js';
 import { jsonReporter } from '../../src/core/reporter.js';
 import { buildProjectFile, runRulesOnProject } from '../../src/core/runner.js';
 import type { AnyRule, Diagnostic } from '../../src/core/types.js';
 import rule from '../../src/rules/supersedes-bidirectional/index.js';
+
+/**
+ * Apply a project-rule fix to the target file's content. Project fixes work in
+ * WHOLE-FILE coordinates (they touch frontmatter, which body coordinates strip),
+ * so the fixer's base offset is 0.
+ */
+function applyProjectFix(
+  targetContent: string,
+  d: { fix?: (f: ReturnType<typeof makeFixer>) => unknown },
+): string {
+  const edit = d.fix?.(makeFixer(0));
+  const edits = Array.isArray(edit) ? edit : edit ? [edit] : [];
+  return applyEdits(targetContent, edits as never);
+}
 
 // Render diagnostics through the real reporter pipeline so tests pin the
 // message text a user actually sees (template + interpolation together).
@@ -216,6 +231,115 @@ describe('madr/supersedes-bidirectional', () => {
       const diagnostics = runRulesOnProject([rule], files);
       expect(diagnostics).toHaveLength(1);
       expect(diagnostics[0]?.messageId).toBe('unknownReference');
+    });
+  });
+
+  // Autofix (#29): the FIRST cross-file fix. A `missingBackReference` diagnostic
+  // carries a fix that inserts the reciprocal key/value into the target file's
+  // EXISTING YAML frontmatter, immediately before the closing `---`. Guard rails:
+  // frontmatter must exist, the key must not already be present, and the byte
+  // slice at the insertion point must be the closing fence. `unknownReference`
+  // is contextual and never fixable.
+  describe('autofix (cross-file back-reference insertion)', () => {
+    it('missingBackReference is fixable and inserts the key before the closing fence', () => {
+      const target = buildProjectFile({
+        path: '0001-old.md',
+        content: '---\nstatus: accepted\n---\n\n# B\n',
+      });
+      const source = buildProjectFile({
+        path: '0042-new.md',
+        content: '---\nsupersedes: ADR-0001\n---\n\n# A\n',
+      });
+      const d = runRulesOnProject([rule], [target, source])[0];
+      expect(d?.messageId).toBe('missingBackReference');
+      expect(d?.path).toBe('0001-old.md');
+      expect(d?.fixable).toBe(true);
+      expect(applyProjectFix(target.content, d!)).toBe(
+        '---\nstatus: accepted\nsuperseded-by: ADR-0042\n---\n\n# B\n',
+      );
+    });
+
+    it('backward-direction missingBackReference inserts `supersedes` into the source target', () => {
+      const target = buildProjectFile({
+        path: '0042-new.md',
+        content: '---\nstatus: accepted\n---\n\n# A\n',
+      });
+      const source = buildProjectFile({
+        path: '0001-old.md',
+        content: '---\nsuperseded-by: ADR-0042\n---\n\n# B\n',
+      });
+      const d = runRulesOnProject([rule], [target, source])[0];
+      expect(d?.messageId).toBe('missingBackReference');
+      expect(d?.path).toBe('0042-new.md');
+      expect(d?.fixable).toBe(true);
+      expect(applyProjectFix(target.content, d!)).toBe(
+        '---\nstatus: accepted\nsupersedes: ADR-0001\n---\n\n# A\n',
+      );
+    });
+
+    it('preserves CRLF frontmatter (inserts with the file’s newline style)', () => {
+      const target = buildProjectFile({
+        path: '0001-old.md',
+        content: '---\r\nstatus: accepted\r\n---\r\n\r\n# B\r\n',
+      });
+      const source = buildProjectFile({
+        path: '0042-new.md',
+        content: '---\r\nsupersedes: ADR-0001\r\n---\r\n\r\n# A\r\n',
+      });
+      const d = runRulesOnProject([rule], [target, source])[0];
+      expect(d?.fixable).toBe(true);
+      expect(applyProjectFix(target.content, d!)).toBe(
+        '---\r\nstatus: accepted\r\nsuperseded-by: ADR-0042\r\n---\r\n\r\n# B\r\n',
+      );
+    });
+
+    it('declines when the target has NO frontmatter (bare body — YAML block creation is out of scope)', () => {
+      const target = buildProjectFile({ path: '0001-old.md', content: '# B\n' });
+      const source = buildProjectFile({
+        path: '0042-new.md',
+        content: '---\nsupersedes: ADR-0001\n---\n\n# A\n',
+      });
+      const d = runRulesOnProject([rule], [target, source])[0];
+      expect(d?.messageId).toBe('missingBackReference');
+      expect(d?.fixable).toBe(false);
+      expect(d?.fix).toBeUndefined();
+    });
+
+    it('declines when the key already exists with a WRONG value (value rewrite out of scope)', () => {
+      // B already has `superseded-by: ADR-0007` (a correct back-ref to C), so no
+      // unknownReference fires; but source A (ADR-0042) still needs a back-ref B
+      // does not carry. The key is present → the value-rewrite is out of scope,
+      // so the missingBackReference from A is not fixable.
+      const target = buildProjectFile({
+        path: '0001-old.md',
+        content: '---\nsuperseded-by: ADR-0007\n---\n\n# B\n',
+      });
+      const sourceA = buildProjectFile({
+        path: '0042-new.md',
+        content: '---\nsupersedes: ADR-0001\n---\n\n# A\n',
+      });
+      const sourceC = buildProjectFile({
+        path: '0007-c.md',
+        content: '---\nsupersedes: ADR-0001\n---\n\n# C\n',
+      });
+      const diags = runRulesOnProject([rule], [target, sourceA, sourceC]);
+      const d = diags.find(
+        (x) => x.messageId === 'missingBackReference' && x.data?.expected === 'ADR-0042',
+      );
+      expect(d).toBeDefined();
+      expect(d?.fixable).toBe(false);
+      expect(d?.fix).toBeUndefined();
+    });
+
+    it('unknownReference is never fixable', () => {
+      const source = buildProjectFile({
+        path: '0042-x.md',
+        content: '---\nsupersedes: ADR-9999\n---\n\n# A\n',
+      });
+      const d = runRulesOnProject([rule], [source])[0];
+      expect(d?.messageId).toBe('unknownReference');
+      expect(d?.fixable).toBe(false);
+      expect(d?.fix).toBeUndefined();
     });
   });
 });
