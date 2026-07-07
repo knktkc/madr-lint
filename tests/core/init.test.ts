@@ -380,5 +380,23 @@ describe('core/init', () => {
       });
       expect(text).not.toMatch(/--update-baseline/);
     });
+
+    it('fallback with files found by the recursive lint must not claim nothing exists', () => {
+      // detectAdrDir scans top-level only, but the initial lint is recursive:
+      // a nested-only ADR tree is source 'fallback' WITH filesChecked > 0.
+      // "created nothing yet" beside "found 5 error(s)" would contradict.
+      const text = buildEpilogue({
+        adrDir: 'docs/adr',
+        adrDirSource: 'fallback',
+        configPath: '.madrlintrc.json',
+        filesChecked: 1,
+        errors: 5,
+        warnings: 0,
+      });
+      expect(text).not.toMatch(/created nothing yet/i);
+      expect(text).not.toMatch(/no existing ADRs found/i);
+      expect(text).toMatch(/docs\/adr/);
+      expect(text).toMatch(/--update-baseline/);
+    });
   });
 });

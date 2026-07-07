@@ -1,4 +1,4 @@
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import {
   existsSync,
   mkdirSync,
@@ -37,6 +37,16 @@ function runCli(cwd: string, args: string[]): CliResult {
     const e = err as { status?: number; stdout?: string; stderr?: string };
     return { status: e.status ?? 1, stdout: e.stdout ?? '', stderr: e.stderr ?? '' };
   }
+}
+
+// execFileSync discards stderr on a zero exit, so stderr assertions on
+// SUCCESSFUL runs (e.g. --force shadow notes) need spawnSync instead.
+function runCliCapture(cwd: string, args: string[]): CliResult {
+  const r = spawnSync(NODE, [`--import=${TSX_ESM}`, CLI, ...args], {
+    cwd,
+    encoding: 'utf8',
+  });
+  return { status: r.status ?? 1, stdout: r.stdout, stderr: r.stderr };
 }
 
 function writeAdr(dir: string, relPath: string, content: string): void {
@@ -190,6 +200,80 @@ describe('cli init (end-to-end)', () => {
     expect(r.status).toBe(0);
     expect(r.stdout).not.toMatch(/--update-baseline/);
   }, 30_000);
+
+  // ──────────────────────────────────────────────────────────────────────
+  // --force leftover-config notes must state the ACTUAL discovery outcome.
+  // CONFIG_FILES order decides which file wins; the note's direction has to
+  // follow it, not assume the old file always precedes the new one.
+  // ──────────────────────────────────────────────────────────────────────
+
+  describe('--force shadow notes (direction-aware)', () => {
+    it('new config wins discovery: notes the OLD file is shadowed, never "remove it to take effect"', () => {
+      // Stale low-priority config (madr-lint.config.js) in a non-TS project:
+      // init writes .madrlintrc.json, which PRECEDES it in CONFIG_FILES, so
+      // the new config already takes effect — claiming otherwise is wrong.
+      writeFileSync(join(dir, 'madr-lint.config.js'), 'export default {};\n');
+
+      const r = runCliCapture(dir, ['init', '--force']);
+      expect(r.status).toBe(0);
+      expect(existsSync(join(dir, '.madrlintrc.json'))).toBe(true);
+      expect(r.stderr).toMatch(/shadowed/i);
+      expect(r.stderr).not.toMatch(/remove it to make the new config take effect/i);
+    }, 30_000);
+
+    it('old config wins discovery: warns it precedes the new one and must be removed', () => {
+      // TS project with a stale .madrlintrc.json: init writes
+      // madr-lint.config.ts, but .madrlintrc.json still wins discovery.
+      writeFileSync(join(dir, 'tsconfig.json'), '{}');
+      writeFileSync(join(dir, '.madrlintrc.json'), '{}');
+
+      const r = runCliCapture(dir, ['init', '--force']);
+      expect(r.status).toBe(0);
+      expect(existsSync(join(dir, 'madr-lint.config.ts'))).toBe(true);
+      expect(r.stderr).toMatch(/precedes/i);
+      expect(r.stderr).toMatch(/remove/i);
+      expect(r.stderr).not.toMatch(/shadowed by/i);
+    }, 30_000);
+  });
+
+  // ──────────────────────────────────────────────────────────────────────
+  // Fallback note vs recursive lint: findAdrFiles() is recursive, so a
+  // nested-only ADR tree falls back on detection (top-level scan) yet still
+  // yields lint findings — the epilogue must not claim emptiness then.
+  // ──────────────────────────────────────────────────────────────────────
+
+  it('nested-only ADR dir: fallback note must not claim nothing exists while reporting findings', () => {
+    // No top-level NNNN-*.md anywhere → detectAdrDir falls back to docs/adr,
+    // but the recursive initial lint still finds (and flags) the nested file.
+    writeAdr(dir, 'docs/adr/2026/0001-nested.md', '# x\n\nno sections here\n');
+
+    const r = runCli(dir, ['init']);
+    expect(r.status).toBe(0);
+    expect(r.stdout).toMatch(/--update-baseline/);
+    expect(r.stdout).not.toMatch(/created nothing yet/i);
+  }, 30_000);
+
+  // ──────────────────────────────────────────────────────────────────────
+  // --dir usage errors: an empty value must not silently fall through to
+  // auto-detection (same footgun class as --max-warnings "").
+  // ──────────────────────────────────────────────────────────────────────
+
+  describe('--dir validation', () => {
+    it('exits 2 when --dir value is empty (must not silently auto-detect)', () => {
+      const r = runCli(dir, ['init', '--dir', '']);
+      expect(r.status).toBe(2);
+      expect(r.stderr).toMatch(/--dir/);
+      // Usage error: nothing may have been written.
+      expect(existsSync(join(dir, '.madrlintrc.json'))).toBe(false);
+    }, 30_000);
+
+    it('exits 2 when --dir value is whitespace-only', () => {
+      const r = runCli(dir, ['init', '--dir', '   ']);
+      expect(r.status).toBe(2);
+      expect(r.stderr).toMatch(/--dir/);
+      expect(existsSync(join(dir, '.madrlintrc.json'))).toBe(false);
+    }, 30_000);
+  });
 
   // ──────────────────────────────────────────────────────────────────────
   // Regression: the plain (non-init) command must keep working exactly as
