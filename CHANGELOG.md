@@ -1,5 +1,41 @@
 # Changelog
 
+## 0.4.0
+
+### Minor Changes
+
+- [#87](https://github.com/knktkc/madr-lint/pull/87) [`7795ca7`](https://github.com/knktkc/madr-lint/commit/7795ca7c40634097806ad2bd7f82d4a3a02e465d) Thanks [@knktkc](https://github.com/knktkc)! - Autofix framework — `--fix`, `meta.fixable`, and the fixer API ([#28](https://github.com/knktkc/madr-lint/issues/28), [ADR-0008](https://github.com/knktkc/madr-lint/blob/main/docs/adr/0008-autofix-text-edits.md)). Fixes are raw-text offset edits, never AST serialization, so a fix changes only the span it targets and leaves every other byte untouched.
+
+  - **Rule API**: a rule declares `meta.fixable: 'code'` and attaches a lazy `fix: (fixer) => TextEdit | TextEdit[] | null` to `context.report(...)`. The `Fixer` (`replaceRange` / `insertAt` / `remove`) takes body (mdast) offsets and translates them to whole-file offsets past stripped frontmatter, so fixes are correct on files with YAML frontmatter. A fix from a rule that did not declare `meta.fixable` is a rule bug — the runner routes it through `core/internal-error`. Fix thunks are lazy: a normal lint constructs no fixer and invokes no thunk.
+  - **CLI**: `--fix` applies fixes in place (only files that change are written) and the exit code reflects the problems that **remain**; `--fix-dry-run` prints a per-file unified diff and writes nothing (exit code as if fixes were applied). Fixes compose with existing flags — `--quiet` / `--max-warnings` operate on the remaining diagnostics, and **suppressed** (`madr-lint-disable`) and **baselined** problems are never rewritten. `--update-baseline` combined with `--fix` / `--fix-dry-run` is a usage error (exit 2).
+  - **Applier**: collects fixes from reported diagnostics only (after suppression and baseline), sorts by offset, drops overlaps (first-by-position wins), applies in one pass, then re-lints to a fixpoint (max 10 passes). Per-file scope — cross-file fixes are tracked separately.
+  - **First real fix**: `madr/status-enum` now mechanically normalizes a v2 list-sourced status value that differs from an allowed value purely by case (e.g. `Accepted` → `accepted`). Frontmatter-sourced values and genuine typos get no fix.
+  - **Reporters**: `text` marks fixable diagnostics with a dim `🔧 fixable` tag; `json` gains a `fixable` boolean per result and a `summary.fixed` count when a fix pass ran; `github` / `sarif` are unchanged.
+  - **Programmatic API**: exports `applyEdits`, `makeFixer`, `collectFixes`, `fixFileContent`, `unifiedDiff`, `MAX_FIX_PASSES`, `frontmatterOffset`, and the `TextEdit` / `Fixer` / `FixFn` types.
+  - **Parser**: `ParsedFile.metadataValueLoc` (exposed to rules as `context.metadataValueLoc`) gives the body-coordinate `{ start, end }` offset range of a `metadata` value, for values sourced from the v2 leading list as a single contiguous text token — the offset source a fix's `fixer.replaceRange` targets.
+
+  **Breaking (type + cache):** `Diagnostic` gains a required `fixable: boolean` field (disclosed like the earlier `suggestion` / `docsUrl` additions), and the content-hash cache schema version is bumped to `3` (missing/mismatched ⇒ cold), so the first run after upgrading re-lints once instead of serving stale-shape cached diagnostics. Consumers constructing `Diagnostic` objects by hand must set `fixable`.
+
+- [#88](https://github.com/knktkc/madr-lint/pull/88) [`32e1c04`](https://github.com/knktkc/madr-lint/commit/32e1c0475b9547236b32c94154ad023270d8b0e6) Thanks [@knktkc](https://github.com/knktkc)! - Make three rules fixable, including the first **cross-file** fix ([#29](https://github.com/knktkc/madr-lint/issues/29)). Building on the autofix framework ([#28](https://github.com/knktkc/madr-lint/issues/28)), fixes remain raw-text offset edits — only the targeted span changes.
+
+  - **`madr/date-iso8601`** now normalizes an **unambiguous** v2 body-list date to `YYYY-MM-DD`: year-first numeric with a single separator (`2026/7/3`, `2026.7.3`, `2026-7-3`) and English named-month forms (`3 Jul 2026`, `July 3, 2026`). Ambiguous day/month order (`03/07/2026`), two-digit years, impossible calendar dates (`2026/2/30`), non-English month names, and any **frontmatter**-sourced value are reported but never rewritten.
+  - **`madr/status-enum`** extends its case-only fix with a tiny synonym/misspelling map validated against the **configured** enum: curated typos (`superceded by …` → `superseded by …`, `depricated` → `deprecated`) fixed under any case setting, and prefix corrections that preserve the tail. Case-only corrections (`Accepted` → `accepted`, `Superseded By ADR-0042` → `superseded by ADR-0042`) apply under `caseSensitive: true` — with the default `caseSensitive: false` such values are valid and never flagged. A value that maps to two candidates, a synonym whose target is not configured, a genuine typo with no unique target, and frontmatter-sourced values get no fix.
+  - **`madr/supersedes-bidirectional`** gains the first **cross-file** fix: a `missingBackReference` inserts the reciprocal `<direction>: <expected>` line into the target ADR's **existing** YAML frontmatter, immediately before the closing `---`. The frontmatter is treated as opaque lines (no YAML reparse/reserialize), so key order, comments, and the file's newline style (LF/CRLF) are preserved. It declines when the target has no frontmatter (a block is never created), when the key already exists (value rewrite/append is out of scope), and for `unknownReference` (contextual). When two sources need a back-reference in the same target, one insertion lands per pass and the runner-up is reported.
+  - **Framework**: `context.report({ fix })` on a **project** rule is now honored (`meta.fixable: 'code'` gates it; a fix from a non-fixable project rule routes through `core/internal-error`, matching per-file behavior). `lintAndFix` runs a project-fix fixpoint on the fixed contents — collecting edits keyed by the target's `path`, applying them per file (the ADR-0008 per-file edit-set seam), and re-running the project pass to a fixpoint under the same 10-pass bound; suppressed and baselined problems are never rewritten.
+  - **Programmatic API**: exports `collectProjectFixes` and `applyEditsCounted` from `src/core/fix.ts`.
+
+  No breaking changes: `Diagnostic.fixable` was already required ([#28](https://github.com/knktkc/madr-lint/issues/28)); project-rule diagnostics that previously reported `fixable: false` now report `true` only when the rule attaches a fix.
+
+- [#85](https://github.com/knktkc/madr-lint/pull/85) [`0e05d1c`](https://github.com/knktkc/madr-lint/commit/0e05d1cd338ae6adec99c066822c3c1edddac029) Thanks [@knktkc](https://github.com/knktkc)! - `madr-lint init` — scaffold a config file with detection heuristics ([#30](https://github.com/knktkc/madr-lint/issues/30)). Non-interactive by design (works in CI / piped stdin):
+
+  - **ADR directory**: first of `docs/adr`, `docs/decisions`, `doc/adr`, `adr`, `docs/architecture/decisions` whose top level contains at least one `NNNN-*.md` file; falls back to `docs/adr` (the linter's default) with a note when nothing qualifies.
+  - **MADR version**: samples up to 20 existing ADRs and lets the majority win — frontmatter with `decision-makers` counts as v4, other frontmatter as v3, a v2 metadata list as v2; empty/tie/no-metadata yields `auto` (omitted from the config, it is the default).
+  - **Config format**: `madr-lint.config.ts` when the project looks TypeScript-ish (`tsconfig.json`, or `typescript` among `package.json` dependencies), `.madrlintrc.json` otherwise.
+  - Refuses to overwrite an existing config file (exit 2); `--force` overwrites, `--dir <path>` overrides directory detection, `--json` emits a machine-readable summary of what was detected and written.
+  - The next-steps epilogue runs a cheap in-process lint of the detected directory and suggests `--update-baseline` when it finds violations, so legacy debt does not block adoption.
+
+  The plain `madr-lint [paths]` command is unchanged — `init` is dispatched only when it is the literal first argument, so paths, flags and exit codes behave exactly as before.
+
 ## 0.3.0
 
 ### Minor Changes

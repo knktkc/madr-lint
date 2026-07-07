@@ -1,6 +1,6 @@
 {
   "name": "madr-lint",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Linter for MADR (Markdown Architectural Decision Records) — supports v2 bold-list and v3/v4 frontmatter. Validates filename pattern, required sections, status enum, ISO 8601 dates, numbering uniqueness/gaps, supersedes bidirectionality, and inter-ADR link integrity.",
   "type": "module",
   "bin": {
