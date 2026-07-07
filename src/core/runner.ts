@@ -417,20 +417,28 @@ export function runRulesOnProject(
     const ruleName = rule.meta.name;
     const suggestions = rule.meta.suggestions;
     const docsUrl = rule.meta.docs.url ?? '';
+    // Cross-file autofix (#29): a `meta.fixable: 'code'` project rule may attach
+    // a fix thunk, resolved to a durable `fixable` boolean and carried (transient)
+    // for the cross-file applier. Same gate + misuse-throw as the per-file path.
+    const fixableRule = rule.meta.fixable === 'code';
     const context: ProjectRuleContext = {
       files,
       options: mergedOptions,
       fileExists: runtime.fileExists,
       report(d) {
         const template = suggestions?.[d.messageId];
-        // Project-rule fixes are #29's concern; the v1 framework never applies
-        // them, so every project diagnostic is fixable:false.
+        const hasFix = d.fix !== undefined;
+        if (hasFix && !fixableRule) {
+          throw new Error(
+            `Rule "${ruleName}" attached a fix but meta.fixable is not 'code'`,
+          );
+        }
         diagnostics.push({
           ruleName,
           severity,
           suggestion: template === undefined ? null : interpolate(template, d.data ?? {}),
           docsUrl,
-          fixable: false,
+          fixable: hasFix,
           ...d,
         });
       },

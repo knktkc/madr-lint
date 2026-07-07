@@ -162,6 +162,18 @@ madr-lint --fix-dry-run
 - 修正中はキャッシュがバイパスされます。修正されたファイルは次回の実行で新しい
   コンテンツハッシュとして通常のパイプラインに戻ります。
 
+現在、修正を提供するルール:
+
+- [`madr/status-enum`](/ja/rules/status-enum/) — v2 本文リストの status を設定済みの
+  列挙値へ正規化します（大文字小文字、収録済みのスペルミス、プレフィックスの大文字小文字・誤字）。
+- [`madr/date-iso8601`](/ja/rules/date-iso8601/) — 曖昧さのない v2 本文リストの日付
+  （年先頭の数値、英語の月名）を `YYYY-MM-DD` に正規化します。
+- [`madr/supersedes-bidirectional`](/ja/rules/supersedes-bidirectional/) — 欠落した
+  逆参照をターゲット ADR の既存 frontmatter に挿入します（唯一のファイル横断修正）。
+
+各ルールは曖昧さのないケースのみを修正し、残りは報告にとどめます。何を修正し何に触れないかは
+各ルールのページに明記しています。特に、YAML **frontmatter** 内の値は現状決して書き換えません。
+
 ## レポーター
 
 ### `text`（デフォルト）

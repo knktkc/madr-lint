@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   applyEdits,
   collectFixes,
+  collectProjectFixes,
   fixFileContent,
   makeFixer,
   unifiedDiff,
@@ -24,6 +25,17 @@ function diag(fix?: FixFn): Diagnostic {
     ...(fix ? { fix } : {}),
   };
 }
+
+/** As `diag`, but attributed to an explicit path (for project-rule fixes). */
+function projDiag(path: string, fix?: FixFn): Diagnostic {
+  return { ...diag(fix), path };
+}
+
+/** A whole-file content lookup keyed by path (for collectProjectFixes). */
+const lookup =
+  (m: Record<string, string>) =>
+  (p: string): string | undefined =>
+    m[p];
 
 describe('core/fix — applyEdits', () => {
   it('applies a single replacement', () => {
@@ -111,6 +123,52 @@ describe('core/fix — collectFixes', () => {
     // The single edit must land in whole-file coordinates.
     expect(edits).toEqual([{ range: [fm + i, fm + i + 8], text: 'accepted' }]);
     expect(applyEdits(content, edits)).toBe('---\nx: 1\n---\n# T\n\naccepted\n');
+  });
+});
+
+describe('core/fix — collectProjectFixes (cross-file, per-path edit sets)', () => {
+  it('groups edits by path in WHOLE-FILE coordinates (base 0, no frontmatter shift)', () => {
+    const byPath = collectProjectFixes(
+      [
+        projDiag('a.md', (f) => f.insertAt(4, 'X')),
+        projDiag('b.md', (f) => f.replaceRange([0, 2], 'YY')),
+      ],
+      lookup({ 'a.md': '---\n---\n', 'b.md': 'zz' }),
+    );
+    expect(byPath.get('a.md')).toEqual([{ range: [4, 4], text: 'X' }]);
+    expect(byPath.get('b.md')).toEqual([{ range: [0, 2], text: 'YY' }]);
+  });
+
+  it('skips declined (null) fixes and diagnostics without a fix', () => {
+    const byPath = collectProjectFixes(
+      [
+        projDiag('a.md'), // no fix
+        projDiag('a.md', () => null), // declined
+      ],
+      lookup({ 'a.md': 'content' }),
+    );
+    expect(byPath.size).toBe(0);
+  });
+
+  it('applies at most ONE fix per file per pass (first non-null wins; the rest re-evaluate next pass)', () => {
+    // Two sources both want to insert into the same target. Emitting both would
+    // create a duplicate key; only the first is taken, and the fixpoint re-runs.
+    const byPath = collectProjectFixes(
+      [
+        projDiag('a.md', (f) => f.insertAt(0, 'first\n')),
+        projDiag('a.md', (f) => f.insertAt(0, 'second\n')),
+      ],
+      lookup({ 'a.md': 'body' }),
+    );
+    expect(byPath.get('a.md')).toEqual([{ range: [0, 0], text: 'first\n' }]);
+  });
+
+  it('skips a diagnostic whose path is not in the content set', () => {
+    const byPath = collectProjectFixes(
+      [projDiag('gone.md', (f) => f.insertAt(0, 'X'))],
+      lookup({ 'a.md': 'body' }),
+    );
+    expect(byPath.size).toBe(0);
   });
 });
 

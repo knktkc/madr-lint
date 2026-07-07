@@ -277,4 +277,70 @@ describe('madr/status-enum', () => {
       expect(d?.fixable).toBe(false);
     });
   });
+
+  // Autofix (#29): extend the case-only fix with a tiny, unambiguous synonym /
+  // misspelling map. Corrections are validated against the CONFIGURED enum:
+  // a mapping that lands on two candidates, or on nothing configured, is
+  // declined. Same four guard rails as the case fix (unique match,
+  // single-text-token, slice-verification, v2-list-only).
+  describe('autofix (synonym / typo normalization, v2 list-sourced)', () => {
+    it('fixes a well-known prefix misspelling ("superceded by" → "superseded by")', () => {
+      const content = '# Title\n\n- Status: superceded by ADR-0001\n';
+      const d = runRule(rule, { content, path: 'v2.md' })[0];
+      expect(d?.messageId).toBe('invalidStatus');
+      expect(d?.fixable).toBe(true);
+      expect(applyFix(content, d!)).toBe(
+        '# Title\n\n- Status: superseded by ADR-0001\n',
+      );
+    });
+
+    it('fixes a prefix case difference, preserving the verbatim tail (caseSensitive)', () => {
+      const content = '# Title\n\n- Status: Superseded By ADR-0001\n';
+      const d = runRule(
+        rule,
+        { content, path: 'v2.md' },
+        { options: { caseSensitive: true } },
+      )[0];
+      expect(d?.fixable).toBe(true);
+      expect(applyFix(content, d!)).toBe(
+        '# Title\n\n- Status: superseded by ADR-0001\n',
+      );
+    });
+
+    it('fixes an exact-value misspelling ("depricated" → "deprecated")', () => {
+      const content = '# Title\n\n- Status: depricated\n';
+      const d = runRule(rule, { content, path: 'v2.md' })[0];
+      expect(d?.fixable).toBe(true);
+      expect(applyFix(content, d!)).toBe('# Title\n\n- Status: deprecated\n');
+    });
+
+    it('declines when the enum makes the correction ambiguous (two case-collision candidates)', () => {
+      const content = '# Title\n\n- Status: Foo\n';
+      const d = runRule(
+        rule,
+        { content, path: 'v2.md' },
+        { options: { values: ['foo', 'FOO'], caseSensitive: true } },
+      )[0];
+      expect(d?.messageId).toBe('invalidStatus');
+      expect(d?.fixable).toBe(false);
+    });
+
+    it('respects options: no fix when the target prefix is not configured', () => {
+      const content = '# Title\n\n- Status: superceded by ADR-0001\n';
+      const d = runRule(
+        rule,
+        { content, path: 'v2.md' },
+        { options: { prefixValues: [] } },
+      )[0];
+      expect(d?.messageId).toBe('invalidStatus');
+      expect(d?.fixable).toBe(false);
+    });
+
+    it('does NOT fix a frontmatter-sourced synonym (YAML-aware, out of scope)', () => {
+      const content = '---\nstatus: superceded by ADR-0001\n---\n# Title\n';
+      const d = runRule(rule, { content, path: 'fm.md' })[0];
+      expect(d?.messageId).toBe('invalidStatus');
+      expect(d?.fixable).toBe(false);
+    });
+  });
 });

@@ -3,9 +3,19 @@ import { join } from 'node:path';
 import * as fc from 'fast-check';
 import { describe, it, expect } from 'vitest';
 import { runRule } from '../helpers/run-rule.js';
+import { applyEdits, makeFixer } from '../../src/core/fix.js';
+import { frontmatterOffset } from '../../src/core/parser.js';
 import rule from '../../src/rules/date-iso8601/index.js';
 
 const fixturesDir = join(import.meta.dirname, '../fixtures/date-iso8601');
+
+/** Apply a fixable diagnostic's fix thunk to the source and return the result. */
+function applyFix(content: string, d: { fix?: (f: ReturnType<typeof makeFixer>) => unknown }): string {
+  const fixer = makeFixer(frontmatterOffset(content));
+  const edit = d.fix?.(fixer);
+  const edits = Array.isArray(edit) ? edit : edit ? [edit] : [];
+  return applyEdits(content, edits as never);
+}
 
 describe('madr/date-iso8601', () => {
   describe('valid fixtures', () => {
@@ -194,6 +204,79 @@ describe('madr/date-iso8601', () => {
       const content =
         '# Title\n\n<!-- madr-lint-disable-next-line madr/date-iso8601 -->\n- Date: 2026-99-99\n';
       expect(runRule(rule, { content, path: 'v2.md' })).toEqual([]);
+    });
+  });
+
+  // Autofix (#29): normalize ONLY unambiguous shapes of a v2 list-sourced value —
+  // year-first numeric (`YYYY/M/D`, `YYYY.M.D`, `YYYY-M-D`) and named-month forms
+  // (`3 Jul 2026`, `Jul 3, 2026`). Day/month-order-ambiguous inputs, invalid
+  // calendar dates, and frontmatter-sourced values are NEVER fixed.
+  describe('autofix (v2 list-sourced, unambiguous normalizations only)', () => {
+    const fixCases: Array<[string, string, string]> = [
+      // [label, raw value, normalized]
+      ['slash year-first', '2026/7/3', '2026-07-03'],
+      ['dot year-first', '2026.7.3', '2026-07-03'],
+      ['hyphen unpadded', '2026-7-3', '2026-07-03'],
+      ['already-padded slash', '2026/07/03', '2026-07-03'],
+      ['day-first named month (abbrev)', '3 Jul 2026', '2026-07-03'],
+      ['day-first named month (full)', '03 July 2026', '2026-07-03'],
+      ['month-first named month (comma)', 'Jul 3, 2026', '2026-07-03'],
+      ['month-first named month (full, comma)', 'July 3, 2026', '2026-07-03'],
+    ];
+
+    for (const [label, raw, normalized] of fixCases) {
+      it(`fixes ${label}: "${raw}" → ${normalized} (plain-key v2 list)`, () => {
+        const content = `# Title\n\n- Date: ${raw}\n`;
+        const d = runRule(rule, { content, path: 'v2.md' })[0];
+        expect(d?.messageId).toBe('invalidDate');
+        expect(d?.fixable).toBe(true);
+        expect(applyFix(content, d!)).toBe(`# Title\n\n- Date: ${normalized}\n`);
+      });
+    }
+
+    it('fixes a bold-key list value', () => {
+      const content = '# Title\n\n- **Date**: 2026/7/3\n';
+      const d = runRule(rule, { content, path: 'v2.md' })[0];
+      expect(d?.fixable).toBe(true);
+      expect(applyFix(content, d!)).toBe('# Title\n\n- **Date**: 2026-07-03\n');
+    });
+
+    it('translates the value offset past frontmatter (frontmatter + v2 list date)', () => {
+      const content = '---\nstatus: accepted\n---\n# Title\n\n- Date: 2026/7/3\n';
+      const d = runRule(rule, { content, path: 'mixed.md' })[0];
+      expect(d?.fixable).toBe(true);
+      expect(applyFix(content, d!)).toBe(
+        '---\nstatus: accepted\n---\n# Title\n\n- Date: 2026-07-03\n',
+      );
+    });
+
+    const declineCases: Array<[string, string]> = [
+      ['DD/MM vs MM/DD ambiguity', '03/07/2026'],
+      ['two-digit-year ambiguity', '26/07/03'],
+      ['invalid calendar date (Feb 30)', '2026/2/30'],
+      ['month out of range', '2026/13/01'],
+      ['day out of range', '2026/07/32'],
+      ['non-English month name', '3 Mai 2026'],
+      ['not a date', 'today'],
+      ['day out of range (hyphen)', '2026-7-32'],
+    ];
+
+    for (const [label, raw] of declineCases) {
+      it(`declines ${label}: "${raw}" (report-only, no fix)`, () => {
+        const content = `# Title\n\n- Date: ${raw}\n`;
+        const d = runRule(rule, { content, path: 'v2.md' })[0];
+        expect(d?.messageId).toBe('invalidDate');
+        expect(d?.fixable).toBe(false);
+        expect(d?.fix).toBeUndefined();
+      });
+    }
+
+    it('does NOT offer a fix for a frontmatter-sourced value (YAML-aware, out of scope)', () => {
+      const content = "---\ndate: '2026/7/3'\n---\n# Title\n";
+      const d = runRule(rule, { content, path: 'fm.md' })[0];
+      expect(d?.messageId).toBe('invalidDate');
+      expect(d?.fixable).toBe(false);
+      expect(d?.fix).toBeUndefined();
     });
   });
 });

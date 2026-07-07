@@ -53,9 +53,11 @@ export function applyEdits(content: string, edits: readonly TextEdit[]): string 
 /**
  * Counting variant of `applyEdits`: `applied` is the number of edits that
  * actually LANDED (post overlap/bounds filtering) — the honest source for
- * `summary.fixed`, which must not count dropped edits.
+ * `summary.fixed`, which must not count dropped edits. Exported for the
+ * cross-file fixpoint (`lintAndFix`), which applies project-rule edits per file
+ * and needs the landed count.
  */
-function applyEditsCounted(
+export function applyEditsCounted(
   content: string,
   edits: readonly TextEdit[],
 ): { text: string; applied: number } {
@@ -107,6 +109,37 @@ export function collectFixes(
     else edits.push(result);
   }
   return edits;
+}
+
+/**
+ * Collect CROSS-FILE (project-rule) fixes, grouped by the file each edits.
+ * A project diagnostic names the file it targets via `diagnostic.path`; its fix
+ * emits an edit for THAT file. Unlike per-file fixes, project fixes operate in
+ * WHOLE-FILE coordinates: they may edit YAML frontmatter, which body (mdast)
+ * coordinates strip, so there is no frontmatter shift to add — the fixer's base
+ * is 0. See #29 (ADR-0008's per-file edit-set seam).
+ *
+ * `contentByPath(path)` returns the current content of a target file, or
+ * undefined if it is not in the fix set (its edits are then skipped). At most
+ * ONE fix contributes per file per pass — a second insertion at the same spot
+ * would duplicate a key; the fixpoint re-runs the project pass so the runners-up
+ * re-evaluate against the now-edited file (and typically decline).
+ */
+export function collectProjectFixes(
+  diagnostics: readonly Diagnostic[],
+  contentByPath: (path: string) => string | undefined,
+): Map<string, TextEdit[]> {
+  const fixer = makeFixer(0);
+  const byPath = new Map<string, TextEdit[]>();
+  for (const d of diagnostics) {
+    if (!d.fix) continue;
+    if (byPath.has(d.path)) continue; // one file, one fix per pass
+    if (contentByPath(d.path) === undefined) continue; // target not in the set
+    const result = d.fix(fixer);
+    if (result === null) continue;
+    byPath.set(d.path, Array.isArray(result) ? [...result] : [result]);
+  }
+  return byPath;
 }
 
 export interface FixFileResult {

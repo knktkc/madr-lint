@@ -63,6 +63,33 @@ supersedes: ADR-9999   # no 9999-*.md exists
 
 `0042-x.md` に対して `data.ref: 'ADR-9999'` を伴う `unknownReference` を発行します。
 
+## 🔧 自動修正
+
+このルールは **自動修正可能**（`madr-lint --fix`）で、madr-lint で最初の**ファイル横断**の修正です。`missingBackReference` が見つかると、対応する `<direction>: <expected>` 行を**ターゲット**ファイルの frontmatter の閉じ `---` の直前に挿入します。frontmatter ブロックは不透明な行として扱う（YAML の再パース／再シリアライズをしない）ため、キーの順序・コメント・改行コードなど他のバイトはすべて保持されます。
+
+修正前（`0001-old.md`、`0042-new.md` への逆参照が欠落）:
+
+```yaml
+---
+status: superseded by ADR-0042
+---
+```
+
+`madr-lint --fix` 後:
+
+```yaml
+---
+status: superseded by ADR-0042
+superseded-by: ADR-0042
+---
+```
+
+`unknownReference` は自動修正**できません**（正しい ADR 番号を知っているのは執筆者だけであり、文脈依存です）。次の場合、`missingBackReference` は修正され**ません**:
+
+- **ターゲットに frontmatter がない** — v2 本文リストの ADR や、frontmatter を持たないファイル。frontmatter ブロックを新規作成することはありません。
+- **キーが既に存在する** — ターゲットが既に `superseded-by:`（または `supersedes:`）を異なる値・部分的な値で宣言している場合、キーを重複させたり値を書き換え／追記したりせず（対象外）、修正を見送ります。この判定は大文字小文字を区別しません。既存の `Superseded-By:` も挿入をブロックするため、矛盾して見える別表記のキーが追加されることはありません。診断は手動で解決するために残ります。
+- **多対一・同一パス** — 2 つのソース ADR が*同じ*ターゲットへの逆参照を必要とする場合、1 パスにつき 1 件だけ挿入し、残りは報告します（配列値が必要で、手動編集の領域です）。
+
 ## オプション
 
 このルールにはオプションがありません。

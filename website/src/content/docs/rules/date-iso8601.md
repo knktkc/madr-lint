@@ -44,6 +44,26 @@ date: '2024-02-29'
 | `date: '26-05-01'` | `invalidDate` | 2-digit year |
 | `date: 'today'` | `invalidDate` | not a date string |
 
+## 🔧 Autofix
+
+This rule is **fixable** (`madr-lint --fix`) — but only for **v2 body-list** dates, where the value has an exact source offset. Frontmatter dates are never rewritten (YAML-aware editing is out of scope), and only **unambiguous** shapes are normalized. Everything else is left as a report-only diagnostic.
+
+Fixed — normalized to `YYYY-MM-DD`:
+
+| Before | After | Shape |
+|---|---|---|
+| `- Date: 2026/7/3` | `- Date: 2026-07-03` | year-first numeric (`/`, `.` or `-`, single separator) |
+| `- Date: 3 Jul 2026` | `- Date: 2026-07-03` | day-first English named month |
+| `- Date: July 3, 2026` | `- Date: 2026-07-03` | month-first English named month |
+
+**Not** fixed (reported, never rewritten):
+
+- **Ambiguous day/month order** — `03/07/2026` could be 3 July or 7 March; there is no safe choice, so it is never touched.
+- **Two-digit years** — `26/07/03`.
+- **Impossible calendar dates** — `2026/2/30`, `2026/13/01`; a fix never turns an invalid date into a *different* valid one.
+- **Non-English or unknown month names** — `3 Mai 2026`.
+- **Frontmatter-sourced values** — a `date:` in YAML frontmatter (fix an ISO value there by hand).
+
 ## Options
 
 | Option | Type | Default | Description |
