@@ -136,9 +136,14 @@ madr-lint --fix-dry-run
 `--fix` rewrites files (only those that actually change), then re-lints the fixed
 content and reports the **remaining** problems — the exit code reflects what is
 left, so `--fix` in CI still fails on anything a fix could not resolve.
-`--fix-dry-run` applies the same fixes in memory and prints a per-file unified
-diff to stdout, writing nothing; its exit code is what `--fix` would have
-produced. If both flags are given, `--fix-dry-run` wins (nothing is written).
+`--fix-dry-run` applies the same fixes in memory and shows a per-file unified
+diff, writing nothing; its exit code is what `--fix` would have produced. If both
+flags are given, `--fix-dry-run` wins (nothing is written).
+
+Where the dry-run diff goes depends on `--format`, so machine-readable stdout is
+never polluted: `text` prints it to stdout (below); `json` embeds it in the
+payload as a top-level `diffs` array (see [`json`](#json)); `sarif` / `github`
+send it to stderr so their stdout stays parseable.
 
 ```text
 --- a/docs/adr/0003-use-postgres.md
@@ -190,7 +195,9 @@ Structured output for tooling. Each result carries `suggestion` — a
 machine-actionable fix, or `null` when the rule defines none for that message —
 `docsUrl`, the rule's documentation URL, and `fixable`, whether `--fix` can
 repair it. When a fix pass ran, `summary` also carries `fixed` (the number of
-fixes applied):
+fixes applied). Under `--fix-dry-run`, the payload additionally carries a
+top-level `diffs` array — one `{ "path", "diff" }` entry per changed file, with
+`diff` holding the unified diff text — so stdout stays pure JSON:
 
 ```bash
 madr-lint --format json
