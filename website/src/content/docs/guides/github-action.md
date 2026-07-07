@@ -35,8 +35,8 @@ jobs:
           path: docs/adr
 ```
 
-> The floating `v0` tag is published alongside the v0.2.0 release. If it isn't
-> available yet, use `@main` (or pin an exact tag like `@v0.2.0`).
+> The floating `v0` tag tracks the latest v0.x release; for stricter
+> reproducibility, pin an exact tag like `@v0.3.0`.
 
 The action exits non-zero when there are `error`-severity diagnostics, failing
 the job automatically.

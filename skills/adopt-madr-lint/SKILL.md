@@ -244,8 +244,8 @@ jobs:
 Notes:
 - `actions/setup-node` must come **before** `knktkc/madr-lint@v0` — the
   action does not install Node itself.
-- The floating `v0` tag is published alongside the v0.2.0 release. If it
-  isn't resolvable yet, use `@main` or pin an exact tag (`@v0.2.0`) instead.
+- The floating `v0` tag tracks the latest v0.x release; pin an exact tag
+  (`@v0.3.0`) for stricter reproducibility.
 - For production CI, prefer pinning `version: '0.3.0'` under `with:` over the
   default `latest` dist-tag, to protect against a hijacked `latest` publish.
 - To fail CI on any warning too, add `args: '--max-warnings 0'`.
