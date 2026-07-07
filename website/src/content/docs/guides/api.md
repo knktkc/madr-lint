@@ -62,6 +62,8 @@ interface Diagnostic {
   data?: Record<string, unknown>;
   suggestion: string | null;  // concrete remediation, or null when the rule defines none
   docsUrl: string;            // rule.meta.docs.url (the repo for core/internal-error)
+  fixable: boolean;           // whether an autofix is available for THIS diagnostic
+  fix?: (fixer: Fixer) => TextEdit | TextEdit[] | null; // transient; see Autofix
 }
 ```
 
@@ -69,6 +71,12 @@ interface Diagnostic {
 rule's declarative `meta.suggestions[messageId]` and `meta.docs.url`.
 `suggestion` is interpolated with the diagnostic's `data`, exactly like the
 message; rules never build these strings imperatively.
+
+`fixable` is a durable boolean — it is serialized to the cache and to `json`
+output, and the text reporter renders a `🔧 fixable` marker for it. The `fix`
+thunk is **transient**: a closure dropped by JSON serialization (so it is absent
+on cache-hydrated diagnostics) and consumed by the autofix applier. See
+[Autofix](#autofix).
 
 ## Run per-file rules together
 
@@ -145,12 +153,58 @@ writeBaseline(baselinePath(process.cwd()), baseline);
 const { kept, hidden } = applyBaseline(newDiagnostics, baseline);
 ```
 
+## Autofix
+
+A rule opts into autofix by declaring `meta.fixable: 'code'` and attaching a lazy
+`fix` thunk to `context.report(...)`. The thunk works in **body** (mdast)
+coordinates — the same space as `node.position.*.offset` — and the `Fixer`
+translates to whole-file offsets, so a fix is correct even when frontmatter was
+stripped:
+
+```typescript
+context.report({
+  messageId: 'invalidStatus',
+  data: { status, allowed },
+  // Only attach a fix when the repair is mechanical; return null to decline.
+  fix: (fixer) => fixer.replaceRange([valueStart, valueEnd], 'accepted'),
+});
+```
+
+The applier primitives are exported for tooling and for cross-file fixes:
+
+```typescript
+import {
+  applyEdits,
+  makeFixer,
+  fixFileContent,
+  frontmatterOffset,
+} from 'madr-lint';
+
+// Translate body offsets past stripped frontmatter, then splice.
+const fixer = makeFixer(frontmatterOffset(content)); // fileOffset = body + frontmatter
+const edit = fixer.replaceRange([start, end], 'accepted'); // TextEdit (whole-file)
+const fixed = applyEdits(content, [edit]); // sorted, overlaps dropped, one pass
+```
+
+`fixFileContent(content, lint)` runs the fixpoint loop for one file: it collects
+edits from the diagnostics your `lint` callback returns (which should already be
+suppression- and baseline-filtered), applies them, re-lints, and repeats up to
+`MAX_FIX_PASSES` (10). It returns `{ fixedContent, remaining, changed, passes,
+applied }`.
+
 ## Exports
 
 | Export | Description |
 |---|---|
 | `parseFile` | Parse content → frontmatter, metadata, mdast, body |
 | `extractListMetadata` | Extract v2 body-list metadata from an mdast tree |
+| `frontmatterOffset` | Length gray-matter strips (`fileOffset = bodyOffset + this`) |
+| `applyEdits` | Apply `TextEdit`s to a string (sorted, overlaps dropped, one pass) |
+| `makeFixer` | Build a `Fixer` that translates body offsets to whole-file `TextEdit`s |
+| `collectFixes` | Invoke diagnostics' `fix` thunks → whole-file `TextEdit[]` |
+| `fixFileContent` | Run the per-file autofix fixpoint against a `lint` callback |
+| `unifiedDiff` | Render a unified diff between two strings (used by `--fix-dry-run`) |
+| `MAX_FIX_PASSES` | Fixpoint iteration cap (10) |
 | `runRule` | Run one per-file rule |
 | `runRulesOnFile` | Run per-file rules with one AST traversal |
 | `runRulesOnProject` | Run cross-file (project) rules |
