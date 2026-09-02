@@ -18,8 +18,11 @@ updates:
       # that is not TS7-compatible (egoist/tsup#1405, fix #1409 unreleased).
       # lint/typecheck/test pass on TS7 — only the d.ts emit fails. Drop this
       # once tsup ships the fix; adopting TS7 also deserves its own ADR.
+      # `versions` rather than `update-types`: inside a group Dependabot does
+      # not honour update-types ignores (dependabot-core#10122) — verified on
+      # #103, which kept TS 7 after two recreates with the update-types form.
       - dependency-name: typescript
-        update-types: ["version-update:semver-major"]
+        versions: [">=7.0.0"]
     groups:
       types:
         patterns:
