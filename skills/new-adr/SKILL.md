@@ -198,7 +198,8 @@ then `- Date:`) starts a second list, and the fields below it drop out of
 metadata. A single-line HTML comment between the items is fine: it renders as
 nothing, so the v2 bridge reads the split block as one metadata block (see
 Step 5). Any other intervening block ends the metadata block — a paragraph, a
-code fence, a thematic break, a heading, or visible HTML such as `<div>`.
+code fence, a thematic break, a blockquote, a heading, or visible HTML such as
+`<div>`.
 
 ### Step 5: Validate — loop until clean
 
