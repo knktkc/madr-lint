@@ -13,9 +13,10 @@ export interface ParsedFile {
   /** Parsed YAML frontmatter (v3/v4), or null if absent. */
   frontmatter: Record<string, unknown> | null;
   /**
-   * v2 body-list metadata extracted from the leading list, or null if absent.
-   * Covers both the bold-key (`- **Status**:`) and the canonical MADR v2.1.2
-   * plain-key (`* Status:`) shapes. See ADR-0006.
+   * v2 body-list metadata extracted from the leading metadata block, or null if
+   * absent. The block is the leading RUN of lists, joined across HTML comments
+   * (which render as nothing). Covers both the bold-key (`- **Status**:`) and
+   * the canonical MADR v2.1.2 plain-key (`* Status:`) shapes. See ADR-0006.
    */
   listMetadata: Record<string, unknown> | null;
   /**
@@ -62,8 +63,8 @@ export function frontmatterOffset(content: string): number {
  * Parse a Markdown file: extract YAML frontmatter via gray-matter, then
  * feed the body into mdast-util-from-markdown directly (per ADR-0002,
  * we skip the unified+remark pipeline overhead). Additionally, extract
- * v2-style list metadata from the body's first list — both bold-key and
- * canonical plain-key shapes (see ADR-0006).
+ * v2-style list metadata from the body's leading metadata block — both
+ * bold-key and canonical plain-key shapes (see ADR-0006).
  */
 export function parseFile(content: string): ParsedFile {
   const matter = grayMatter(content);
@@ -135,20 +136,25 @@ const RECOGNIZED_METADATA_KEYS = new Set([
 ]);
 
 /**
- * Extract v2-style list metadata from an mdast Root. The metadata block is
- * the leading list — the first block after the H1 title (only headings may
- * precede it; an intervening paragraph means the list is body content, not
- * metadata). Each `listItem` is read as one `Key: value` pair in either of
- * two shapes:
+ * Extract v2-style list metadata from an mdast Root. The metadata block leads
+ * the body: headings and HTML may precede it, but an intervening paragraph
+ * means the list is body content, not metadata. The block is the leading RUN
+ * of lists, joined across HTML comments — a comment ends the CommonMark list
+ * yet renders as nothing, so a field below it is still metadata (#73). Only
+ * comments bridge; visible HTML, a paragraph, a code fence, a thematic break,
+ * a blockquote, and a heading of any depth all end the block, as does a second
+ * list with no comment before it. Each `listItem` is read as one `Key: value`
+ * pair in either of two shapes:
  *
  *   - Bold key:  `- **Status**: accepted`  (some MADR v2 authors)
  *   - Plain key: `* Status: accepted`      (official MADR v2.1.2 template)
  *
  * Key normalization: trim → lowercase → spaces become hyphens
  * (matches v4 frontmatter convention, e.g. "Decision Makers" →
- * "decision-makers"). On duplicate keys, first occurrence wins.
+ * "decision-makers"). On duplicate keys, first occurrence wins — across
+ * segments too, so an earlier segment always shadows a later one.
  *
- * Returns null unless the list carries a recognized MADR key, so ordinary
+ * Returns null unless the block carries a recognized MADR key, so ordinary
  * leading prose lists are not mistaken for metadata. (A leading list keyed by
  * a recognized field is still treated as metadata even if its value reads
  * prose-like, e.g. `Status: under discussion` — that position + key is
@@ -161,6 +167,17 @@ export function extractListMetadata(
   ast: Root,
 ): Record<string, unknown> | null {
   return extractListMetadataWithLoc(ast)?.values ?? null;
+}
+
+/**
+ * True when an `html` node is nothing but a comment — i.e. invisible in the
+ * rendered document. Deliberately independent of suppression.ts (which happens
+ * to use the same shape test): the question here is "does a reader see this?",
+ * not "is this a madr-lint directive".
+ */
+function isHtmlComment(value: string): boolean {
+  const trimmed = value.trim();
+  return trimmed.startsWith('<!--') && trimmed.endsWith('-->');
 }
 
 /**
@@ -177,43 +194,64 @@ function extractListMetadataWithLoc(
   loc: Record<string, MetadataPosition>;
   valueOffsets: Record<string, { start: number; end: number }>;
 } | null {
-  let firstList: List | null = null;
+  const segments: List[] = [];
+  let bridged = false;
   for (const child of ast.children) {
-    if (child.type === 'heading') {
-      if (child.depth >= 2) break; // reached the first H2 — no metadata block
-      continue; // skip the H1 title (and any further headings)
-    }
-    // Leading HTML comments / markers don't displace the metadata block.
-    if (child.type === 'html') continue;
-    if (child.type === 'list') {
-      firstList = child;
+    if (segments.length === 0) {
+      if (child.type === 'heading') {
+        if (child.depth >= 2) break; // reached the first H2 — no metadata block
+        continue; // skip the H1 title (and any further headings)
+      }
+      // Leading HTML comments / markers don't displace the metadata block.
+      if (child.type === 'html') continue;
+      if (child.type === 'list') {
+        segments.push(child);
+        continue;
+      }
+      // Any other leading block (paragraph, code, thematic break, …) means the
+      // metadata block — which must lead — is absent; the list, if any, is prose.
       break;
     }
-    // Any other leading block (paragraph, code, thematic break, …) means the
-    // metadata block — which must lead — is absent; the list, if any, is prose.
+    // An HTML comment between two items ends the CommonMark list but renders as
+    // nothing, so the block a reader sees is still one block: a field below it
+    // must not vanish from metadata (#73). Only pure comments bridge — visible
+    // HTML is real content. A heading of ANY depth ends the block here; the H1
+    // branch above must stay unreachable once a segment exists, or
+    // `list | comment | # Other | list` would merge across a section boundary.
+    if (child.type === 'html' && isHtmlComment(child.value)) {
+      bridged = true;
+      continue;
+    }
+    if (child.type === 'list' && bridged) {
+      segments.push(child);
+      bridged = false;
+      continue;
+    }
     break;
   }
 
-  if (!firstList) return null;
+  if (segments.length === 0) return null;
 
   const values: Record<string, unknown> = {};
   const loc: Record<string, MetadataPosition> = {};
   const valueOffsets: Record<string, { start: number; end: number }> = {};
-  for (const item of firstList.children) {
-    const pair = extractListItemKV(item);
-    if (pair && !(pair.key in values)) {
-      values[pair.key] = pair.value;
-      const start = item.position?.start;
-      if (start) loc[pair.key] = { line: start.line, column: start.column };
-      // Record the value offset only when it slices back to the exact value —
-      // this rejects any misalignment from escapes / entities, keeping autofix
-      // edits precise. Only available when the body text is supplied.
-      if (
-        body !== undefined &&
-        pair.valueOffset &&
-        body.slice(pair.valueOffset.start, pair.valueOffset.end) === pair.value
-      ) {
-        valueOffsets[pair.key] = pair.valueOffset;
+  for (const list of segments) {
+    for (const item of list.children) {
+      const pair = extractListItemKV(item);
+      if (pair && !(pair.key in values)) {
+        values[pair.key] = pair.value;
+        const start = item.position?.start;
+        if (start) loc[pair.key] = { line: start.line, column: start.column };
+        // Record the value offset only when it slices back to the exact value —
+        // this rejects any misalignment from escapes / entities, keeping autofix
+        // edits precise. Only available when the body text is supplied.
+        if (
+          body !== undefined &&
+          pair.valueOffset &&
+          body.slice(pair.valueOffset.start, pair.valueOffset.end) === pair.value
+        ) {
+          valueOffsets[pair.key] = pair.valueOffset;
+        }
       }
     }
   }
