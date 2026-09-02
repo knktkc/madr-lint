@@ -89,17 +89,19 @@ attributed to a file; a directive in that file suppresses them:
   section, a missing metadata field) are only silenced by file-scoped
   suppression: `disable-file`, or a `disable` left open to the end of the
   file. A bounded `disable`/`enable` pair does not silence them.
-- **A suppression comment placed between MADR v2 metadata-list items splits
-  the list.** v2 metadata is a Markdown list (`* Status: accepted` /
-  `* Date: 2024-1-5`); an HTML comment inserted *between* items breaks the
-  list in two, and the v2 metadata bridge only reads up to the split — the
-  field after the comment silently disappears from the parsed metadata. That
-  degrades a line-suppressible `invalidDate` into an unsuppressible
-  file-level `missingDate` (see "Diagnostics without a line" above) — a
-  worse, unsuppressed error than the one you started with. Place directives
-  above the whole list instead, or use `madr-lint-disable-file` for v2
-  files. Tracked as
-  [#73](https://github.com/knktkc/madr-lint/issues/73).
+- **A directive between MADR v2 metadata-list items is supported.** v2
+  metadata is a Markdown list (`* Status: accepted` / `* Date: 2024-1-5`), and
+  an HTML comment inserted *between* items does split that list in two per
+  CommonMark — but the comment renders as nothing, so the v2 metadata bridge
+  reads the split block as one metadata block. The field below the comment
+  keeps its line number, so `disable-next-line` targets it normally. With no
+  directive above it, `--fix` rewrites that same field in place. Not both:
+  `--fix` never rewrites a suppressed problem. What still ends the metadata
+  block: a paragraph, a code fence, a thematic break, a blockquote, a heading
+  of any depth, and visible HTML such as `<div>` or `<details>`.
+- **Keep a directive on a single line.** A directive written as a multi-line
+  `<!--` … `-->` block resolves to its own second line, not to your content, so
+  `disable-next-line` misses. Write the whole directive on one line.
 - **One directive per comment, standing alone.** A comment that contains
   another comment on the same line (`<!-- … --><!-- … -->`) is rejected as a
   directive. Unknown keywords (e.g. `madr-lint-disable-line`) and ordinary
