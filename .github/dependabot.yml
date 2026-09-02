@@ -13,6 +13,13 @@ updates:
     cooldown:
       default-days: 3
       semver-major-days: 7
+    ignore:
+      # TypeScript 7 breaks `pnpm build`: tsup 8.5.1 bundles a rollup-plugin-dts
+      # that is not TS7-compatible (egoist/tsup#1405, fix #1409 unreleased).
+      # lint/typecheck/test pass on TS7 — only the d.ts emit fails. Drop this
+      # once tsup ships the fix; adopting TS7 also deserves its own ADR.
+      - dependency-name: typescript
+        update-types: ["version-update:semver-major"]
     groups:
       types:
         patterns:
@@ -51,3 +58,10 @@ updates:
     cooldown:
       default-days: 3
       semver-major-days: 7
+    groups:
+      # init and analyze must run the same version: the analyze post-step
+      # rejects a config file written by a different version, so separate
+      # PRs for the two can never pass CI (#106 / #107).
+      codeql:
+        patterns:
+          - github/codeql-action/*
