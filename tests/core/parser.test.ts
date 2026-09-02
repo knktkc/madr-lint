@@ -393,11 +393,55 @@ describe('parser/extractListMetadata — comment-split metadata block (#73)', ()
     });
   });
 
+  // Bridging positives. The predicate deliberately admits shapes suppression.ts
+  // rejects as directives (coalesced / space-separated comments): the parser
+  // asks "does a reader see this?", not "is this a madr-lint directive?".
+  const bridgingHtml: Array<[string, string]> = [
+    ['a single comment', '<!-- c -->'],
+    ['two coalesced comments', '<!-- a --><!-- b -->'],
+    ['two space-separated comments', '<!-- a --> <!-- b -->'],
+    ['the empty-comment form', '<!-->'],
+    ['a multi-line comment', '<!--\nnote\n-->'],
+  ];
+
+  for (const [label, html] of bridgingHtml) {
+    it(`bridges across ${label}`, () => {
+      const md = `# T\n\n* Status: accepted\n${html}\n* Date: 2026/07/06\n`;
+      expect(extractListMetadata(ast(md))).toEqual({
+        status: 'accepted',
+        date: '2026/07/06',
+      });
+    });
+  }
+
   // Boundary guards. These pass both before and after the fix: they pin what
   // does NOT bridge, which is the whole safety argument for widening the scan.
-  it('does not bridge across an html node that is not purely a comment', () => {
-    const md =
-      '# T\n\n* Status: accepted\n<!-- a --> visible\n* Date: 2026/07/06\n';
+  const nonBridgingHtml: Array<[string, string]> = [
+    ['a visible word after the comment', '<!-- a --> visible'],
+    ['visible text between two comments', '<!-- a --> visible <!-- b -->'],
+    ['a stray end marker after the comment', '<!-- a -->x-->'],
+  ];
+
+  for (const [label, html] of nonBridgingHtml) {
+    it(`does not bridge across an html node with ${label}`, () => {
+      const md = `# T\n\n* Status: accepted\n${html}\n* Date: 2026/07/06\n`;
+      expect(extractListMetadata(ast(md))).toEqual({ status: 'accepted' });
+    });
+  }
+
+  it('does not bridge across an html node that merely ends with a comment', () => {
+    // HTML block type 6 runs to the next blank line, so the visible <div> and
+    // the comment under it coalesce into ONE html node ending in `-->`.
+    const md = [
+      '# T',
+      '',
+      '* Status: accepted',
+      '<div class="x">hi</div>',
+      '<!-- c -->',
+      '',
+      '* Date: 2026/07/06',
+      '',
+    ].join('\n');
     expect(extractListMetadata(ast(md))).toEqual({ status: 'accepted' });
   });
 
@@ -460,6 +504,21 @@ describe('parser/extractListMetadata — comment-split metadata block (#73)', ()
 
   it('does not merge two adjacent lists with no comment between them', () => {
     const md = '# T\n\n* Status: accepted\n- Date: 2026/07/06\n';
+    expect(extractListMetadata(ast(md))).toEqual({ status: 'accepted' });
+  });
+
+  it('a consumed bridge does not latch across a later marker change', () => {
+    const md =
+      '# T\n\n* Status: accepted\n<!-- c -->\n* Date: 2026/07/06\n- Deciders: alice\n';
+    expect(extractListMetadata(ast(md))).toEqual({
+      status: 'accepted',
+      date: '2026/07/06',
+    });
+  });
+
+  it('a list with no bridge before it ends the block, even if a comment follows', () => {
+    const md =
+      '# T\n\n* Status: accepted\n- Date: 2026-05-01\n<!-- c -->\n* Deciders: alice\n';
     expect(extractListMetadata(ast(md))).toEqual({ status: 'accepted' });
   });
 
