@@ -47,7 +47,7 @@ describe('parser/extractListMetadata', () => {
     });
   });
 
-  it('only considers the FIRST list before any H2 heading', () => {
+  it('does not read a list after the first H2 heading', () => {
     const md = [
       '# T',
       '',
