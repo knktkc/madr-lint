@@ -21,6 +21,11 @@ updates:
       # `versions` rather than `update-types`: inside a group Dependabot does
       # not honour update-types ignores (dependabot-core#10122) — verified on
       # #103, which kept TS 7 after two recreates with the update-types form.
+      # NOTE: neither form took effect on `@dependabot recreate` of the open
+      # group PR, so the rule actually in force is the one stored on GitHub's
+      # side by `@dependabot ignore typescript major version` (#103, 2026-09-02).
+      # To re-enable TS 7 you must do BOTH: delete this entry AND comment
+      # `@dependabot unignore typescript` on any open Dependabot PR.
       - dependency-name: typescript
         versions: [">=7.0.0"]
     groups:
