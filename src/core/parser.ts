@@ -170,14 +170,29 @@ export function extractListMetadata(
 }
 
 /**
- * True when an `html` node is nothing but a comment — i.e. invisible in the
- * rendered document. Deliberately independent of suppression.ts (which happens
- * to use the same shape test): the question here is "does a reader see this?",
- * not "is this a madr-lint directive".
+ * True when an `html` node is nothing but HTML comments — one or more, with
+ * only whitespace between them — i.e. invisible in the rendered document.
+ * Deliberately independent of suppression.ts, which rejects several of these
+ * shapes as directives: the question here is "does a reader see this?", not
+ * "is this a madr-lint directive?".
+ *
+ * Consuming the comments in a run rather than testing the first and last four
+ * characters is what keeps `<!-- a --> visible <!-- b -->` out — CommonMark
+ * ends an HTML block on the first line containing `-->`, so that whole line is
+ * ONE node whose visible text a reader does see.
  */
 function isHtmlComment(value: string): boolean {
-  const trimmed = value.trim();
-  return trimmed.startsWith('<!--') && trimmed.endsWith('-->');
+  let rest = value.trim();
+  if (rest.length === 0) return false;
+  while (rest.length > 0) {
+    if (!rest.startsWith('<!--')) return false;
+    // From index 2, not 4: CommonMark admits `<!-->` and `<!--->` as empty
+    // comments, where the closing `-->` overlaps the opening `<!--`.
+    const end = rest.indexOf('-->', 2);
+    if (end === -1) return false;
+    rest = rest.slice(end + 3).trim();
+  }
+  return true;
 }
 
 /**
