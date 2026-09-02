@@ -320,7 +320,7 @@ guide for the full directive syntax.
 
 ```markdown
 <!-- madr-lint-disable-next-line madr/status-enum -->
-status: some-legacy-value-we-intentionally-keep
+* Status: some-legacy-value-we-intentionally-keep
 ```
 
 **A directive between MADR v2 body-list metadata items is the recommended
