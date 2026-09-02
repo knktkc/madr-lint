@@ -94,11 +94,11 @@ attributed to a file; a directive in that file suppresses them:
   an HTML comment inserted *between* items does split that list in two per
   CommonMark — but the comment renders as nothing, so the v2 metadata bridge
   reads the split block as one metadata block. The field below the comment
-  keeps its line number, so `disable-next-line` targets it normally — or, with
-  no directive above it, `--fix` rewrites it in place. Not both: `--fix` never
-  rewrites a suppressed problem. What still ends the metadata block: a
-  paragraph, a code fence, a thematic break, a blockquote, a heading of any
-  depth, and visible HTML such as `<div>` or `<details>`.
+  keeps its line number, so `disable-next-line` targets it normally. With no
+  directive above it, `--fix` rewrites that same field in place. Not both:
+  `--fix` never rewrites a suppressed problem. What still ends the metadata
+  block: a paragraph, a code fence, a thematic break, a blockquote, a heading
+  of any depth, and visible HTML such as `<div>` or `<details>`.
 - **Keep a directive on a single line.** A directive written as a multi-line
   `<!--` … `-->` block resolves to its own second line, not to your content, so
   `disable-next-line` misses. Write the whole directive on one line.

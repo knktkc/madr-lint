@@ -247,10 +247,10 @@ Two things that commonly trip this up, both confirmed during dogfooding:
   authoring from scratch, fix the underlying value instead — that's cheaper
   than an exception you'll have to justify later.
 
-**Suppression comments between v2 metadata-list items work** as of this
-release: the comment splits the Markdown list, but the v2 bridge reads the
-split block as one metadata block, so `disable-next-line` reaches the field
-below it. Keep the whole directive on one line.
+**Suppression comments between v2 metadata-list items work.** The comment
+splits the Markdown list, but the v2 bridge reads the split block as one
+metadata block, so `disable-next-line` reaches the field below it. Keep the
+whole directive on one line.
 
 ### Step 6: Done
 

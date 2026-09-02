@@ -335,11 +335,11 @@ spelling.** A v2 ADR's metadata is a Markdown list:
 Inserting an HTML comment *between* these list items does split the Markdown
 list in two per CommonMark, but the comment renders as nothing, so madr-lint's
 v2 metadata bridge reads the split block as one metadata block. The field
-below the comment keeps its line number, so `disable-next-line` reaches it —
-or, with no directive above it, `--fix` rewrites it in place. Not both:
-`--fix` never touches a suppressed problem. Keep the whole directive on one
-line: a multi-line `<!--` … `-->` block resolves to its own second line and
-misses.
+below the comment keeps its line number, so `disable-next-line` reaches it.
+With no directive above it, `--fix` rewrites that same field in place. Not
+both: `--fix` never touches a suppressed problem. Keep the whole directive on
+one line: a multi-line `<!--` … `-->` block resolves to its own second line
+and misses.
 
 A **frontmatter**-sourced value is different — it is stripped before the body
 is parsed, so it has no body line and no line-scoped directive can reach it.

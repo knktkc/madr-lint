@@ -122,10 +122,11 @@ export function parseFile(content: string): ParsedFile {
 // Canonical MADR metadata field names across v2/v3/v4 (after key
 // normalization). Used to distinguish a genuine metadata block from an
 // ordinary leading list: the plain-key shape (`Foo: bar`) is syntactically
-// identical to prose bullets, so we only promote a list to metadata when it
-// carries at least one of these keys. The set is deliberately the canonical
-// fields — a list keyed only by non-standard fields (e.g. `Tags`, `Author`)
-// is treated as prose, not metadata. See the dogfooding notes in ADR-0006.
+// identical to prose bullets, so we only promote the block to metadata when it
+// carries at least one of these keys. The gate runs once over the merged
+// segments, not per list. The set is deliberately the canonical fields — a
+// block keyed only by non-standard fields (e.g. `Tags`, `Author`) is treated
+// as prose, not metadata. See the dogfooding notes in ADR-0006.
 const RECOGNIZED_METADATA_KEYS = new Set([
   'status',
   'date',
@@ -137,12 +138,13 @@ const RECOGNIZED_METADATA_KEYS = new Set([
 
 /**
  * Extract v2-style list metadata from an mdast Root. The metadata block leads
- * the body: headings and HTML may precede it, but an intervening paragraph
- * means the list is body content, not metadata. The block is the leading RUN
- * of lists, joined across HTML comments — a comment ends the CommonMark list
- * yet renders as nothing, so a field below it is still metadata (#73). Only
- * comments bridge; visible HTML, a paragraph, a code fence, a thematic break,
- * a blockquote, and a heading of any depth all end the block, as does a second
+ * the body: only H1 headings and HTML nodes may precede it — an H2-or-deeper
+ * heading, or any other block before the first list, means there is no
+ * metadata block. The block itself is the leading RUN of lists, joined across
+ * HTML comments — a comment ends the CommonMark list yet renders as nothing,
+ * so a field below it is still metadata (#73). Only comments bridge; once the
+ * run has started, visible HTML, a paragraph, a code fence, a thematic break,
+ * a blockquote, and a heading of ANY depth all end the block, as does a second
  * list with no comment before it. Each `listItem` is read as one `Key: value`
  * pair in either of two shapes:
  *
@@ -215,7 +217,7 @@ function extractListMetadataWithLoc(
     if (segments.length === 0) {
       if (child.type === 'heading') {
         if (child.depth >= 2) break; // reached the first H2 — no metadata block
-        continue; // skip the H1 title (and any further headings)
+        continue; // skip the H1 title (and any further H1s)
       }
       // Leading HTML comments / markers don't displace the metadata block.
       if (child.type === 'html') continue;
