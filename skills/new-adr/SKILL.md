@@ -192,9 +192,13 @@ Consequences"` doesn't match. Use a single `## Consequences` heading (with
 `Good, because` / `Bad, because` bullets, matching this project's own
 `recommended`-preset-compliant fixtures) instead of the upstream split.
 
-The `* Status:` / `* Date:` / `* Deciders:` lines must stay a **single,
-uninterrupted Markdown list** — see the "v2 body-list is fragile" warning in
-Step 5 before adding any inline suppression comment near them.
+Keep the `* Status:` / `* Date:` / `* Deciders:` lines in one Markdown list
+and use the same bullet marker for every item — a marker change (`* Status:`
+then `- Date:`) starts a second list, and the fields below it drop out of
+metadata. A single-line HTML comment between the items is fine: it renders as
+nothing, so the v2 bridge reads the split block as one metadata block (see
+Step 5). Any other intervening block ends the metadata block — a paragraph, a
+code fence, a thematic break, a heading, or visible HTML such as `<div>`.
 
 ### Step 5: Validate — loop until clean
 
