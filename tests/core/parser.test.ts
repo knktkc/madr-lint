@@ -7,6 +7,18 @@ function ast(md: string): Root {
   return fromMarkdown(md);
 }
 
+/** The exact document from #73: a directive between two v2 metadata items. */
+const issueFile = [
+  '# 0001 test',
+  '',
+  '* Status: accepted',
+  '<!-- madr-lint-disable-next-line madr/date-iso8601 -->',
+  '* Date: 2026/07/06',
+  '',
+  '## Context and Problem Statement',
+  '',
+].join('\n');
+
 describe('parser/extractListMetadata', () => {
   it('extracts a single key/value pair', () => {
     const md = '# T\n\n- **Status**: Proposed\n';
@@ -243,6 +255,261 @@ describe('parser/extractListMetadata — precision guards', () => {
   });
 });
 
+// An HTML comment placed BETWEEN v2 metadata items ends the Markdown list per
+// CommonMark, but renders as nothing — the block a reader sees is still one
+// metadata block. The extractor therefore reads the leading RUN of lists joined
+// across comment-only html nodes (#73). Only comments bridge; every other block
+// type still ends the block. See ADR-0006 refinement 4.
+describe('parser/extractListMetadata — comment-split metadata block (#73)', () => {
+  it('merges leading list segments split by a directive comment (#73)', () => {
+    expect(extractListMetadata(ast(issueFile))).toEqual({
+      status: 'accepted',
+      date: '2026/07/06',
+    });
+  });
+
+  it('merges across an ordinary (non-directive) comment too', () => {
+    const md = [
+      '# T',
+      '',
+      '* Status: accepted',
+      '<!-- reviewers: see PR #12 -->',
+      '* Date: 2026/07/06',
+      '',
+    ].join('\n');
+    expect(extractListMetadata(ast(md))).toEqual({
+      status: 'accepted',
+      date: '2026/07/06',
+    });
+  });
+
+  it('merges when blank lines surround the comment', () => {
+    const md = [
+      '# T',
+      '',
+      '* Status: accepted',
+      '',
+      '<!-- c -->',
+      '',
+      '* Date: 2026/07/06',
+      '',
+    ].join('\n');
+    expect(parseFile(md).metadataLoc).toEqual({
+      status: { line: 3, column: 1 },
+      date: { line: 7, column: 1 },
+    });
+  });
+
+  it('chains across two stacked comment nodes', () => {
+    const md = [
+      '# T',
+      '',
+      '* Status: accepted',
+      '<!-- a -->',
+      '<!-- b -->',
+      '* Date: 2026/07/06',
+      '',
+    ].join('\n');
+    expect(extractListMetadata(ast(md))).toEqual({
+      status: 'accepted',
+      date: '2026/07/06',
+    });
+  });
+
+  it('merges split segments in the bold-key v2 shape', () => {
+    const md = '# T\n\n- **Status**: accepted\n<!-- c -->\n- **Date**: 2026/07/06\n';
+    expect(extractListMetadata(ast(md))).toEqual({
+      status: 'accepted',
+      date: '2026/07/06',
+    });
+  });
+
+  it('merges three segments bridged by two comments, each key keeping its own line', () => {
+    const md = [
+      '# T',
+      '',
+      '* Status: accepted',
+      '<!-- a -->',
+      '* Date: 2026/07/06',
+      '<!-- b -->',
+      '* Deciders: alice',
+      '',
+    ].join('\n');
+    expect(parseFile(md).metadataLoc).toEqual({
+      status: { line: 3, column: 1 },
+      date: { line: 5, column: 1 },
+      deciders: { line: 7, column: 1 },
+    });
+  });
+
+  it('duplicate key across segments keeps the first occurrence', () => {
+    const md = [
+      '# T',
+      '',
+      '* Status: accepted',
+      '<!-- c -->',
+      '* Status: rejected',
+      '* Date: 2026-05-01',
+      '',
+    ].join('\n');
+    expect(extractListMetadata(ast(md))).toEqual({
+      status: 'accepted',
+      date: '2026-05-01',
+    });
+  });
+
+  it('a recognized key in a later segment promotes the block from null to metadata', () => {
+    const md = [
+      '# T',
+      '',
+      '* apples',
+      '* bananas',
+      '',
+      '<!-- note -->',
+      '',
+      '* Status: accepted',
+      '',
+    ].join('\n');
+    expect(extractListMetadata(ast(md))).toEqual({ status: 'accepted' });
+  });
+
+  it('documents the accepted over-merge of a prose list bridged by a comment', () => {
+    const md = [
+      '# T',
+      '',
+      '* Status: accepted',
+      '* Date: 2026-05-01',
+      '',
+      '<!-- note -->',
+      '',
+      '* Note: hello',
+      '* plain bullet',
+      '',
+    ].join('\n');
+    expect(extractListMetadata(ast(md))).toEqual({
+      status: 'accepted',
+      date: '2026-05-01',
+      note: 'hello',
+    });
+  });
+
+  // Boundary guards. These pass both before and after the fix: they pin what
+  // does NOT bridge, which is the whole safety argument for widening the scan.
+  it('does not bridge across an html node that is not purely a comment', () => {
+    const md =
+      '# T\n\n* Status: accepted\n<!-- a --> visible\n* Date: 2026/07/06\n';
+    expect(extractListMetadata(ast(md))).toEqual({ status: 'accepted' });
+  });
+
+  it('does not bridge across visible HTML between segments', () => {
+    const md = [
+      '# T',
+      '',
+      '* Status: accepted',
+      '',
+      '<div class="x">hi</div>',
+      '',
+      '* Date: 2026/07/06',
+      '',
+    ].join('\n');
+    expect(extractListMetadata(ast(md))).toEqual({ status: 'accepted' });
+  });
+
+  it('does not pull a collapsed <details> block into metadata', () => {
+    const md = [
+      '# T',
+      '',
+      '* Status: accepted',
+      '',
+      '<details><summary>Legacy</summary>',
+      '',
+      '* Deciders: bob',
+      '* Consulted: nobody',
+      '',
+      '</details>',
+      '',
+    ].join('\n');
+    expect(extractListMetadata(ast(md))).toEqual({ status: 'accepted' });
+  });
+
+  const terminators: Array<[string, string[]]> = [
+    ['a paragraph', ['Some prose.']],
+    ['a thematic break', ['---']],
+    ['a fenced code block', ['```txt', 'x', '```']],
+    ['a blockquote', ['> quoted']],
+    ['an H1 heading', ['# Other']],
+    ['an H2 heading', ['## Context']],
+  ];
+
+  for (const [label, block] of terminators) {
+    it(`does not merge past ${label} following a bridging comment`, () => {
+      const md = [
+        '# T',
+        '',
+        '* Status: accepted',
+        '<!-- c -->',
+        '',
+        ...block,
+        '',
+        '* Date: 2026/07/06',
+        '',
+      ].join('\n');
+      expect(extractListMetadata(ast(md))).toEqual({ status: 'accepted' });
+    });
+  }
+
+  it('does not merge two adjacent lists with no comment between them', () => {
+    const md = '# T\n\n* Status: accepted\n- Date: 2026/07/06\n';
+    expect(extractListMetadata(ast(md))).toEqual({ status: 'accepted' });
+  });
+
+  it('still reads metadata after a visible-HTML prologue (prologue rule unchanged)', () => {
+    const md = '# T\n\n<div align="center">badge</div>\n\n* Status: accepted\n';
+    expect(extractListMetadata(ast(md))).toEqual({ status: 'accepted' });
+  });
+
+  it('cannot recover an item swallowed by an HTML block on the line above', () => {
+    // CommonMark HTML block type 6 runs to the next blank line, so the `* Date:`
+    // line is absorbed into the html node and never reaches the AST at all.
+    const md =
+      '# T\n\n* Status: accepted\n<div class="x">hi</div>\n* Date: 2026/07/06\n';
+    expect(extractListMetadata(ast(md))).toEqual({ status: 'accepted' });
+  });
+
+  it('keeps the indented-comment workaround working (one list, both keys)', () => {
+    const md = [
+      '# T',
+      '',
+      '* Status: accepted',
+      '  <!-- madr-lint-disable-next-line madr/date-iso8601 -->',
+      '* Date: 2026/07/06',
+      '',
+    ].join('\n');
+    expect(extractListMetadata(ast(md))).toEqual({
+      status: 'accepted',
+      date: '2026/07/06',
+    });
+  });
+
+  it('a trailing comment before the first H2 leaves the block intact', () => {
+    const md = [
+      '# T',
+      '',
+      '* Status: accepted',
+      '* Date: 2026-05-01',
+      '',
+      '<!-- a trailing note -->',
+      '',
+      '## Context',
+      '',
+    ].join('\n');
+    expect(extractListMetadata(ast(md))).toEqual({
+      status: 'accepted',
+      date: '2026-05-01',
+    });
+  });
+});
+
 describe('parser/parseFile metadata combination', () => {
   it('frontmatter only → metadata equals frontmatter', () => {
     const parsed = parseFile('---\nstatus: accepted\n---\n\n# T\n');
@@ -315,5 +582,41 @@ describe('parseFile — metadataLoc (list item positions for suppression)', () =
   it('files without metadata have null metadataLoc', () => {
     const parsed = parseFile('# T\n\nJust prose.\n');
     expect(parsed.metadataLoc).toBeNull();
+  });
+
+  it('a key after the comment keeps its own list-item position (#73)', () => {
+    expect(parseFile(issueFile).metadataLoc).toEqual({
+      status: { line: 3, column: 1 },
+      date: { line: 5, column: 1 },
+    });
+  });
+
+  it('the post-comment value offset slices back to the exact value (autofix range)', () => {
+    const parsed = parseFile(issueFile);
+    const at = parsed.body.indexOf('2026/07/06');
+    expect(parsed.metadataValueLoc?.date).toEqual({ start: at, end: at + 10 });
+    expect(parsed.body.slice(at, at + 10)).toBe('2026/07/06');
+  });
+
+  it('CRLF line endings keep loc and value offsets exact across the comment', () => {
+    const parsed = parseFile(issueFile.replace(/\n/g, '\r\n'));
+    expect(parsed.listMetadata?.date).toBe('2026/07/06');
+    expect(parsed.metadataLoc?.date).toEqual({ line: 5, column: 1 });
+    const range = parsed.metadataValueLoc?.date;
+    expect(range).toBeDefined();
+    expect(parsed.body.slice(range!.start, range!.end)).toBe('2026/07/06');
+  });
+
+  it('frontmatter still wins over a key found after the comment, and that key gets no body position', () => {
+    const parsed = parseFile(
+      "---\ndate: '2026-01-01'\n---\n# T\n\n* Status: accepted\n<!-- c -->\n* Date: 2026/07/06\n",
+    );
+    expect(parsed.listMetadata).toEqual({
+      status: 'accepted',
+      date: '2026/07/06',
+    });
+    expect(parsed.metadata).toEqual({ status: 'accepted', date: '2026-01-01' });
+    expect(parsed.metadataLoc).toEqual({ status: { line: 3, column: 1 } });
+    expect(Object.keys(parsed.metadataValueLoc ?? {})).toEqual(['status']);
   });
 });
