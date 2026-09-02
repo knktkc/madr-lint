@@ -243,14 +243,10 @@ Two things that commonly trip this up, both confirmed during dogfooding:
   authoring from scratch, fix the underlying value instead — that's cheaper
   than an exception you'll have to justify later.
 
-**v2 body-list is fragile around suppression comments.** If you ever need to
-suppress a diagnostic on a v2-style ADR's metadata list (status/date/
-deciders), do **not** put the HTML comment between list items — it splits
-the list and the field after the comment silently vanishes from parsed
-metadata (turning a suppressible line-level diagnostic into an
-unsuppressible file-level one). See `adopt-madr-lint`'s Step 8 for the
-verified failure mode and the safe alternative
-(`madr-lint-disable-file <rule>` placed outside the list).
+**Suppression comments between v2 metadata-list items work** as of this
+release: the comment splits the Markdown list, but the v2 bridge reads the
+split block as one metadata block, so `disable-next-line` reaches the field
+below it. Keep the whole directive on one line.
 
 ### Step 6: Done
 

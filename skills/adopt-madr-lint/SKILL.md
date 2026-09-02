@@ -323,27 +323,25 @@ guide for the full directive syntax.
 status: some-legacy-value-we-intentionally-keep
 ```
 
-**Gotcha verified during dogfooding — do NOT place a suppression comment
-inside a MADR v2 body-list metadata block.** A v2 ADR's metadata is a
-Markdown list:
+**A directive between MADR v2 body-list metadata items is the recommended
+spelling.** A v2 ADR's metadata is a Markdown list:
 
 ```markdown
 * Status: accepted
-* Deciders: bob
+<!-- madr-lint-disable-next-line madr/date-iso8601 -->
 * Date: 2024-1-5
 ```
 
-Inserting an HTML comment *between* these list items (e.g. right above
-`* Date: ...` to target it with `disable-next-line`) splits the Markdown
-list in two. madr-lint's v2 metadata bridge only reads the list up to that
-split, so the field after the comment silently disappears from
-`context.metadata` entirely — an `invalidDate` diagnostic (line-suppressible)
-turns into a `missingDate` diagnostic (a **file-level** diagnostic, which
-`disable-next-line`/bounded `disable` **cannot** suppress at all — see the
-guide's "Diagnostics without a line" limitation). You end up with a *worse*,
-unsuppressed error instead of a silenced one.
+Inserting an HTML comment *between* these list items does split the Markdown
+list in two per CommonMark, but the comment renders as nothing, so madr-lint's
+v2 metadata bridge reads the split block as one metadata block. The field
+below the comment keeps its line number, so `disable-next-line` reaches it and
+`--fix` can still rewrite it. Keep the whole directive on one line: a
+multi-line `<!--` … `-->` block resolves to its own second line and misses.
 
-For a v2 file, suppress the whole rule for that file instead:
+A **frontmatter**-sourced value is different — it is stripped before the body
+is parsed, so it has no body line and no line-scoped directive can reach it.
+For that case, suppress the whole rule for the file instead:
 
 ```markdown
 <!-- madr-lint-disable-file madr/status-enum -->
