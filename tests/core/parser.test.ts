@@ -483,6 +483,8 @@ describe('parser/extractListMetadata — comment-split metadata block (#73)', ()
     ['a blockquote', ['> quoted']],
     ['an H1 heading', ['# Other']],
     ['an H2 heading', ['## Context']],
+    ['visible HTML', ['<div class="x">hi</div>']],
+    ['a collapsed <details> opener', ['<details><summary>Legacy</summary>']],
   ];
 
   for (const [label, block] of terminators) {
@@ -524,6 +526,15 @@ describe('parser/extractListMetadata — comment-split metadata block (#73)', ()
 
   it('still reads metadata after a visible-HTML prologue (prologue rule unchanged)', () => {
     const md = '# T\n\n<div align="center">badge</div>\n\n* Status: accepted\n';
+    expect(extractListMetadata(ast(md))).toEqual({ status: 'accepted' });
+  });
+
+  it('a prologue comment does not arm a bridge for a later adjacent list', () => {
+    // The prologue admits any html node; only the interior demands a comment.
+    // Sharing one `bridged = true` branch between the two would let a leading
+    // marker bridge a marker-change split that has no comment at all.
+    const md =
+      '# T\n\n<!-- editor marker -->\n\n* Status: accepted\n- Date: 2026/07/06\n';
     expect(extractListMetadata(ast(md))).toEqual({ status: 'accepted' });
   });
 
