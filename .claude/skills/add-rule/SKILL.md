@@ -323,18 +323,26 @@ import { execSync } from 'node:child_process';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { Bench } from 'tinybench';
 import { runRule } from '../../tests/helpers/run-rule.js';
+import { uniqueDocs } from '../unique-content.js';
 import rule from '../../src/rules/<kebab>/index.js';
 
 const tiny = readFileSync(new URL('./fixtures/tiny.md', import.meta.url), 'utf8');
 const typical = readFileSync(new URL('./fixtures/typical.md', import.meta.url), 'utf8');
 
+// One unique document per iteration. Replaying an identical string measures
+// gray-matter's content-keyed memo instead of the parse (#122) — see the
+// `perf-regression-check` skill, "Methodology rules". `uniqueDocs` appends an
+// HTML comment; confirm this rule ignores it (below).
+const nextTiny = uniqueDocs(tiny);
+const nextTypical = uniqueDocs(typical);
+
 const bench = new Bench({ time: 500 });
 bench
   .add('madr/<kebab> — tiny', () => {
-    runRule(rule, { content: tiny, path: '0001-bench.md' });
+    runRule(rule, { content: nextTiny(), path: '0001-bench.md' });
   })
   .add('madr/<kebab> — typical', () => {
-    runRule(rule, { content: typical, path: '0001-bench.md' });
+    runRule(rule, { content: nextTypical(), path: '0001-bench.md' });
   });
 
 await bench.run();
@@ -348,6 +356,12 @@ writeFileSync(
 ```
 
 Plus minimal `benchmarks/<kebab>/fixtures/{tiny,typical}.md` corpora.
+
+`uniqueDocs` appends `<!-- bench N -->` on its own line. No current rule reads
+it, but that is not guaranteed for a rule that inspects `html` nodes or trailing
+content — so confirm it: run the rule through `runRule` on each fixture with and
+without the marker and check the diagnostics are identical. If they differ, the
+bench needs a marker this rule ignores, not a dropped uniqueness.
 
 For **project rules (Shape D)** — `benchmarks/<kebab>/bench.ts`:
 

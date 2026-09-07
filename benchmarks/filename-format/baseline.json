@@ -1,26 +1,26 @@
 [
   {
     "Task name": "madr/filename-format — tiny (valid path)",
-    "Latency avg (ns)": "552.57 ± 4.03%",
-    "Latency med (ns)": "417.00 ± 41.00",
-    "Throughput avg (ops/s)": "2396381 ± 0.03%",
-    "Throughput med (ops/s)": "2398082 ± 214675",
-    "Samples": 904884
+    "Latency avg (ns)": "255.99 ± 1.72%",
+    "Latency med (ns)": "209.00 ± 1.00",
+    "Throughput avg (ops/s)": "4381934 ± 0.02%",
+    "Throughput med (ops/s)": "4784689 ± 23003",
+    "Samples": 1953196
   },
   {
     "Task name": "madr/filename-format — typical (valid path)",
-    "Latency avg (ns)": "592.00 ± 4.69%",
-    "Latency med (ns)": "417.00 ± 41.00",
-    "Throughput avg (ops/s)": "2368743 ± 0.03%",
-    "Throughput med (ops/s)": "2398082 ± 214675",
-    "Samples": 845296
+    "Latency avg (ns)": "258.76 ± 2.11%",
+    "Latency med (ns)": "209.00 ± 41.00",
+    "Throughput avg (ops/s)": "4365545 ± 0.02%",
+    "Throughput med (ops/s)": "4784689 ± 784689",
+    "Samples": 1932325
   },
   {
     "Task name": "madr/filename-format — invalid path (snake_case)",
-    "Latency avg (ns)": "756.43 ± 6.43%",
-    "Latency med (ns)": "458.00 ± 41.00",
-    "Throughput avg (ops/s)": "2133277 ± 0.03%",
-    "Throughput med (ops/s)": "2183406 ± 183406",
-    "Samples": 661000
+    "Latency avg (ns)": "371.84 ± 6.02%",
+    "Latency med (ns)": "333.00 ± 41.00",
+    "Throughput avg (ops/s)": "3143394 ± 0.02%",
+    "Throughput med (ops/s)": "3003003 ± 421655",
+    "Samples": 1344677
   }
 ]

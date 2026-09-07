@@ -1,26 +1,26 @@
 [
   {
     "Task name": "madr/date-iso8601 — tiny (valid)",
-    "Latency avg (ns)": "21955 ± 2.39%",
-    "Latency med (ns)": "17583 ± 542.00",
-    "Throughput avg (ops/s)": "54610 ± 0.20%",
-    "Throughput med (ops/s)": "56873 ± 1805",
-    "Samples": 22774
+    "Latency avg (ns)": "23167 ± 1.06%",
+    "Latency med (ns)": "21000 ± 500.00",
+    "Throughput avg (ops/s)": "45963 ± 0.14%",
+    "Throughput med (ops/s)": "47619 ± 1161",
+    "Samples": 21584
   },
   {
     "Task name": "madr/date-iso8601 — typical (valid)",
-    "Latency avg (ns)": "61840 ± 1.63%",
-    "Latency med (ns)": "53375 ± 1791.0",
-    "Throughput avg (ops/s)": "17927 ± 0.34%",
-    "Throughput med (ops/s)": "18735 ± 629",
-    "Samples": 8086
+    "Latency avg (ns)": "61394 ± 1.19%",
+    "Latency med (ns)": "57167 ± 3709.0",
+    "Throughput avg (ops/s)": "17321 ± 0.31%",
+    "Throughput med (ops/s)": "17493 ± 1166",
+    "Samples": 8145
   },
   {
     "Task name": "madr/date-iso8601 — invalid date",
-    "Latency avg (ns)": "23020 ± 5.56%",
-    "Latency med (ns)": "18334 ± 584.00",
-    "Throughput avg (ops/s)": "52610 ± 0.19%",
-    "Throughput med (ops/s)": "54543 ± 1795",
-    "Samples": 21721
+    "Latency avg (ns)": "24397 ± 1.19%",
+    "Latency med (ns)": "21583 ± 833.00",
+    "Throughput avg (ops/s)": "44171 ± 0.17%",
+    "Throughput med (ops/s)": "46333 ± 1860",
+    "Samples": 20495
   }
 ]
