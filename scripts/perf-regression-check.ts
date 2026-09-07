@@ -9,11 +9,20 @@
 // working tree is never mutated. Base ref resolution order: $PERF_BASE_REF,
 // else `HEAD~1`.
 //
+// HEAD's `benchmarks/` is copied OVER the worktree's, so both sides run the
+// SAME bench code, fixtures and helper — only `src/` and `tests/helpers/`
+// differ. Otherwise a benchmark fix can never take effect: base keeps running
+// its own old bench, and the two sides measure different things. That is not
+// hypothetical — the per-file benches used to replay one identical fixture
+// string, which gray-matter's content-keyed memoization turned into a cache
+// lookup after the first iteration, so a change that made real parsing 6%
+// faster read as a 14% regression (#122).
+//
 // To avoid noise-induced flakiness (two sequential bench phases on a shared
 // runner can swing >10% by chance), a rule that shows a regression is
 // re-measured once; a task fails only if the regression REPRODUCES.
 import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync, readdirSync, rmSync } from 'node:fs';
+import { cpSync, existsSync, readFileSync, readdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
@@ -90,6 +99,10 @@ function measure(
       continue;
     }
     console.log(`[perf:check] ${side.label} bench: ${rule}`);
+    // Clear any stale result first: a failed bench must not be read as a pass
+    // off a leftover file (HEAD's gitignored per-sha JSONs ride along in the
+    // benchmarks copy below, and local runs leave them in the main tree).
+    rmSync(join(side.benchRoot, rule, `${side.short}.json`), { force: true });
     if (!runBench(benchFile, side.cwd)) {
       notes?.push(`${rule}: ${side.label} bench failed`);
       continue;
@@ -154,9 +167,15 @@ function cleanupWorktree(): void {
 cleanupWorktree(); // clear any stale worktree from a previous interrupted run
 try {
   git(['worktree', 'add', '--detach', WORKTREE, baseSha]);
+  // Both sides run HEAD's benchmark harness (see the header): swap the base
+  // checkout's benchmarks/ for HEAD's. The benches import `../../src/...` and
+  // `../../tests/helpers/...` relatively, so they still exercise BASE's code.
+  const baseBenchRoot = join(WORKTREE, 'benchmarks');
+  rmSync(baseBenchRoot, { recursive: true, force: true });
+  cpSync(BENCH_DIR, baseBenchRoot, { recursive: true });
   const baseSide: Side = {
     label: 'base',
-    benchRoot: join(WORKTREE, 'benchmarks'),
+    benchRoot: baseBenchRoot,
     cwd: WORKTREE,
     short: git(['rev-parse', '--short', 'HEAD'], WORKTREE),
   };
@@ -167,10 +186,9 @@ try {
   const round1 = new Map<string, Change[]>();
   for (const [rule, head] of headMetrics) {
     const base = baseMetrics.get(rule);
-    if (!base) {
-      skipped.push(`${rule}: new benchmark (absent in base ${baseShort})`);
-      continue;
-    }
+    // Base runs HEAD's bench files, so a rule can only be missing here because
+    // its base run failed or emitted nothing — `measure` already noted that.
+    if (!base) continue;
     round1.set(rule, compareRule(head, base, FAIL_THRESHOLD, WARN_THRESHOLD));
   }
 
