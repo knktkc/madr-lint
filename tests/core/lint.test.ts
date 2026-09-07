@@ -527,6 +527,41 @@ describe('core/lint', () => {
       expect(Object.hasOwn(Object.prototype, 'contentHash')).toBe(false);
       expect(Object.getPrototypeOf({})).toBe(Object.prototype);
     });
+
+    // The single-file case above is served by the COLD-path map alone: run 1
+    // writes the key, and JSON.parse hands it back as an own property that a
+    // plain read would still find. Only a warm manifest that predates the
+    // `__proto__` file exercises the rehydration in `loadManifest`.
+    it('rehydrates a warm manifest that later gains a "__proto__" entry', () => {
+      const cache: CacheConfig = {
+        dir: join(dir, '.madr-lint', 'cache'),
+        configHash: 'h',
+        pkgVersion: '0.0.0-test',
+      };
+      const ordinary = join(dir, 'a.md');
+      const proto = join(dir, '__proto__');
+      writeFileSync(ordinary, BARE);
+
+      const base = {
+        rules: [requiredSections],
+        ruleSeverity: { 'madr/required-sections': 'error' } as const,
+        cwd: dir,
+        cache,
+      };
+
+      // Run 1: only a.md — the manifest is written without a __proto__ key.
+      expect(lintFiles({ ...base, files: [ordinary] }).filesFromCache).toBe(0);
+
+      // Run 2: a.md hits the warm manifest, __proto__ is new.
+      writeFileSync(proto, BARE);
+      expect(lintFiles({ ...base, files: [ordinary, proto] }).filesFromCache).toBe(1);
+
+      // Run 3: both must now come from the cache.
+      expect(lintFiles({ ...base, files: [ordinary, proto] }).filesFromCache).toBe(2);
+
+      const files = JSON.parse(readFileSync(manifestPath(cache.dir), 'utf8')).files;
+      expect(Object.keys(files).toSorted()).toEqual(['__proto__', 'a.md']);
+    });
   });
 
   // Autofix orchestration (#28): lintAndFix runs the per-file fixpoint (with
