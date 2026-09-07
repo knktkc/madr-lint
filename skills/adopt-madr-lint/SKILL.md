@@ -337,9 +337,10 @@ list in two per CommonMark, but the comment renders as nothing, so madr-lint's
 v2 metadata bridge reads the split block as one metadata block. The field
 below the comment keeps its line number, so `disable-next-line` reaches it.
 With no directive above it, `--fix` rewrites that same field in place. Not
-both: `--fix` never touches a suppressed problem. Keep the whole directive on
-one line: a multi-line `<!--` … `-->` block resolves to its own second line
-and misses.
+both: `--fix` never touches a suppressed problem. The directive may also span
+several lines — a multi-line `<!--` … `-->` block targets the first non-blank
+line after `-->` — as long as the keyword and its rule list stay inside one
+comment.
 
 A **frontmatter**-sourced value is different — it is stripped before the body
 is parsed, so it has no body line and no line-scoped directive can reach it.

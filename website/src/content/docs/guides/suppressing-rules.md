@@ -99,9 +99,22 @@ attributed to a file; a directive in that file suppresses them:
   `--fix` never rewrites a suppressed problem. What still ends the metadata
   block: a paragraph, a code fence, a thematic break, a blockquote, a heading
   of any depth, and visible HTML such as `<div>` or `<details>`.
-- **Keep a directive on a single line.** A directive written as a multi-line
-  `<!--` … `-->` block resolves to its own second line, not to your content, so
-  `disable-next-line` misses. Write the whole directive on one line.
+- **A directive may span several lines.** Written as a multi-line `<!--` …
+  `-->` block, `disable-next-line` targets the first non-blank line after
+  `-->`, the same line a one-line directive would reach:
+
+  ```markdown
+  <!--
+  madr-lint-disable-next-line madr/date-iso8601
+  -->
+  * Date: 2024-1-5
+  ```
+
+  The keyword and its rule list still have to sit inside one comment — two
+  comments do not combine into one directive. Give `-->` its own line, too:
+  anything after it on the same line (`--> * Date: 2024-1-5`) is swallowed
+  into the comment, which then no longer ends in `-->` and is not read as a
+  directive at all — it silences nothing, silently.
 - **One directive per comment, standing alone.** A comment that contains
   another comment on the same line (`<!-- … --><!-- … -->`) is rejected as a
   directive. Unknown keywords (e.g. `madr-lint-disable-line`) and ordinary
