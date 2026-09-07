@@ -1,8 +1,0 @@
----
-"madr-lint": patch
----
-
-Bypass gray-matter's content-keyed parse cache ([#122](https://github.com/knktkc/madr-lint/issues/122)). gray-matter 4.0.3 memoizes a parse only when it is called with no options, in a plain object keyed by the *whole document* (`matter.cache[content]`). Both parser call sites now pass a shared, frozen options object, which turns that memoization off.
-
-- **A document whose entire content is any `Object.prototype` member name (`constructor`, `toString`, `valueOf`, `__proto__`, …) no longer crashes.** Every one of those twelve lookups hit an inherited member, which gray-matter accepted as a cache hit and returned as a file with `content: undefined` — so `parseFile` threw `TypeError: Cannot convert undefined or null to object` and `frontmatterOffset` threw `TypeError: Cannot read properties of undefined (reading 'length')`. The throw escaped `lintFiles`, so `madr-lint docs/adr` on a directory holding such a file exited with a stack trace instead of reporting; it now reports the file's violations like any other. Only those exact bodies were affected — a trailing newline made the key an ordinary miss.
-- **madr-lint no longer keeps every parsed document in memory.** The cache retained each document's full content for the process lifetime, as the key, the stripped body, and an `orig` Buffer. Measured over 1,000 distinct 8.4 KB documents: 16.9 MB retained before (8.9 MB heap + 8.0 MB buffers, about 2.1x the corpus), 0 MB now. Per-file lint throughput is unchanged (-1% to +3% across the rule benches, i.e. noise). `--fix` now performs a real second parse in `frontmatterOffset` where it previously got a memo hit — about +3 µs per file per pass, measured on this repo's own ADRs; correctness is unaffected.
