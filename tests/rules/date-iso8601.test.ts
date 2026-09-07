@@ -23,6 +23,20 @@ function splitFile(comment: string): string {
   ].join('\n');
 }
 
+/** The #115 document: the bullet marker changes between two v2 metadata items. */
+function markerChangeFile(comment?: string): string {
+  return [
+    '# 0001 test',
+    '',
+    '* Status: accepted',
+    ...(comment ? [comment] : []),
+    '- Date: 2026/07/06',
+    '',
+    '## Context and Problem Statement',
+    '',
+  ].join('\n');
+}
+
 /** Apply a fixable diagnostic's fix thunk to the source and return the result. */
 function applyFix(content: string, d: { fix?: (f: ReturnType<typeof makeFixer>) => unknown }): string {
   const fixer = makeFixer(frontmatterOffset(content));
@@ -244,6 +258,28 @@ describe('madr/date-iso8601', () => {
       expect(applyFix(content, diagnostics[0]!)).toBe(
         content.replace('2026/07/06', '2026-07-06'),
       );
+    });
+
+    // #115: a bullet-marker change also splits the Markdown list, with no node
+    // between the two lists for a comment to bridge. The field below the change
+    // must stay part of the metadata block — line-located, suppressible, fixable.
+    it('a marker change before the date keeps invalidDate line-located and fixable, with no missingDate (#115)', () => {
+      const content = markerChangeFile();
+      const diagnostics = runRule(rule, { content, path: '0001-test.md' });
+      expect.soft(diagnostics.some((d) => d.messageId === 'missingDate')).toBe(
+        false,
+      );
+      expect.soft(diagnostics).toHaveLength(1);
+      expect.soft(diagnostics[0]?.messageId).toBe('invalidDate');
+      expect.soft(diagnostics[0]?.loc).toEqual({ line: 4, column: 1 });
+      expect.soft(diagnostics[0]?.fixable).toBe(true);
+    });
+
+    it('disable-next-line above a marker-changed date item suppresses it (#115)', () => {
+      const content = markerChangeFile(
+        '<!-- madr-lint-disable-next-line madr/date-iso8601 -->',
+      );
+      expect(runRule(rule, { content, path: '0001-test.md' })).toEqual([]);
     });
   });
 

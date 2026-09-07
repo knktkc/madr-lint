@@ -298,6 +298,18 @@ describe('parser/extractListMetadata — precision guards', () => {
   });
 });
 
+/** Blocks that end the metadata block wherever they appear inside it. */
+const terminators: Array<[string, string[]]> = [
+  ['a paragraph', ['Some prose.']],
+  ['a thematic break', ['---']],
+  ['a fenced code block', ['```txt', 'x', '```']],
+  ['a blockquote', ['> quoted']],
+  ['an H1 heading', ['# Other']],
+  ['an H2 heading', ['## Context']],
+  ['visible HTML', ['<div class="x">hi</div>']],
+  ['a collapsed <details> opener', ['<details><summary>Legacy</summary>']],
+];
+
 // An HTML comment placed BETWEEN v2 metadata items ends the Markdown list per
 // CommonMark, but renders as nothing — the block a reader sees is still one
 // metadata block. The extractor therefore reads the leading RUN of lists joined
@@ -519,17 +531,6 @@ describe('parser/extractListMetadata — comment-split metadata block (#73)', ()
     expect(extractListMetadata(ast(md))).toEqual({ status: 'accepted' });
   });
 
-  const terminators: Array<[string, string[]]> = [
-    ['a paragraph', ['Some prose.']],
-    ['a thematic break', ['---']],
-    ['a fenced code block', ['```txt', 'x', '```']],
-    ['a blockquote', ['> quoted']],
-    ['an H1 heading', ['# Other']],
-    ['an H2 heading', ['## Context']],
-    ['visible HTML', ['<div class="x">hi</div>']],
-    ['a collapsed <details> opener', ['<details><summary>Legacy</summary>']],
-  ];
-
   for (const [label, block] of terminators) {
     it(`does not merge past ${label} following a bridging comment`, () => {
       const md = [
@@ -547,23 +548,31 @@ describe('parser/extractListMetadata — comment-split metadata block (#73)', ()
     });
   }
 
-  it('does not merge two adjacent lists with no comment between them', () => {
-    const md = '# T\n\n* Status: accepted\n- Date: 2026/07/06\n';
-    expect(extractListMetadata(ast(md))).toEqual({ status: 'accepted' });
-  });
-
-  it('a consumed bridge does not latch across a later marker change', () => {
+  it('consumes the bridge, and the marker-change list after it merges on its own merit (#115)', () => {
+    // Before #115 this pinned the opposite: the consumed bridge did not latch,
+    // so `- Deciders` was dropped. It now merges because every item of that
+    // list reads as `Key: value` — not because the bridge carried over.
     const md =
       '# T\n\n* Status: accepted\n<!-- c -->\n* Date: 2026/07/06\n- Deciders: alice\n';
+    expect(extractListMetadata(ast(md))).toEqual({
+      status: 'accepted',
+      date: '2026/07/06',
+      deciders: 'alice',
+    });
+  });
+
+  it('a consumed bridge does not latch across a later prose list', () => {
+    const md =
+      '# T\n\n* Status: accepted\n<!-- c -->\n* Date: 2026/07/06\n- just prose\n* Deciders: alice\n';
     expect(extractListMetadata(ast(md))).toEqual({
       status: 'accepted',
       date: '2026/07/06',
     });
   });
 
-  it('a list with no bridge before it ends the block, even if a comment follows', () => {
+  it('a prose list with no bridge before it ends the block, even if a comment follows', () => {
     const md =
-      '# T\n\n* Status: accepted\n- Date: 2026-05-01\n<!-- c -->\n* Deciders: alice\n';
+      '# T\n\n* Status: accepted\n- just prose\n<!-- c -->\n* Deciders: alice\n';
     expect(extractListMetadata(ast(md))).toEqual({ status: 'accepted' });
   });
 
@@ -572,12 +581,13 @@ describe('parser/extractListMetadata — comment-split metadata block (#73)', ()
     expect(extractListMetadata(ast(md))).toEqual({ status: 'accepted' });
   });
 
-  it('a prologue comment does not arm a bridge for a later adjacent list', () => {
+  it('a prologue comment does not arm a bridge for a later non-KV list', () => {
     // The prologue admits any html node; only the interior demands a comment.
     // Sharing one `bridged = true` branch between the two would let a leading
-    // marker bridge a marker-change split that has no comment at all.
+    // marker bridge a list the KV gate rejects. Since #115 the second list has
+    // to carry a non-`Key: value` item for the difference to show.
     const md =
-      '# T\n\n<!-- editor marker -->\n\n* Status: accepted\n- Date: 2026/07/06\n';
+      '# T\n\n<!-- editor marker -->\n\n* Status: accepted\n- Date: 2026/07/06\n- just prose\n';
     expect(extractListMetadata(ast(md))).toEqual({ status: 'accepted' });
   });
 
@@ -620,6 +630,130 @@ describe('parser/extractListMetadata — comment-split metadata block (#73)', ()
       status: 'accepted',
       date: '2026-05-01',
     });
+  });
+});
+
+// A bullet-marker change between two v2 metadata items (`* Status:` then
+// `- Date:`) starts a second CommonMark list with NO node between them, so no
+// comment can bridge it (#115). Such a list joins the metadata block when every
+// one of its items reads as a `Key: value` pair — a prose list, which a reader
+// sees as a separate block, still ends it.
+describe('parser/extractListMetadata — marker-change split metadata block (#115)', () => {
+  it('merges an adjacent list whose items are all Key: value pairs (#115)', () => {
+    const md = '# T\n\n* Status: accepted\n- Date: 2026/07/06\n';
+    expect(extractListMetadata(ast(md))).toEqual({
+      status: 'accepted',
+      date: '2026/07/06',
+    });
+  });
+
+  it('does not merge an adjacent list when one item is not Key: value', () => {
+    const md = '# T\n\n* Status: accepted\n- Date: 2026/07/06\n- just prose\n';
+    expect(extractListMetadata(ast(md))).toEqual({ status: 'accepted' });
+  });
+
+  it('does not merge a prose list after the metadata list', () => {
+    const md = '# T\n\n* Status: accepted\n- just prose\n';
+    expect(extractListMetadata(ast(md))).toEqual({ status: 'accepted' });
+  });
+
+  it('merges an ordered list whose items are all Key: value pairs', () => {
+    const md = '# T\n\n* Status: accepted\n1. Date: 2026/07/06\n';
+    expect(extractListMetadata(ast(md))).toEqual({
+      status: 'accepted',
+      date: '2026/07/06',
+    });
+  });
+
+  it('merges a KV-shaped prose list too — the accepted over-merge (#115)', () => {
+    // The same class of cost as the #73 over-merge: shape is all the scan has
+    // to go on, so a list of `Key: value`-looking prose bullets joins the block.
+    const md =
+      '# T\n\n* Status: accepted\n- Option A: do nothing\n- Option B: rewrite\n';
+    expect(extractListMetadata(ast(md))).toEqual({
+      status: 'accepted',
+      'option-a': 'do nothing',
+      'option-b': 'rewrite',
+    });
+  });
+
+  it('merges a comment-bridged list that follows a merged marker change', () => {
+    const md =
+      '# T\n\n* Status: accepted\n- Date: 2026-05-01\n<!-- c -->\n* Deciders: alice\n';
+    expect(extractListMetadata(ast(md))).toEqual({
+      status: 'accepted',
+      date: '2026-05-01',
+      deciders: 'alice',
+    });
+  });
+
+  it('runs the recognized-key gate once over the merged lists', () => {
+    const md = '# T\n\n* Tags: infra\n- Status: accepted\n';
+    expect(extractListMetadata(ast(md))).toEqual({
+      tags: 'infra',
+      status: 'accepted',
+    });
+  });
+
+  it('returns null when neither merged list carries a recognized key', () => {
+    const md = '# T\n\n* Tags: infra\n- Author: alice\n';
+    expect(extractListMetadata(ast(md))).toBeNull();
+  });
+
+  it('keeps first-wins on a duplicate key across the marker change', () => {
+    const md = '# T\n\n* Status: accepted\n- Status: rejected\n';
+    expect(extractListMetadata(ast(md))).toEqual({ status: 'accepted' });
+  });
+
+  for (const [label, block] of terminators) {
+    it(`does not merge past ${label} between two adjacent lists`, () => {
+      const md = [
+        '# T',
+        '',
+        '* Status: accepted',
+        '',
+        ...block,
+        '',
+        '- Date: 2026/07/06',
+        '',
+      ].join('\n');
+      expect(extractListMetadata(ast(md))).toEqual({ status: 'accepted' });
+    });
+  }
+
+  it('a key from the merged list keeps its own line and an exact value range', () => {
+    const md = '# T\n\n* Status: accepted\n- Date: 2026/07/06\n';
+    const parsed = parseFile(md);
+    expect(parsed.metadataLoc).toEqual({
+      status: { line: 3, column: 1 },
+      date: { line: 4, column: 1 },
+    });
+    const range = parsed.metadataValueLoc?.date;
+    expect(range).toBeDefined();
+    expect(parsed.body.slice(range!.start, range!.end)).toBe('2026/07/06');
+  });
+
+  it('CRLF line endings keep loc and value offsets exact across the marker change', () => {
+    const parsed = parseFile(
+      '# T\r\n\r\n* Status: accepted\r\n- Date: 2026/07/06\r\n',
+    );
+    expect(parsed.metadataLoc?.date).toEqual({ line: 4, column: 1 });
+    const range = parsed.metadataValueLoc?.date;
+    expect(range).toBeDefined();
+    expect(parsed.body.slice(range!.start, range!.end)).toBe('2026/07/06');
+  });
+
+  it('frontmatter still shadows a key from the merged list, which then has no body position', () => {
+    const parsed = parseFile(
+      "---\ndate: '2026-01-01'\n---\n# T\n\n* Status: accepted\n- Date: 2026/07/06\n",
+    );
+    expect(parsed.listMetadata).toEqual({
+      status: 'accepted',
+      date: '2026/07/06',
+    });
+    expect(parsed.metadata).toEqual({ status: 'accepted', date: '2026-01-01' });
+    expect(parsed.metadataLoc).toEqual({ status: { line: 3, column: 1 } });
+    expect(Object.keys(parsed.metadataValueLoc ?? {})).toEqual(['status']);
   });
 });
 
