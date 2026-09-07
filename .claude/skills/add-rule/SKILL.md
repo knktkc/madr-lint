@@ -323,18 +323,25 @@ import { execSync } from 'node:child_process';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { Bench } from 'tinybench';
 import { runRule } from '../../tests/helpers/run-rule.js';
+import { uniqueDocs } from '../unique-content.js';
 import rule from '../../src/rules/<kebab>/index.js';
 
 const tiny = readFileSync(new URL('./fixtures/tiny.md', import.meta.url), 'utf8');
 const typical = readFileSync(new URL('./fixtures/typical.md', import.meta.url), 'utf8');
 
+// One unique document per iteration. Replaying an identical string measures
+// gray-matter's content-keyed memo instead of the parse (#122) — see the
+// `perf-regression-check` skill, "Methodology rules".
+const nextTiny = uniqueDocs(tiny);
+const nextTypical = uniqueDocs(typical);
+
 const bench = new Bench({ time: 500 });
 bench
   .add('madr/<kebab> — tiny', () => {
-    runRule(rule, { content: tiny, path: '0001-bench.md' });
+    runRule(rule, { content: nextTiny(), path: '0001-bench.md' });
   })
   .add('madr/<kebab> — typical', () => {
-    runRule(rule, { content: typical, path: '0001-bench.md' });
+    runRule(rule, { content: nextTypical(), path: '0001-bench.md' });
   });
 
 await bench.run();

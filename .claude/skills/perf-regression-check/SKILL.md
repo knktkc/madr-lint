@@ -24,13 +24,15 @@ CLAUDE.md (M2: 100 ADRs <100ms cold; M3: 5000 files <4s cold).
    tree; read each `benchmarks/<rule>/<sha>.json`.
 3. **Measure base** — check the base ref out into a throwaway git worktree
    inside the repo (`.perf-base/`, gitignored, auto-removed) so Node resolves
-   the repo's `node_modules` and the main working tree is never mutated; run
-   the same benches there.
+   the repo's `node_modules` and the main working tree is never mutated. HEAD's
+   `benchmarks/` is then copied OVER the worktree's, so only `src/` and
+   `tests/helpers/` differ between the two sides (see "Methodology rules").
 4. **Compare** per task: `delta = (head - base) / base`.
    - `delta ≥ -5%` → **OK** (includes speedups)
    - `-10% ≤ delta < -5%` → **WARN** (no fail)
    - `delta < -10%` → **FAIL** candidate
-   - task absent in base (new benchmark) → skipped, no effect on exit code
+   - a rule whose bench cannot run on base (e.g. a rule added in this PR, whose
+     `src/` file the base ref lacks) → skipped with a note, no effect on exit code
 5. **Confirm-on-fail** — any rule with a FAIL candidate is re-measured once;
    a task fails for real only if the regression **reproduces**. Non-reproduced
    candidates are downgraded to WARN (so shared-runner noise can't flake CI).
@@ -63,6 +65,34 @@ commit is available for the worktree) and sets
   feedback)
 - On documentation-only PRs (bench results are noisy and don't reflect runtime
   changes)
+
+## Methodology rules
+
+Two rules, both learned from one incident (#122). gray-matter memoizes a parse
+by whole-document content when called with no options. The per-file benches
+replayed ONE identical fixture string per task, so every iteration after the
+first was a cache lookup, not a parse. A fix that bypassed that cache — 6%
+faster on real linting, where documents differ — read as a **14% regression**
+on `madr/date-iso8601 — tiny (valid)`, because the old bench had been
+measuring the memo.
+
+1. **Both sides run HEAD's benchmark harness.** The script replaces the base
+   worktree's `benchmarks/` with a copy of HEAD's before measuring. The benches
+   import `../../src/...` and `../../tests/helpers/...` relatively, so they
+   still exercise BASE's code — same bench, same fixtures, different `src`.
+   Without this a benchmark fix can never take effect: base keeps running its
+   own old bench, and the comparison is between two different measurements.
+2. **Every content string that reaches `parseFile` in a hot loop is unique per
+   iteration.** `benchmarks/unique-content.ts` exports `uniqueDocs(fixture)`,
+   which returns a closure appending `<!-- bench N -->` on its own line — no
+   rule reads it, and it costs one concat. This holds for any future
+   content-keyed memoization, not just gray-matter's. Project-rule benches that
+   build their corpus once with `buildProjectFile` outside the loop need no
+   uniqueness: `runRulesOnProject` never parses.
+
+Shared bench helpers live as *files* directly under `benchmarks/`
+(`unique-content.ts`), never in a subdirectory: `ruleDirsIn()` treats every
+directory there as a rule and would report "no bench.ts" for it.
 
 ## Note on `baseline.json`
 
