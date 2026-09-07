@@ -159,11 +159,13 @@ const RECOGNIZED_METADATA_KEYS = new Set([
  * heading, or any other block before the first list, means there is no
  * metadata block. The block itself is the leading RUN of lists, joined across
  * HTML comments — a comment ends the CommonMark list yet renders as nothing,
- * so a field below it is still metadata (#73). Only comments bridge; once the
- * run has started, visible HTML, a paragraph, a code fence, a thematic break,
- * a blockquote, and a heading of ANY depth all end the block, as does a second
- * list with no comment before it. Each `listItem` is read as one `Key: value`
- * pair in either of two shapes:
+ * so a field below it is still metadata (#73). A second list with nothing
+ * between it and the first (a bullet-marker change, or an ordered list) joins
+ * the run when EVERY one of its items reads as a `Key: value` pair (#115); a
+ * list carrying any other item is prose and ends the block. Once the run has
+ * started, visible HTML, a paragraph, a code fence, a thematic break, a
+ * blockquote, and a heading of ANY depth all end the block. Each `listItem` is
+ * read as one `Key: value` pair in either of two shapes:
  *
  *   - Bold key:  `- **Status**: accepted`  (some MADR v2 authors)
  *   - Plain key: `* Status: accepted`      (official MADR v2.1.2 template)
@@ -256,7 +258,20 @@ function extractListMetadataWithLoc(
       bridged = true;
       continue;
     }
-    if (child.type === 'list' && bridged) {
+    // A bullet-marker change (`* Status:` then `- Date:`) also splits the block
+    // into two CommonMark lists, but with NO node between them for a comment to
+    // bridge (#115). Shape is all the scan has to go on there, so such a list
+    // joins the block only when EVERY item reads as a `Key: value` pair — which
+    // keeps an ordinary prose list out, at the cost of merging a prose list
+    // that happens to be KV-shaped throughout (same class as the #73 tradeoff).
+    // The length guard matters because `[].every()` is true: no Markdown
+    // produces an empty list, but this function is public and takes any Root.
+    if (
+      child.type === 'list' &&
+      (bridged ||
+        (child.children.length > 0 &&
+          child.children.every((item) => extractListItemKV(item))))
+    ) {
       segments.push(child);
       bridged = false;
       continue;
