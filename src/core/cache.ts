@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
+import { nullProtoMap } from './null-proto-map.js';
 import type { Diagnostic } from './types.js';
 
 /**
@@ -91,7 +92,17 @@ export function loadManifest(path: string): CacheManifest | null {
     ) {
       return null;
     }
-    return data as CacheManifest;
+    // Rehydrate onto a null prototype: path keys come from the filesystem, so
+    // a file named `__proto__` must behave as ordinary data on both read and
+    // write (#56). JSON.parse gives it as an OWN property; copying it onto a
+    // plain object would hand it back to the inherited setter.
+    const files = nullProtoMap<CacheEntry>();
+    for (const [key, entry] of Object.entries(
+      data.files as Record<string, CacheEntry>,
+    )) {
+      files[key] = entry;
+    }
+    return { ...(data as CacheManifest), files };
   } catch {
     return null;
   }

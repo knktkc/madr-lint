@@ -16,6 +16,7 @@ import {
   fixFileContent,
   MAX_FIX_PASSES,
 } from './fix.js';
+import { nullProtoMap } from './null-proto-map.js';
 import {
   buildProjectFile,
   runRulesOnFile,
@@ -142,7 +143,7 @@ export function lintFiles(opts: LintOptions): LintResult {
         schemaVersion: CACHE_SCHEMA_VERSION,
         version: opts.cache.pkgVersion,
         configHash: opts.cache.configHash,
-        files: {},
+        files: nullProtoMap<CacheEntry>(),
       };
     }
   }

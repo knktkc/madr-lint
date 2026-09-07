@@ -9,6 +9,7 @@ import {
   saveManifest,
   manifestPath,
   CACHE_SCHEMA_VERSION,
+  type CacheEntry,
   type CacheManifest,
 } from '../../src/core/cache.js';
 
@@ -108,6 +109,49 @@ describe('core/cache', () => {
       const path = manifestPath(tmp);
       writeFileSync(path, JSON.stringify({ version: 'x' }), 'utf8');
       expect(loadManifest(path)).toBeNull();
+    });
+
+    // Manifest keys are filename-derived (issue #56). On a plain object a
+    // '__proto__' key reads and writes THROUGH Object.prototype, so such an
+    // entry can never cache-hit and vanishes on serialize.
+    it('rehydrates files onto a null prototype', () => {
+      const path = manifestPath(tmp);
+      saveManifest(path, {
+        schemaVersion: CACHE_SCHEMA_VERSION,
+        version: '1',
+        configHash: 'h',
+        files: {},
+      });
+      const loaded = loadManifest(path);
+      expect(loaded).not.toBeNull();
+      expect(Object.getPrototypeOf(loaded?.files)).toBeNull();
+    });
+
+    it('round-trips a "__proto__" file key through load and save', () => {
+      const path = manifestPath(tmp);
+      const entry: CacheEntry = {
+        contentHash: 'deadbeef',
+        perFileDiagnostics: [],
+      };
+      // Hand-written JSON: an object literal keyed '__proto__' would set the
+      // prototype rather than create the property. JSON.parse creates it OWN.
+      writeFileSync(
+        path,
+        `{"schemaVersion":${CACHE_SCHEMA_VERSION},"version":"1","configHash":"h",` +
+          `"files":{"__proto__":${JSON.stringify(entry)}}}`,
+        'utf8',
+      );
+
+      const loaded = loadManifest(path);
+      expect(loaded).not.toBeNull();
+      expect(Object.getPrototypeOf(loaded?.files)).toBeNull();
+      expect(Object.hasOwn(loaded?.files ?? {}, '__proto__')).toBe(true);
+      expect(loaded?.files['__proto__']).toEqual(entry);
+
+      if (loaded) saveManifest(path, loaded);
+      const again = loadManifest(path);
+      expect(Object.hasOwn(again?.files ?? {}, '__proto__')).toBe(true);
+      expect(again?.files['__proto__']).toEqual(entry);
     });
 
     it('creates the cache directory if it does not exist', () => {

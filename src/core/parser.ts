@@ -2,6 +2,7 @@ import type { List, ListItem, Paragraph, Root } from 'mdast';
 import { fromMarkdown } from 'mdast-util-from-markdown';
 import { toString } from 'mdast-util-to-string';
 import grayMatter from 'gray-matter';
+import { nullProtoMap } from './null-proto-map.js';
 
 /** Source position of a metadata list item, in body coordinates. */
 export interface MetadataPosition {
@@ -87,7 +88,10 @@ export function parseFile(content: string): ParsedFile {
     // Frontmatter wins on conflict, BUT explicit null/undefined are
     // skipped so that `status: ~` in YAML doesn't blank a present
     // list value (counterintuitive UX otherwise).
-    const frontmatterDefined: Record<string, unknown> = {};
+    // Null prototype: YAML keys are document-controlled and gray-matter hands
+    // `__proto__` back as an own key, which a plain object would feed to the
+    // inherited setter — silently dropping it (#56).
+    const frontmatterDefined = nullProtoMap<unknown>();
     for (const [k, v] of Object.entries(frontmatter)) {
       if (v !== null && v !== undefined) frontmatterDefined[k] = v;
     }
@@ -249,13 +253,17 @@ function extractListMetadataWithLoc(
 
   if (segments.length === 0) return null;
 
-  const values: Record<string, unknown> = {};
-  const loc: Record<string, MetadataPosition> = {};
-  const valueOffsets: Record<string, { start: number; end: number }> = {};
+  // Keys come from the document. `Object.hasOwn` below is the fix for #56:
+  // `in` sees inherited members, so `* Constructor: x` read as a duplicate of
+  // a key that was never set and was dropped. The null prototype is defense in
+  // depth — with it, an unset key can never read back an inherited value.
+  const values = nullProtoMap<unknown>();
+  const loc = nullProtoMap<MetadataPosition>();
+  const valueOffsets = nullProtoMap<{ start: number; end: number }>();
   for (const list of segments) {
     for (const item of list.children) {
       const pair = extractListItemKV(item);
-      if (pair && !(pair.key in values)) {
+      if (pair && !Object.hasOwn(values, pair.key)) {
         values[pair.key] = pair.value;
         const start = item.position?.start;
         if (start) loc[pair.key] = { line: start.line, column: start.column };
@@ -276,7 +284,13 @@ function extractListMetadataWithLoc(
   const hasRecognizedKey = Object.keys(values).some((k) =>
     RECOGNIZED_METADATA_KEYS.has(k),
   );
-  return hasRecognizedKey ? { values, loc, valueOffsets } : null;
+  // `values` is handed back as a PLAIN copy: it reaches the public
+  // `extractListMetadata` / `ParsedFile.listMetadata` surface verbatim, where
+  // a consumer may call `hasOwnProperty` on it. Spreading uses
+  // CreateDataProperty, so a `constructor` key stays an own data property.
+  // `loc` / `valueOffsets` need no copy here — this function is private and
+  // parseFile already spreads them into fresh objects before exposing them.
+  return hasRecognizedKey ? { values: { ...values }, loc, valueOffsets } : null;
 }
 
 const KEY_PATTERN = /^[A-Za-z][A-Za-z0-9 \-_]*$/;

@@ -89,6 +89,44 @@ describe('parser/extractListMetadata', () => {
     expect(extractListMetadata(ast(md))).toEqual({ status: 'Proposed' });
   });
 
+  // #56: de-duplication used `key in values` on a plain object, so a key
+  // seen as already present through inheritance was silently dropped.
+  // `constructor` is the ONLY reachable case: normalizeKey lowercases, so
+  // `toString` arrives as `tostring`, and `__proto__` fails KEY_PATTERN
+  // (leading letter required).
+  it('reads a key named "constructor"', () => {
+    const md = '# T\n\n* Status: accepted\n* Constructor: x\n';
+    expect(extractListMetadata(ast(md))).toEqual({
+      status: 'accepted',
+      constructor: 'x',
+    });
+  });
+
+  it('records a body position for a "constructor" key', () => {
+    const md = '# T\n\n* Status: accepted\n* Constructor: x\n';
+    const loc = parseFile(md).metadataLoc;
+    expect(loc).not.toBeNull();
+    expect(Object.hasOwn(loc ?? {}, 'constructor')).toBe(true);
+    expect(loc?.['constructor']).toEqual({ line: 4, column: 1 });
+  });
+
+  // `toEqual` ignores prototypes, so the public records need their own pin:
+  // consumers may call `hasOwnProperty` on them, which a null-prototype
+  // object would not answer (#56).
+  it('returns plain objects across the public parser surface', () => {
+    const md = '# T\n\n* Status: accepted\n* Constructor: x\n';
+    expect(Object.getPrototypeOf(extractListMetadata(ast(md)))).toBe(
+      Object.prototype,
+    );
+    const parsed = parseFile(md);
+    expect(Object.getPrototypeOf(parsed.metadata)).toBe(Object.prototype);
+    expect(Object.getPrototypeOf(parsed.listMetadata)).toBe(Object.prototype);
+    expect(Object.getPrototypeOf(parsed.metadataLoc)).toBe(Object.prototype);
+    expect(Object.getPrototypeOf(parsed.metadataValueLoc)).toBe(
+      Object.prototype,
+    );
+  });
+
   it('preserves inline value text via mdast-util-to-string', () => {
     const md = '# T\n\n- **Status**: superseded by `ADR-0042`\n';
     expect(extractListMetadata(ast(md))).toEqual({
@@ -609,6 +647,20 @@ describe('parser/parseFile metadata combination', () => {
       status: 'accepted',
       date: '2026-05-01',
     });
+  });
+
+  // #56: the merge builds a `frontmatterDefined` record to drop explicit
+  // null/undefined. gray-matter hands `__proto__` back as an OWN key, so on a
+  // plain object that copy step feeds it to the inherited setter — and a
+  // string value makes the setter a silent no-op, dropping the key.
+  it('keeps a frontmatter "__proto__" key through the v2 merge', () => {
+    const parsed = parseFile('---\n__proto__: x\n---\n# T\n\n* Status: accepted\n');
+    expect(parsed.metadata).not.toBeNull();
+    expect(Object.hasOwn(parsed.metadata ?? {}, '__proto__')).toBe(true);
+    expect(parsed.metadata?.['__proto__']).toBe('x');
+    // The merged record stays an ordinary object — the key is data, not a swap.
+    expect(Object.getPrototypeOf(parsed.metadata)).toBe(Object.prototype);
+    expect(parsed.metadata?.['status']).toBe('accepted');
   });
 
   it('neither → metadata is null', () => {
