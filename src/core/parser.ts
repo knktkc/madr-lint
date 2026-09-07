@@ -264,9 +264,13 @@ function extractListMetadataWithLoc(
     // joins the block only when EVERY item reads as a `Key: value` pair — which
     // keeps an ordinary prose list out, at the cost of merging a prose list
     // that happens to be KV-shaped throughout (same class as the #73 tradeoff).
+    // The length guard matters because `[].every()` is true: no Markdown
+    // produces an empty list, but this function is public and takes any Root.
     if (
       child.type === 'list' &&
-      (bridged || child.children.every((item) => extractListItemKV(item)))
+      (bridged ||
+        (child.children.length > 0 &&
+          child.children.every((item) => extractListItemKV(item))))
     ) {
       segments.push(child);
       bridged = false;

@@ -4,7 +4,7 @@ import {
   frontmatterOffset,
   parseFile,
 } from '../../src/core/parser.js';
-import type { Root } from 'mdast';
+import type { List, Root } from 'mdast';
 import { fromMarkdown } from 'mdast-util-from-markdown';
 import grayMatter from 'gray-matter';
 
@@ -698,6 +698,21 @@ describe('parser/extractListMetadata — marker-change split metadata block (#11
   it('returns null when neither merged list carries a recognized key', () => {
     const md = '# T\n\n* Tags: infra\n- Author: alice\n';
     expect(extractListMetadata(ast(md))).toBeNull();
+  });
+
+  it('an empty list between two lists still ends the block', () => {
+    // CommonMark has no zero-item list, so this is only reachable through the
+    // public `extractListMetadata`, which takes any Root. `[].every()` is true,
+    // so the KV gate has to reject an empty list explicitly.
+    const tree = ast('# T\n\n* Status: accepted\n\n- Date: 2026-05-01\n');
+    const empty: List = {
+      type: 'list',
+      ordered: false,
+      spread: false,
+      children: [],
+    };
+    tree.children.splice(2, 0, empty);
+    expect(extractListMetadata(tree)).toEqual({ status: 'accepted' });
   });
 
   it('keeps first-wins on a duplicate key across the marker change', () => {
