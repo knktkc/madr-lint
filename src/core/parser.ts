@@ -49,6 +49,19 @@ export interface ParsedFile {
 }
 
 /**
+ * Passed to EVERY gray-matter call. gray-matter memoizes a parse only when it
+ * is called with no options, and its cache is a plain object keyed by the whole
+ * document — so a document that is exactly the name of an `Object.prototype`
+ * member (`constructor`, `toString`, `hasOwnProperty`) reads that inherited
+ * member back as a hit and yields `content: undefined` (#122). The cache also
+ * retains every parsed document for the process lifetime, which for a
+ * thousand-ADR repo is the whole corpus held live. Frozen because the single
+ * instance is shared across all calls.
+ */
+const GRAY_MATTER_OPTIONS: NonNullable<Parameters<typeof grayMatter>[1]> =
+  Object.freeze({});
+
+/**
  * Character length of the frontmatter block that gray-matter strips from the
  * front of `content` — i.e. the offset at which the body begins in the whole
  * file. mdast positions are body-relative, so `fileOffset = bodyOffset +
@@ -57,7 +70,7 @@ export interface ParsedFile {
  * leading-newline inputs). Used by the autofix fixer. See ADR-0008.
  */
 export function frontmatterOffset(content: string): number {
-  return content.length - grayMatter(content).content.length;
+  return content.length - grayMatter(content, GRAY_MATTER_OPTIONS).content.length;
 }
 
 /**
@@ -68,7 +81,7 @@ export function frontmatterOffset(content: string): number {
  * bold-key and canonical plain-key shapes (see ADR-0006).
  */
 export function parseFile(content: string): ParsedFile {
-  const matter = grayMatter(content);
+  const matter = grayMatter(content, GRAY_MATTER_OPTIONS);
   const data = matter.data as Record<string, unknown>;
   const frontmatter = Object.keys(data).length > 0 ? data : null;
   const ast = fromMarkdown(matter.content);

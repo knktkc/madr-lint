@@ -1,7 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { extractListMetadata, parseFile } from '../../src/core/parser.js';
+import {
+  extractListMetadata,
+  frontmatterOffset,
+  parseFile,
+} from '../../src/core/parser.js';
 import type { Root } from 'mdast';
 import { fromMarkdown } from 'mdast-util-from-markdown';
+import grayMatter from 'gray-matter';
 
 function ast(md: string): Root {
   return fromMarkdown(md);
@@ -740,5 +745,39 @@ describe('parseFile — metadataLoc (list item positions for suppression)', () =
     expect(parsed.metadata).toEqual({ status: 'accepted', date: '2026-01-01' });
     expect(parsed.metadataLoc).toEqual({ status: { line: 3, column: 1 } });
     expect(Object.keys(parsed.metadataValueLoc ?? {})).toEqual(['status']);
+  });
+});
+
+// gray-matter 4.0.3 memoizes every parse in a PLAIN object keyed by the whole
+// document (`matter.cache[content]`). A document that is exactly the name of an
+// Object.prototype member therefore reads a truthy inherited value as a "cache
+// hit", and gray-matter hands back a file whose `content` is undefined (#122).
+describe('parseFile — gray-matter content cache (#122)', () => {
+  /** gray-matter exposes its cache as a property its bundled types omit. */
+  const grayMatterModule = grayMatter as unknown as {
+    cache: Record<string, unknown>;
+  };
+
+  for (const content of ['constructor', 'toString', 'hasOwnProperty']) {
+    it(`parses a document whose entire content is "${content}"`, () => {
+      const parsed = parseFile(content);
+      expect(parsed.metadata).toBeNull();
+      expect(parsed.body).toBe(content);
+      expect(parsed.ast.type).toBe('root');
+    });
+
+    it(`reports a zero frontmatter offset for "${content}"`, () => {
+      expect(frontmatterOffset(content)).toBe(0);
+    });
+  }
+
+  // Both call sites, not just parseFile: dropping the options from
+  // frontmatterOffset alone leaves every other test here green.
+  it('leaves no parsed document behind in gray-matter’s cache', () => {
+    const doc = '# 0122 cache pin\n\n* Status: accepted\n';
+    grayMatterModule.cache = {};
+    parseFile(doc);
+    frontmatterOffset(doc);
+    expect(Object.keys(grayMatterModule.cache)).toEqual([]);
   });
 });

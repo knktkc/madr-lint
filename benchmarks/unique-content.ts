@@ -1,11 +1,11 @@
 /**
  * Per-iteration document uniqueness for benchmarks.
  *
- * A bench that replays ONE identical content string measures the parse only on
- * its first iteration: gray-matter memoizes by whole-document content, so every
- * later iteration is a cache lookup. That hid the real cost so thoroughly that
- * removing the memoization — 6% faster on real linting, where documents differ —
- * read as a 14% regression on `madr/date-iso8601 — tiny (valid)` (#122).
+ * A bench that replays ONE identical content string can measure the parse only
+ * on its first iteration, if anything downstream memoizes by whole-document
+ * content. gray-matter did exactly that until #122, and it hid the real cost so
+ * thoroughly that removing the memoization read as a 14% regression on
+ * `madr/date-iso8601 — tiny (valid)`.
  *
  * So every content string that reaches `parseFile` inside a hot loop goes
  * through this helper. The appended marker is an HTML comment on its own line,

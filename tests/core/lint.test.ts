@@ -564,6 +564,33 @@ describe('core/lint', () => {
     });
   });
 
+  // gray-matter keys its memoization cache by the whole document on a plain
+  // object, so a file whose entire content names an Object.prototype member
+  // used to reach the CLI as a crash instead of a report (#122).
+  describe('prototype-member document content (#122)', () => {
+    it('lints a file whose entire content is "constructor"', () => {
+      const file = join(dir, '0001-constructor.md');
+      writeFileSync(file, 'constructor');
+
+      const result = lintFiles({
+        rules: [requiredSections],
+        ruleSeverity: { 'madr/required-sections': 'error' },
+        files: [file],
+        cwd: dir,
+      });
+
+      expect(result.filesChecked).toBe(1);
+      expect(result.diagnostics.length).toBeGreaterThan(0);
+      expect([...new Set(result.diagnostics.map((d) => d.ruleName))]).toEqual([
+        'madr/required-sections',
+      ]);
+      // Diagnostic paths are cwd-relative.
+      expect([...new Set(result.diagnostics.map((d) => d.path))]).toEqual([
+        '0001-constructor.md',
+      ]);
+    });
+  });
+
   // Autofix orchestration (#28): lintAndFix runs the per-file fixpoint (with
   // suppression + baseline applied to REPORTED diagnostics only), then the
   // project pass on the FIXED contents.

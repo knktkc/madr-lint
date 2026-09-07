@@ -61,7 +61,7 @@ Linters live or die by speed. Performance is treated as a feature, not an aftert
 **Discipline:**
 
 - Every rule has a benchmark stub at `benchmarks/<rule>/bench.ts`
-- Per-file benches feed a **unique document per iteration** (`uniqueDocs()` from `benchmarks/unique-content.ts`). A replayed identical string is served from gray-matter's content-keyed memo after the first iteration, so the bench measures a cache lookup instead of a parse (the rule holds for any future content-keyed memoization, not just gray-matter's)
+- Per-file benches feed a **unique document per iteration** (`uniqueDocs()` from `benchmarks/unique-content.ts`). A replayed identical string is served from any content-keyed memo after the first iteration, so the bench measures a cache lookup instead of a parse. gray-matter's own memo was removed in #122, but the rule holds for any future content-keyed memoization
 - `perf-regression-check` runs in CI; PR blocks at ≥10% slowdown, warns at 5-10%
 - Baselines committed in-repo at `benchmarks/<rule>/baseline.json`. CI never auto-updates baselines (manual via `bench-rule --update-baseline`)
 
