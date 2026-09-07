@@ -253,10 +253,10 @@ function extractListMetadataWithLoc(
 
   if (segments.length === 0) return null;
 
-  // Null-prototype accumulators: keys come from the document, so a field
-  // named after an Object.prototype member (`Constructor`) must not read as
-  // already present (#56). The `Object.hasOwn` check below is what enforces
-  // first-wins; the null prototype keeps the value itself uninherited.
+  // Keys come from the document. `Object.hasOwn` below is the fix for #56:
+  // `in` sees inherited members, so `* Constructor: x` read as a duplicate of
+  // a key that was never set and was dropped. The null prototype is defense in
+  // depth — with it, an unset key can never read back an inherited value.
   const values = nullProtoMap<unknown>();
   const loc = nullProtoMap<MetadataPosition>();
   const valueOffsets = nullProtoMap<{ start: number; end: number }>();
@@ -284,13 +284,13 @@ function extractListMetadataWithLoc(
   const hasRecognizedKey = Object.keys(values).some((k) =>
     RECOGNIZED_METADATA_KEYS.has(k),
   );
-  // Hand back PLAIN copies: these reach the public `extractListMetadata` /
-  // `ParsedFile` surface, where a consumer may call `hasOwnProperty` on them.
-  // Spreading uses CreateDataProperty, so a `constructor` key stays an own
-  // data property on the copy.
-  return hasRecognizedKey
-    ? { values: { ...values }, loc: { ...loc }, valueOffsets: { ...valueOffsets } }
-    : null;
+  // `values` is handed back as a PLAIN copy: it reaches the public
+  // `extractListMetadata` / `ParsedFile.listMetadata` surface verbatim, where
+  // a consumer may call `hasOwnProperty` on it. Spreading uses
+  // CreateDataProperty, so a `constructor` key stays an own data property.
+  // `loc` / `valueOffsets` need no copy here — this function is private and
+  // parseFile already spreads them into fresh objects before exposing them.
+  return hasRecognizedKey ? { values: { ...values }, loc, valueOffsets } : null;
 }
 
 const KEY_PATTERN = /^[A-Za-z][A-Za-z0-9 \-_]*$/;
