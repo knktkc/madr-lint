@@ -43,8 +43,14 @@ interface Directive {
   kind: DirectiveKind;
   /** null = applies to all rules; otherwise the explicit rule-id list. */
   rules: readonly string[] | null;
-  /** 1-based directive line in body (frontmatter-stripped) coordinates. */
+  /** 1-based START line of the comment, in body (frontmatter-stripped) coordinates. */
   line: number;
+  /**
+   * 1-based END line of the comment, same coordinates. Equals `line` for a
+   * single-line comment; for a multi-line `<!--` … `-->` block it is the line
+   * carrying `-->`, which is what `disable-next-line` counts from (#116).
+   */
+  endLine: number;
 }
 
 interface NextLineEntry {
@@ -57,14 +63,21 @@ export interface DirectiveIndex {
   fileDisableAll: boolean;
   /** Rules disabled file-wide via `disable-file <rules>`. */
   fileDisableRules: Set<string>;
-  /** `disable` / `enable` directives, sorted by line ascending. */
+  /** `disable` / `enable` directives, sorted by START line ascending. */
   ranged: Directive[];
-  /** disable-next-line: target line (directive line + 1) → affected rules. */
+  /**
+   * disable-next-line: target line → affected rules. The target is the first
+   * NON-BLANK line after the comment's END line, not `line + 1`.
+   */
   nextLine: Map<number, NextLineEntry>;
 }
 
 /** Parse one `<!-- ... -->` html node value into a directive, or null. */
-function parseDirective(value: string, line: number): Directive | null {
+function parseDirective(
+  value: string,
+  line: number,
+  endLine: number,
+): Directive | null {
   const trimmed = value.trim();
   if (!trimmed.startsWith('<!--') || !trimmed.endsWith('-->')) return null;
 
@@ -86,7 +99,12 @@ function parseDirective(value: string, line: number): Directive | null {
   if (!DIRECTIVE_KINDS.has(keyword as DirectiveKind)) return null;
 
   const rest = wsIndex === -1 ? '' : afterPrefix.slice(wsIndex);
-  return { kind: keyword as DirectiveKind, rules: parseRuleList(rest), line };
+  return {
+    kind: keyword as DirectiveKind,
+    rules: parseRuleList(rest),
+    line,
+    endLine,
+  };
 }
 
 function parseRuleList(rest: string): readonly string[] | null {
@@ -102,8 +120,9 @@ function parseRuleList(rest: string): readonly string[] | null {
 function walkHtml(node: MdastNode, out: Directive[]): void {
   if (node.type === 'html') {
     const line = node.position?.start.line;
-    if (typeof line === 'number') {
-      const directive = parseDirective(node.value, line);
+    const endLine = node.position?.end.line;
+    if (typeof line === 'number' && typeof endLine === 'number') {
+      const directive = parseDirective(node.value, line, endLine);
       if (directive) out.push(directive);
     }
   }
@@ -163,7 +182,11 @@ export function collectDirectives(
         break;
       }
       case 'disable-next-line': {
-        const target = nextNonBlankLine(directive.line);
+        // Counted from the comment's END line: a `<!--` … `-->` block written
+        // across several lines would otherwise target its own interior
+        // instead of the author's content below `-->` (#116). A single-line
+        // comment has endLine === line, so its behavior is unchanged.
+        const target = nextNonBlankLine(directive.endLine);
         if (target === null) break;
         let entry = index.nextLine.get(target);
         if (!entry) {
@@ -177,6 +200,12 @@ export function collectDirectives(
     }
   }
 
+  // Ranges stay keyed to the comment's START line, which is what preserves
+  // pre-#116 behavior: a range opens where the author wrote it. The choice is
+  // observable, not cosmetic — an INLINE multi-line comment shares its start
+  // line with the content beside it (`[gone](./nope.md) <!--` … `-->` spans
+  // three lines while the link is reported on the first), so counting from
+  // `endLine` here would stop such a `disable` from covering its own line.
   index.ranged.sort((a, b) => a.line - b.line);
   return index;
 }
