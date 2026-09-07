@@ -185,7 +185,7 @@ The spec.md and docs/rules/*.md for both should be updated to reflect that v2 is
 
 ## Post-0.1.0 refinements (dogfooding on a real-world corpus)
 
-Running the linter against a real corpus surfaced two corrections to the M4 design:
+Running the linter against a real corpus surfaced the following corrections to the M4 design:
 
 1. **Plain (non-emphasized) keys are now read.** The original extractor required
    bold keys (`- **Status**:`). But the canonical MADR v2.1.2 template uses
@@ -199,6 +199,20 @@ Running the linter against a real corpus surfaced two corrections to the M4 desi
 3. **Rename.** `ParsedFile.boldListMetadata` → `listMetadata` and
    `extractBoldListMetadata` → `extractListMetadata` (the API-surface code blocks
    above show the original names). The combined `metadata` field is unchanged.
+4. **HTML comments between items no longer end the metadata block** ([#73](https://github.com/knktkc/madr-lint/issues/73)).
+   A comment placed *between* two items ends the CommonMark list, so the
+   first-list-only scan dropped every field below it — a `disable-next-line`
+   directive turned a line-suppressible `invalidDate` into an unsuppressible
+   file-level `missingDate`. The block is now the leading **run** of lists,
+   joined across comment-only `html` nodes. Only a comment bridges: visible
+   HTML, a paragraph, a code fence, a thematic break, a blockquote, and a
+   heading of any depth all still end the block, and two lists with no comment
+   between them stay two lists. Blank lines around the comment are irrelevant —
+   chosen over line adjacency because `disable-next-line` deliberately targets
+   the next non-blank line. Note that item 2's parenthetical "only headings may
+   precede it" was already imprecise: the prologue has accepted any `html`
+   since the leading-comment test shipped, and that stays unchanged so an ADR
+   with an HTML badge header keeps its metadata.
 
 ## Out of scope
 

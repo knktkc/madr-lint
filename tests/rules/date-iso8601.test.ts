@@ -9,6 +9,20 @@ import rule from '../../src/rules/date-iso8601/index.js';
 
 const fixturesDir = join(import.meta.dirname, '../fixtures/date-iso8601');
 
+/** The #73 document: `comment` sits between two v2 metadata list items. */
+function splitFile(comment: string): string {
+  return [
+    '# 0001 test',
+    '',
+    '* Status: accepted',
+    comment,
+    '* Date: 2026/07/06',
+    '',
+    '## Context and Problem Statement',
+    '',
+  ].join('\n');
+}
+
 /** Apply a fixable diagnostic's fix thunk to the source and return the result. */
 function applyFix(content: string, d: { fix?: (f: ReturnType<typeof makeFixer>) => unknown }): string {
   const fixer = makeFixer(frontmatterOffset(content));
@@ -204,6 +218,32 @@ describe('madr/date-iso8601', () => {
       const content =
         '# Title\n\n<!-- madr-lint-disable-next-line madr/date-iso8601 -->\n- Date: 2026-99-99\n';
       expect(runRule(rule, { content, path: 'v2.md' })).toEqual([]);
+    });
+
+    // #73: a directive BETWEEN v2 metadata items splits the Markdown list, but
+    // the comment renders as nothing, so the field below it must stay part of
+    // the metadata block — line-located, suppressible, and fixable.
+    it('disable-next-line between v2 metadata list items suppresses invalidDate and produces no missingDate (#73)', () => {
+      const content = splitFile(
+        '<!-- madr-lint-disable-next-line madr/date-iso8601 -->',
+      );
+      const diagnostics = runRule(rule, { content, path: '0001-test.md' });
+      expect.soft(diagnostics.some((d) => d.messageId === 'missingDate')).toBe(
+        false,
+      );
+      expect.soft(diagnostics).toEqual([]);
+    });
+
+    it('an invalid date after a NON-directive comment is line-located and fixable', () => {
+      const content = splitFile('<!-- plain comment -->');
+      const diagnostics = runRule(rule, { content, path: '0001-test.md' });
+      expect(diagnostics).toHaveLength(1);
+      expect(diagnostics[0]?.messageId).toBe('invalidDate');
+      expect(diagnostics[0]?.loc).toEqual({ line: 5, column: 1 });
+      expect(diagnostics[0]?.fixable).toBe(true);
+      expect(applyFix(content, diagnostics[0]!)).toBe(
+        content.replace('2026/07/06', '2026-07-06'),
+      );
     });
   });
 

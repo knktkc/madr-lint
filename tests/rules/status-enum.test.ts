@@ -231,6 +231,21 @@ describe('madr/status-enum', () => {
         '# Title\n\n<!-- madr-lint-disable-next-line madr/status-enum -->\n- Status: totally-wrong\n';
       expect(runRule(rule, { content, path: 'v2.md' })).toEqual([]);
     });
+
+    // #73 is a parser-level contract restoration, not a date-specific one: a
+    // comment between v2 metadata items must not drop the field below it.
+    it('an invalid status after an interleaved comment is line-located and fixable', () => {
+      const content =
+        '# T\n\n* Date: 2026-07-06\n<!-- c -->\n* Status: depricated\n\n## Context\n';
+      const diagnostics = runRule(rule, { content, path: 'v2.md' });
+      expect(diagnostics).toHaveLength(1);
+      expect(diagnostics[0]?.messageId).toBe('invalidStatus');
+      expect(diagnostics[0]?.loc).toEqual({ line: 5, column: 1 });
+      expect(diagnostics[0]?.fixable).toBe(true);
+      expect(applyFix(content, diagnostics[0]!)).toBe(
+        content.replace('depricated', 'deprecated'),
+      );
+    });
   });
 
   // Autofix (#28): the ONLY mechanical status-enum fix is a pure case
