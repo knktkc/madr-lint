@@ -632,6 +632,20 @@ describe('parser/parseFile metadata combination', () => {
     });
   });
 
+  // #56: the merge builds a `frontmatterDefined` record to drop explicit
+  // null/undefined. gray-matter hands `__proto__` back as an OWN key, so on a
+  // plain object that copy step feeds it to the inherited setter — and a
+  // string value makes the setter a silent no-op, dropping the key.
+  it('keeps a frontmatter "__proto__" key through the v2 merge', () => {
+    const parsed = parseFile('---\n__proto__: x\n---\n# T\n\n* Status: accepted\n');
+    expect(parsed.metadata).not.toBeNull();
+    expect(Object.hasOwn(parsed.metadata ?? {}, '__proto__')).toBe(true);
+    expect(parsed.metadata?.['__proto__']).toBe('x');
+    // The merged record stays an ordinary object — the key is data, not a swap.
+    expect(Object.getPrototypeOf(parsed.metadata)).toBe(Object.prototype);
+    expect(parsed.metadata?.['status']).toBe('accepted');
+  });
+
   it('neither → metadata is null', () => {
     const parsed = parseFile('# Just body\n\nNo metadata here.\n');
     expect(parsed.frontmatter).toBeNull();
