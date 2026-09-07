@@ -10,6 +10,7 @@
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
+import { nullProtoMap } from './null-proto-map.js';
 import { INTERNAL_ERROR_RULE_NAME, type Diagnostic } from './types.js';
 
 /** Bumped only on a breaking change to the on-disk shape. */
@@ -38,17 +39,6 @@ export interface BaselineApplyResult {
 /** Absolute path to the baseline file for a given project root. */
 export function baselinePath(cwd: string): string {
   return join(cwd, '.madr-lint', 'baseline.json');
-}
-
-/**
- * Null-prototype map. Fingerprint keys derive from on-disk filenames and
- * rule metadata, so a key like '__proto__' must behave as ordinary data —
- * on a plain object it would read/write THROUGH Object.prototype instead
- * (prototype pollution + silently dropped entries). With no prototype there
- * is nothing to pollute. JSON.stringify output is identical.
- */
-function nullProtoMap<T>(): Record<string, T> {
-  return Object.create(null) as Record<string, T>;
 }
 
 /**
