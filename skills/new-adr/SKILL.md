@@ -196,8 +196,8 @@ Keep the `* Status:` / `* Date:` / `* Deciders:` lines in one Markdown list,
 and use the same bullet marker for every item anyway. A marker change
 (`* Status:` then `- Date:`) does start a second list, but the v2 bridge
 tolerates it as long as every item of that second list reads as `Key: value` —
-one prose bullet among them ends the metadata block and drops the fields below
-it. A single-line HTML comment between the items is fine: it renders as
+one prose bullet among them makes that whole second list prose, dropping every
+field in it. A single-line HTML comment between the items is fine: it renders as
 nothing, so the bridge reads the split block as one metadata block (see
 Step 5). Any other intervening block ends the metadata block — a paragraph, a
 code fence, a thematic break, a blockquote, a heading, or visible HTML such as

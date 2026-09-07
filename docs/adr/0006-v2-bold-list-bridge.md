@@ -226,8 +226,16 @@ Running the linter against a real corpus surfaced the following corrections to t
    shape. The accepted cost is the mirror of item 4's: a genuine prose list
    whose every bullet happens to read `Key: value` (`- Option A: do nothing`)
    merges into the block, adding unrecognized keys to `listMetadata`. Bounded,
-   because the recognized-key gate of item 2 still decides whether the block is
-   metadata at all, and duplicate keys still resolve first-wins.
+   because item 2's recognized-key gate still decides whether the block is
+   metadata at all, and duplicate keys still resolve first-wins. That gate is
+   unchanged as a mechanism, but its outcome can flip: a document whose only
+   recognized key sits in the adjacent list (a prose list leading, `* Status:`
+   below it) now yields metadata where it yielded `null`, which also lets
+   `detectMadrVersion` cast a v2 vote for it. Absorbed junk keys alone never
+   flip it. Same shape as item 4's own outcome change, and the consequence for
+   users is the same: a field that was a file-level `missingDate` becomes a
+   line-located `invalidDate`, so a baseline entry keyed on the old messageId
+   stops absorbing it (`--update-baseline` after upgrading).
 
 ## Out of scope
 
