@@ -2,6 +2,7 @@ import type { List, ListItem, Paragraph, Root } from 'mdast';
 import { fromMarkdown } from 'mdast-util-from-markdown';
 import { toString } from 'mdast-util-to-string';
 import grayMatter from 'gray-matter';
+import { nullProtoMap } from './null-proto-map.js';
 
 /** Source position of a metadata list item, in body coordinates. */
 export interface MetadataPosition {
@@ -249,13 +250,17 @@ function extractListMetadataWithLoc(
 
   if (segments.length === 0) return null;
 
-  const values: Record<string, unknown> = {};
-  const loc: Record<string, MetadataPosition> = {};
-  const valueOffsets: Record<string, { start: number; end: number }> = {};
+  // Null-prototype accumulators: keys come from the document, so a field
+  // named after an Object.prototype member (`Constructor`) must not read as
+  // already present (#56). The `Object.hasOwn` check below is what enforces
+  // first-wins; the null prototype keeps the value itself uninherited.
+  const values = nullProtoMap<unknown>();
+  const loc = nullProtoMap<MetadataPosition>();
+  const valueOffsets = nullProtoMap<{ start: number; end: number }>();
   for (const list of segments) {
     for (const item of list.children) {
       const pair = extractListItemKV(item);
-      if (pair && !(pair.key in values)) {
+      if (pair && !Object.hasOwn(values, pair.key)) {
         values[pair.key] = pair.value;
         const start = item.position?.start;
         if (start) loc[pair.key] = { line: start.line, column: start.column };
@@ -276,7 +281,13 @@ function extractListMetadataWithLoc(
   const hasRecognizedKey = Object.keys(values).some((k) =>
     RECOGNIZED_METADATA_KEYS.has(k),
   );
-  return hasRecognizedKey ? { values, loc, valueOffsets } : null;
+  // Hand back PLAIN copies: these reach the public `extractListMetadata` /
+  // `ParsedFile` surface, where a consumer may call `hasOwnProperty` on them.
+  // Spreading uses CreateDataProperty, so a `constructor` key stays an own
+  // data property on the copy.
+  return hasRecognizedKey
+    ? { values: { ...values }, loc: { ...loc }, valueOffsets: { ...valueOffsets } }
+    : null;
 }
 
 const KEY_PATTERN = /^[A-Za-z][A-Za-z0-9 \-_]*$/;
