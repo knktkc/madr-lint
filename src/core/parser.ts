@@ -88,7 +88,10 @@ export function parseFile(content: string): ParsedFile {
     // Frontmatter wins on conflict, BUT explicit null/undefined are
     // skipped so that `status: ~` in YAML doesn't blank a present
     // list value (counterintuitive UX otherwise).
-    const frontmatterDefined: Record<string, unknown> = {};
+    // Null prototype: YAML keys are document-controlled and gray-matter hands
+    // `__proto__` back as an own key, which a plain object would feed to the
+    // inherited setter — silently dropping it (#56).
+    const frontmatterDefined = nullProtoMap<unknown>();
     for (const [k, v] of Object.entries(frontmatter)) {
       if (v !== null && v !== undefined) frontmatterDefined[k] = v;
     }
