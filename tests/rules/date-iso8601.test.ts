@@ -248,6 +248,20 @@ describe('madr/date-iso8601', () => {
       expect.soft(diagnostics).toEqual([]);
     });
 
+    // #116: the same directive spelled as a multi-line comment. The html node
+    // spans three lines, so the target is the line after `-->`, not the
+    // comment's own interior.
+    it('a multi-line disable-next-line between v2 metadata list items suppresses invalidDate and produces no missingDate (#116)', () => {
+      const content = splitFile(
+        ['<!--', 'madr-lint-disable-next-line madr/date-iso8601', '-->'].join('\n'),
+      );
+      const diagnostics = runRule(rule, { content, path: '0001-test.md' });
+      expect.soft(diagnostics.some((d) => d.messageId === 'missingDate')).toBe(
+        false,
+      );
+      expect.soft(diagnostics).toEqual([]);
+    });
+
     it('an invalid date after a NON-directive comment is line-located and fixable', () => {
       const content = splitFile('<!-- plain comment -->');
       const diagnostics = runRule(rule, { content, path: '0001-test.md' });
