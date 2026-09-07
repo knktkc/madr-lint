@@ -89,6 +89,27 @@ describe('parser/extractListMetadata', () => {
     expect(extractListMetadata(ast(md))).toEqual({ status: 'Proposed' });
   });
 
+  // #56: de-duplication used `key in values` on a plain object, so a key
+  // that names an Object.prototype member was seen as already present and
+  // silently dropped. `__proto__` cannot occur — KEY_PATTERN needs a leading
+  // letter — but `Constructor` is a legal v2 field name.
+  it('reads a key named after an Object.prototype member', () => {
+    const md = '# T\n\n* Status: accepted\n* Constructor: x\n* Prototype: y\n';
+    expect(extractListMetadata(ast(md))).toEqual({
+      status: 'accepted',
+      constructor: 'x',
+      prototype: 'y',
+    });
+  });
+
+  it('records a body position for a "constructor" key', () => {
+    const md = '# T\n\n* Status: accepted\n* Constructor: x\n';
+    const loc = parseFile(md).metadataLoc;
+    expect(loc).not.toBeNull();
+    expect(Object.hasOwn(loc ?? {}, 'constructor')).toBe(true);
+    expect(loc?.['constructor']).toEqual({ line: 4, column: 1 });
+  });
+
   it('preserves inline value text via mdast-util-to-string', () => {
     const md = '# T\n\n- **Status**: superseded by `ADR-0042`\n';
     expect(extractListMetadata(ast(md))).toEqual({
