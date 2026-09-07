@@ -482,6 +482,53 @@ describe('core/lint', () => {
     });
   });
 
+  // Manifest keys are filename-derived (#56). `lintFiles({ files: [...] })`
+  // accepts explicit paths, so a file literally named `__proto__` produces
+  // that key — on a plain object the write goes through the inherited setter
+  // (the entry never serializes) and the read returns Object.prototype.
+  describe('prototype-safe cache keys', () => {
+    const BARE = '# Just a heading\n\nNo sections here.\n';
+
+    function lintProtoFile(cache: CacheConfig) {
+      const file = join(dir, '__proto__');
+      writeFileSync(file, BARE);
+      return lintFiles({
+        rules: [requiredSections],
+        ruleSeverity: { 'madr/required-sections': 'error' },
+        files: [file],
+        cwd: dir,
+        cache,
+      });
+    }
+
+    it('caches and round-trips a file literally named "__proto__"', () => {
+      const cache: CacheConfig = {
+        dir: join(dir, '.madr-lint', 'cache'),
+        configHash: 'h',
+        pkgVersion: '0.0.0-test',
+      };
+
+      const cold = lintProtoFile(cache);
+      expect(cold.filesFromCache).toBe(0);
+      expect(cold.diagnostics).toHaveLength(3);
+
+      const warm = lintProtoFile(cache);
+      expect(warm.filesFromCache).toBe(1);
+      expect(warm.diagnostics).toEqual(cold.diagnostics);
+
+      // The entry must actually reach the on-disk manifest.
+      const raw = readFileSync(manifestPath(cache.dir), 'utf8');
+      expect(raw).toContain('"__proto__"');
+      expect(JSON.parse(raw).files.__proto__.contentHash).toBe(
+        computeContentHash(BARE),
+      );
+
+      // …and nothing may have leaked onto the global prototype.
+      expect(Object.hasOwn(Object.prototype, 'contentHash')).toBe(false);
+      expect(Object.getPrototypeOf({})).toBe(Object.prototype);
+    });
+  });
+
   // Autofix orchestration (#28): lintAndFix runs the per-file fixpoint (with
   // suppression + baseline applied to REPORTED diagnostics only), then the
   // project pass on the FIXED contents.
