@@ -1,26 +1,26 @@
 [
   {
     "Task name": "madr/no-duplicate-numbering — 10 files",
-    "Latency avg (ns)": "1199.5 ± 1.49%",
-    "Latency med (ns)": "1041.0 ± 41.00",
-    "Throughput avg (ops/s)": "950707 ± 0.03%",
-    "Throughput med (ops/s)": "960615 ± 39385",
-    "Samples": 416824
+    "Latency avg (ns)": "1008.6 ± 0.32%",
+    "Latency med (ns)": "1000.00 ± 41.00",
+    "Throughput avg (ops/s)": "1016285 ± 0.02%",
+    "Throughput med (ops/s)": "1000000 ± 42753",
+    "Samples": 495717
   },
   {
     "Task name": "madr/no-duplicate-numbering — 100 files",
-    "Latency avg (ns)": "10689 ± 0.78%",
-    "Latency med (ns)": "10000.0 ± 292.00",
-    "Throughput avg (ops/s)": "98754 ± 0.08%",
-    "Throughput med (ops/s)": "100000 ± 2837",
-    "Samples": 46778
+    "Latency avg (ns)": "9893.7 ± 0.35%",
+    "Latency med (ns)": "9708.0 ± 167.00",
+    "Throughput avg (ops/s)": "103138 ± 0.06%",
+    "Throughput med (ops/s)": "103008 ± 1742",
+    "Samples": 50538
   },
   {
     "Task name": "madr/no-duplicate-numbering — 1000 files",
-    "Latency avg (ns)": "115142 ± 1.48%",
-    "Latency med (ns)": "102667 ± 3125.0",
-    "Throughput avg (ops/s)": "9302 ± 0.48%",
-    "Throughput med (ops/s)": "9740 ± 297",
-    "Samples": 4343
+    "Latency avg (ns)": "101161 ± 0.54%",
+    "Latency med (ns)": "96959 ± 2250.0",
+    "Throughput avg (ops/s)": "10044 ± 0.26%",
+    "Throughput med (ops/s)": "10314 ± 240",
+    "Samples": 4943
   }
 ]
