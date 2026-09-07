@@ -35,11 +35,19 @@ jobs:
       # publish PUT gets a 404 (auth-shaped, not a real "not found"). Upgrade
       # npm before publishing; bump this pin deliberately.
       - run: npm install -g npm@11.18.0
-      - uses: changesets/action@a45c4d594aa4e2c509dc14a9f2b3b67ba3780d0d # v1.9.0
+      # v2 renamed the inputs (`publish` → `publish-script`, `version` →
+      # `version-script`), takes the token via the `github-token` input (the
+      # GITHUB_TOKEN env var is no longer read), pushes release commits/tags
+      # through the GitHub API by default, and requires @changesets/cli v3.
+      - uses: changesets/action@8488615a623b1b9c987934bb89eae8af6a946ac1 # v2.1.1
         with:
-          publish: pnpm publish-ci
-          version: pnpm changeset:version
+          publish-script: pnpm publish-ci
+          version-script: pnpm changeset:version
+          github-token: ${{ secrets.GITHUB_TOKEN }}
         env:
+          # Still needed as an env var: @changesets/changelog-github reads
+          # GITHUB_TOKEN itself to resolve PR/commit links when writing the
+          # CHANGELOG (the action no longer forwards it).
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Tokenless publish via npm OIDC trusted publishing (registered on the
           # madr-lint npm package). The npm CLI (upgraded above) performs the
