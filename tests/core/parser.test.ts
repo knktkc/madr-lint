@@ -90,15 +90,15 @@ describe('parser/extractListMetadata', () => {
   });
 
   // #56: de-duplication used `key in values` on a plain object, so a key
-  // that names an Object.prototype member was seen as already present and
-  // silently dropped. `__proto__` cannot occur — KEY_PATTERN needs a leading
-  // letter — but `Constructor` is a legal v2 field name.
-  it('reads a key named after an Object.prototype member', () => {
-    const md = '# T\n\n* Status: accepted\n* Constructor: x\n* Prototype: y\n';
+  // seen as already present through inheritance was silently dropped.
+  // `constructor` is the ONLY reachable case: normalizeKey lowercases, so
+  // `toString` arrives as `tostring`, and `__proto__` fails KEY_PATTERN
+  // (leading letter required).
+  it('reads a key named "constructor"', () => {
+    const md = '# T\n\n* Status: accepted\n* Constructor: x\n';
     expect(extractListMetadata(ast(md))).toEqual({
       status: 'accepted',
       constructor: 'x',
-      prototype: 'y',
     });
   });
 
@@ -108,6 +108,23 @@ describe('parser/extractListMetadata', () => {
     expect(loc).not.toBeNull();
     expect(Object.hasOwn(loc ?? {}, 'constructor')).toBe(true);
     expect(loc?.['constructor']).toEqual({ line: 4, column: 1 });
+  });
+
+  // `toEqual` ignores prototypes, so the public records need their own pin:
+  // consumers may call `hasOwnProperty` on them, which a null-prototype
+  // object would not answer (#56).
+  it('returns plain objects across the public parser surface', () => {
+    const md = '# T\n\n* Status: accepted\n* Constructor: x\n';
+    expect(Object.getPrototypeOf(extractListMetadata(ast(md)))).toBe(
+      Object.prototype,
+    );
+    const parsed = parseFile(md);
+    expect(Object.getPrototypeOf(parsed.metadata)).toBe(Object.prototype);
+    expect(Object.getPrototypeOf(parsed.listMetadata)).toBe(Object.prototype);
+    expect(Object.getPrototypeOf(parsed.metadataLoc)).toBe(Object.prototype);
+    expect(Object.getPrototypeOf(parsed.metadataValueLoc)).toBe(
+      Object.prototype,
+    );
   });
 
   it('preserves inline value text via mdast-util-to-string', () => {
