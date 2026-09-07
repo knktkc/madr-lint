@@ -9,10 +9,11 @@
 // working tree is never mutated. Base ref resolution order: $PERF_BASE_REF,
 // else `HEAD~1`.
 //
-// HEAD's `benchmarks/` is copied OVER the worktree's, so both sides run the
-// SAME bench code, fixtures and helper — only `src/` and `tests/helpers/`
-// differ. Otherwise a benchmark fix can never take effect: base keeps running
-// its own old bench, and the two sides measure different things. That is not
+// The WORKING TREE's `benchmarks/` (identical to HEAD in CI, which runs on a
+// clean checkout) is copied OVER the worktree's, so both sides run the SAME
+// bench code, fixtures and helper — only `src/` and `tests/helpers/` differ.
+// Otherwise a benchmark fix can never take effect: base keeps running its own
+// old bench, and the two sides measure different things. That is not
 // hypothetical — the per-file benches used to replay one identical fixture
 // string, which gray-matter's content-keyed memoization turned into a cache
 // lookup after the first iteration, so a change that made real parsing 6%
@@ -167,9 +168,12 @@ function cleanupWorktree(): void {
 cleanupWorktree(); // clear any stale worktree from a previous interrupted run
 try {
   git(['worktree', 'add', '--detach', WORKTREE, baseSha]);
-  // Both sides run HEAD's benchmark harness (see the header): swap the base
-  // checkout's benchmarks/ for HEAD's. The benches import `../../src/...` and
-  // `../../tests/helpers/...` relatively, so they still exercise BASE's code.
+  // Both sides run one benchmark harness (see the header): swap the base
+  // checkout's benchmarks/ for the WORKING TREE's — BENCH_DIR is the live
+  // directory, not `git show HEAD:benchmarks`, so a local uncommitted bench
+  // edit is measured on both sides (in CI the two are identical). The benches
+  // import `../../src/...` and `../../tests/helpers/...` relatively, so they
+  // still exercise BASE's code.
   const baseBenchRoot = join(WORKTREE, 'benchmarks');
   rmSync(baseBenchRoot, { recursive: true, force: true });
   cpSync(BENCH_DIR, baseBenchRoot, { recursive: true });

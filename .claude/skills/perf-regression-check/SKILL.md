@@ -24,15 +24,19 @@ CLAUDE.md (M2: 100 ADRs <100ms cold; M3: 5000 files <4s cold).
    tree; read each `benchmarks/<rule>/<sha>.json`.
 3. **Measure base** — check the base ref out into a throwaway git worktree
    inside the repo (`.perf-base/`, gitignored, auto-removed) so Node resolves
-   the repo's `node_modules` and the main working tree is never mutated. HEAD's
-   `benchmarks/` is then copied OVER the worktree's, so only `src/` and
-   `tests/helpers/` differ between the two sides (see "Methodology rules").
+   the repo's `node_modules` and the main working tree is never mutated. The
+   working tree's `benchmarks/` (identical to HEAD in CI) is then copied OVER
+   the worktree's, so only `src/` and `tests/helpers/` differ between the two
+   sides (see "Methodology rules").
 4. **Compare** per task: `delta = (head - base) / base`.
    - `delta ≥ -5%` → **OK** (includes speedups)
    - `-10% ≤ delta < -5%` → **WARN** (no fail)
    - `delta < -10%` → **FAIL** candidate
    - a rule whose bench cannot run on base (e.g. a rule added in this PR, whose
-     `src/` file the base ref lacks) → skipped with a note, no effect on exit code
+     `src/` file the base ref lacks) → skipped with a note, no effect on exit
+     code. Node prints an `ERR_MODULE_NOT_FOUND` stack trace from the base side
+     first, then `Skipped: <rule>: base bench failed`. That is expected, not a
+     failure: the Summary still prints and the check still exits 0.
 5. **Confirm-on-fail** — any rule with a FAIL candidate is re-measured once;
    a task fails for real only if the regression **reproduces**. Non-reproduced
    candidates are downgraded to WARN (so shared-runner noise can't flake CI).
@@ -76,8 +80,9 @@ faster on real linting, where documents differ — read as a **14% regression**
 on `madr/date-iso8601 — tiny (valid)`, because the old bench had been
 measuring the memo.
 
-1. **Both sides run HEAD's benchmark harness.** The script replaces the base
-   worktree's `benchmarks/` with a copy of HEAD's before measuring. The benches
+1. **Both sides run one benchmark harness.** The script replaces the base
+   worktree's `benchmarks/` with a copy of the working tree's (identical to
+   HEAD in CI, which runs on a clean checkout) before measuring. The benches
    import `../../src/...` and `../../tests/helpers/...` relatively, so they
    still exercise BASE's code — same bench, same fixtures, different `src`.
    Without this a benchmark fix can never take effect: base keeps running its
@@ -85,7 +90,9 @@ measuring the memo.
 2. **Every content string that reaches `parseFile` in a hot loop is unique per
    iteration.** `benchmarks/unique-content.ts` exports `uniqueDocs(fixture)`,
    which returns a closure appending `<!-- bench N -->` on its own line — no
-   rule reads it, and it costs one concat. This holds for any future
+   rule reads it today, and it costs one concat. That neutrality is a property
+   of the current rules, not a law: when adding a rule, confirm its diagnostics
+   are identical with and without the marker. This holds for any future
    content-keyed memoization, not just gray-matter's. Project-rule benches that
    build their corpus once with `buildProjectFile` outside the loop need no
    uniqueness: `runRulesOnProject` never parses.

@@ -331,7 +331,8 @@ const typical = readFileSync(new URL('./fixtures/typical.md', import.meta.url), 
 
 // One unique document per iteration. Replaying an identical string measures
 // gray-matter's content-keyed memo instead of the parse (#122) — see the
-// `perf-regression-check` skill, "Methodology rules".
+// `perf-regression-check` skill, "Methodology rules". `uniqueDocs` appends an
+// HTML comment; confirm this rule ignores it (below).
 const nextTiny = uniqueDocs(tiny);
 const nextTypical = uniqueDocs(typical);
 
@@ -355,6 +356,12 @@ writeFileSync(
 ```
 
 Plus minimal `benchmarks/<kebab>/fixtures/{tiny,typical}.md` corpora.
+
+`uniqueDocs` appends `<!-- bench N -->` on its own line. No current rule reads
+it, but that is not guaranteed for a rule that inspects `html` nodes or trailing
+content — so confirm it: run the rule through `runRule` on each fixture with and
+without the marker and check the diagnostics are identical. If they differ, the
+bench needs a marker this rule ignores, not a dropped uniqueness.
 
 For **project rules (Shape D)** — `benchmarks/<kebab>/bench.ts`:
 

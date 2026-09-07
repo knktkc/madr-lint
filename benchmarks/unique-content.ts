@@ -8,10 +8,13 @@
  * read as a 14% regression on `madr/date-iso8601 — tiny (valid)` (#122).
  *
  * So every content string that reaches `parseFile` inside a hot loop goes
- * through this helper. The appended marker is an HTML comment on its own line:
- * it changes nothing a rule reads (no heading, no metadata list item, and the
- * leading metadata block is unaffected by a trailing node) and costs one string
- * concat per iteration.
+ * through this helper. The appended marker is an HTML comment on its own line,
+ * which costs one string concat per iteration and changes nothing any CURRENT
+ * rule reads: none adds a heading or a metadata list item, and the leading
+ * metadata block is unaffected by a trailing node. That is a property of
+ * today's rules, not a law — a rule that reads `html` nodes or trailing content
+ * would see it. When adding a rule, confirm its diagnostics are identical with
+ * and without the marker (one `runRule` call each, compared).
  */
 export function uniqueDocs(fixture: string): () => string {
   let n = 0;
