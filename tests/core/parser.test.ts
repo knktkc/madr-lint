@@ -771,9 +771,13 @@ describe('parseFile — gray-matter content cache (#122)', () => {
     });
   }
 
+  // Both call sites, not just parseFile: dropping the options from
+  // frontmatterOffset alone leaves every other test here green.
   it('leaves no parsed document behind in gray-matter’s cache', () => {
+    const doc = '# 0122 cache pin\n\n* Status: accepted\n';
     grayMatterModule.cache = {};
-    parseFile('# 0122 cache pin\n\n* Status: accepted\n');
+    parseFile(doc);
+    frontmatterOffset(doc);
     expect(Object.keys(grayMatterModule.cache)).toEqual([]);
   });
 });
