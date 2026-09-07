@@ -213,6 +213,21 @@ Running the linter against a real corpus surfaced the following corrections to t
    precede it" was already imprecise: the prologue has accepted any `html`
    since the leading-comment test shipped, and that stays unchanged so an ADR
    with an HTML badge header keeps its metadata.
+5. **A bullet-marker change no longer ends the metadata block** ([#115](https://github.com/knktkc/madr-lint/issues/115)).
+   Item 4's closing clause — "two lists with no comment between them stay two
+   lists" — left the same silent field loss reachable without any comment:
+   `* Status: accepted` followed by `- Date: 2026/07/06` is two CommonMark
+   lists with no node between them, so nothing could bridge them and `Date`
+   was dropped. Such a list now joins the run when **every** one of its items
+   parses as a `Key: value` pair; a list carrying any other item is prose and
+   still ends the block. The gate is shape, not marker: an ordered list
+   (`1. Date: …`) after an unordered one merges on the same terms. A
+   comment-bridged list keeps item 4's behavior — it merges regardless of
+   shape. The accepted cost is the mirror of item 4's: a genuine prose list
+   whose every bullet happens to read `Key: value` (`- Option A: do nothing`)
+   merges into the block, adding unrecognized keys to `listMetadata`. Bounded,
+   because the recognized-key gate of item 2 still decides whether the block is
+   metadata at all, and duplicate keys still resolve first-wins.
 
 ## Out of scope
 

@@ -1,0 +1,8 @@
+---
+"madr-lint": patch
+---
+
+Read the fields below a bullet-marker change in a MADR v2 metadata block ([#115](https://github.com/knktkc/madr-lint/issues/115)). `* Status: accepted` followed by `- Date: 2026/07/06` is two CommonMark lists with no node between them, so the HTML-comment bridge added for #73 could not reach the second one and every field below the marker change vanished from metadata.
+
+- **A marker change no longer drops fields.** An adjacent list now joins the metadata block when *every* one of its items reads as a `Key: value` pair, so the `Date` above is parsed, keeps its own line number, is targetable by `madr-lint-disable-next-line`, and is repaired by `--fix` — instead of degrading a line-suppressible `invalidDate` into an unsuppressible file-level `missingDate`. The gate is shape, not marker: an ordered list (`1. Date: …`) after an unordered one merges on the same terms; a list with any non-`Key: value` item is prose and still ends the block, as do a paragraph, a code fence, a thematic break, a blockquote, a heading of any depth, and visible HTML.
+- **`extractListMetadata` (public export) returns more keys for some documents.** The accepted cost of a shape-only gate is over-merging: a genuine prose list whose every bullet happens to read `Key: value` (`- Option A: do nothing`) is now merged into the block, so its keys appear in `listMetadata` / `metadata`. Whether the block counts as metadata at all is unchanged — it still needs one recognized MADR key (`status`, `date`, `deciders`, `decision-makers`, `consulted`, `informed`) — and duplicate keys still resolve first-wins, so an earlier field always shadows a later one.
