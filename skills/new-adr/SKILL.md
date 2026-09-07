@@ -197,11 +197,11 @@ and use the same bullet marker for every item anyway. A marker change
 (`* Status:` then `- Date:`) does start a second list, but the v2 bridge
 tolerates it as long as every item of that second list reads as `Key: value` —
 one prose bullet among them makes that whole second list prose, dropping every
-field in it. A single-line HTML comment between the items is fine: it renders as
-nothing, so the bridge reads the split block as one metadata block (see
-Step 5). Any other intervening block ends the metadata block — a paragraph, a
-code fence, a thematic break, a blockquote, a heading, or visible HTML such as
-`<div>`.
+field in it. An HTML comment between the items is fine, on one line or
+several: it renders as nothing, so the bridge reads the split block as one
+metadata block (see Step 5). Any other intervening block ends the metadata
+block — a paragraph, a code fence, a thematic break, a blockquote, a heading,
+or visible HTML such as `<div>`.
 
 ### Step 5: Validate — loop until clean
 
@@ -252,8 +252,9 @@ Two things that commonly trip this up, both confirmed during dogfooding:
 
 **Suppression comments between v2 metadata-list items work.** The comment
 splits the Markdown list, but the v2 bridge reads the split block as one
-metadata block, so `disable-next-line` reaches the field below it. Keep the
-whole directive on one line.
+metadata block, so `disable-next-line` reaches the field below it. A
+multi-line `<!--` … `-->` block works too: it targets the first non-blank
+line after `-->`.
 
 ### Step 6: Done
 

@@ -224,6 +224,61 @@ describe('core/suppression — per-file directives', () => {
     });
   });
 
+  describe('directives written as a multi-line HTML comment (#116)', () => {
+    // An `html` node spanning `<!--` … `-->` carries a start line and an end
+    // line. disable-next-line must resolve from the END line, or it targets
+    // the comment's own interior instead of the author's content.
+    it('disable-next-line inside a multi-line comment targets the line after -->', () => {
+      const content = [
+        '# A', // 1 (reported)
+        '<!--', // 2 ┐
+        'madr-lint-disable-next-line test/line', // 3 │ one html node (2 → 4)
+        '-->', // 4 ┘
+        '## B', // 5 (suppressed)
+        '## C', // 6 (reported)
+      ].join('\n');
+      expect(reportedLines(run([lineRule('test/line')], content))).toEqual([1, 6]);
+    });
+
+    it('a blank line after --> is skipped, as it is for a single-line directive', () => {
+      const content = [
+        '# A', // 1 (reported)
+        '<!--', // 2 ┐
+        'madr-lint-disable-next-line test/line', // 3 │ one html node (2 → 4)
+        '-->', // 4 ┘
+        '', // 5 (blank — skipped)
+        '## B', // 6 (suppressed)
+        '## C', // 7 (reported)
+      ].join('\n');
+      expect(reportedLines(run([lineRule('test/line')], content))).toEqual([1, 7]);
+    });
+
+    it('a single-line directive is unchanged (its end line IS its start line)', () => {
+      const content = [
+        '# A', // 1 (reported)
+        '<!-- madr-lint-disable-next-line test/line -->', // 2 → targets line 3
+        '## B', // 3 (suppressed)
+        '## C', // 4 (reported)
+      ].join('\n');
+      expect(reportedLines(run([lineRule('test/line')], content))).toEqual([1, 4]);
+    });
+
+    it('a multi-line disable / enable pair still opens and closes at the comment start', () => {
+      const content = [
+        '# A', // 1 (reported)
+        '<!--', // 2 ┐
+        'madr-lint-disable test/line', // 3 │ one html node (2 → 4)
+        '-->', // 4 ┘
+        '## B', // 5 (suppressed)
+        '<!--', // 6 ┐
+        'madr-lint-enable test/line', // 7 │ one html node (6 → 8)
+        '-->', // 8 ┘
+        '## D', // 9 (reported again)
+      ].join('\n');
+      expect(reportedLines(run([lineRule('test/line')], content))).toEqual([1, 9]);
+    });
+  });
+
   describe('coalesced html nodes and multi-comment lines', () => {
     it('two comments coalesced on ONE line are not a directive (no garbage rule list)', () => {
       const content = [
@@ -448,6 +503,36 @@ describe('core/suppression — project rules (file-scoped)', () => {
     );
     expect(broken).toHaveLength(1);
     expect(broken[0]?.data?.url).toBe('./nada.md');
+  });
+
+  // #116: `disable-next-line` counts from the comment's END line, but a
+  // ranged `disable` must keep opening at its START line. An INLINE multi-line
+  // comment shares its start line with the content beside it, so the two
+  // differ observably: the html node below spans body lines 1→3 while
+  // no-broken-links reports the link at line 1. Keying the range off the end
+  // line would let the diagnostic escape.
+  it('an inline multi-line disable opens at the comment START line, suppressing its own line', () => {
+    const adr = join(dir, '0001-a.md');
+    writeFileSync(
+      adr,
+      [
+        '---',
+        'status: accepted',
+        '---',
+        '[gone](./nope.md) <!--', // body line 1 ┐ html node 1 → 3;
+        'madr-lint-disable madr/no-broken-links', // body 2 │ the link is
+        '-->', // body 3 ┘ reported at line 1
+      ].join('\n'),
+    );
+    const result = lintFiles({
+      rules: [noBrokenLinks],
+      ruleSeverity: { 'madr/no-broken-links': 'error' },
+      files: [adr],
+      cwd: dir,
+    });
+    expect(
+      result.diagnostics.filter((d) => d.ruleName === 'madr/no-broken-links'),
+    ).toEqual([]);
   });
 
   it('disable-next-line skips a blank line before the target (project path)', () => {
