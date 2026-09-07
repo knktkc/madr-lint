@@ -700,6 +700,51 @@ describe('parser/extractListMetadata — marker-change split metadata block (#11
     expect(extractListMetadata(ast(md))).toBeNull();
   });
 
+  it('merges an item that carries a nested sub-bullet list', () => {
+    // Only the item's first child is read, so the MADR "considered options"
+    // idiom of sub-bullets under a field survives the KV gate. Nothing but the
+    // first `##` protects it, which is why it is pinned here.
+    const md =
+      '# T\n\n* Status: accepted\n- Date: 2026-05-01\n  - a sub bullet\n';
+    expect(extractListMetadata(ast(md))).toEqual({
+      status: 'accepted',
+      date: '2026-05-01',
+    });
+  });
+
+  it('does not merge a task-list item', () => {
+    // The checkbox is part of the item's text, and a key must start with a
+    // letter — so `[ ] Date` is not a key and the whole list stays prose.
+    const md = '# T\n\n* Status: accepted\n- [ ] Date: 2026-05-01\n';
+    expect(extractListMetadata(ast(md))).toEqual({ status: 'accepted' });
+  });
+
+  it('merges an ordered list using the `)` delimiter', () => {
+    const md = '# T\n\n* Status: accepted\n1) Date: 2026-05-01\n';
+    expect(extractListMetadata(ast(md))).toEqual({
+      status: 'accepted',
+      date: '2026-05-01',
+    });
+  });
+
+  it('merges a loose list (blank lines between the items)', () => {
+    const md =
+      '# T\n\n* Status: accepted\n\n- Date: 2026-05-01\n\n- Deciders: alice\n';
+    expect(extractListMetadata(ast(md))).toEqual({
+      status: 'accepted',
+      date: '2026-05-01',
+      deciders: 'alice',
+    });
+  });
+
+  it('promotes a document whose only recognized key sits in the merged list', () => {
+    // The gate mechanism is unchanged, but its OUTCOME can flip: this returned
+    // null before #115, because the leading prose list carried no recognized
+    // key. `detectMadrVersion` reads the same result, so it now casts a v2 vote.
+    const md = '# T\n\n- apples\n- oranges\n\n* Status: accepted\n';
+    expect(extractListMetadata(ast(md))).toEqual({ status: 'accepted' });
+  });
+
   it('an empty list between two lists still ends the block', () => {
     // CommonMark has no zero-item list, so this is only reachable through the
     // public `extractListMetadata`, which takes any Root. `[].every()` is true,
