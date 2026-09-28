@@ -2,6 +2,7 @@
 import { defineConfig } from 'astro/config';
 import starlight from '@astrojs/starlight';
 import starlightLlmsTxt from 'starlight-llms-txt';
+import { unified } from '@astrojs/markdown-remark';
 
 const BASE = '/madr-lint';
 
@@ -37,8 +38,12 @@ function rehypeBaseLinks() {
 export default defineConfig({
   site: 'https://knktkc.github.io',
   base: BASE,
+  // Astro 7.3 made Sätteri the default Markdown processor and dropped
+  // @astrojs/markdown-remark from its own dependencies. rehypeBaseLinks is a
+  // rehype plugin, so keep the unified pipeline explicitly. Porting it to a
+  // Sätteri hast plugin would let this dependency go again.
   markdown: {
-    rehypePlugins: [rehypeBaseLinks],
+    processor: unified({ rehypePlugins: [rehypeBaseLinks] }),
   },
   integrations: [
     starlight({
