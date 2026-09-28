@@ -45,7 +45,6 @@ export default defineConfig({
       title: 'madr-lint',
       description:
         'A fast, configurable linter for MADR (Markdown Architectural Decision Records).',
-      tagline: 'A fast, configurable linter for MADR.',
       logo: {
         src: './src/assets/logo.svg',
         replacesTitle: true,
