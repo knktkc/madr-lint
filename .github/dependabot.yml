@@ -70,6 +70,9 @@ updates:
       # init and analyze must run the same version: the analyze post-step
       # rejects a config file written by a different version, so separate
       # PRs for the two can never pass CI (#106 / #107).
+      # Dependabot names sub-path actions in full (github/codeql-action/init),
+      # and the `github/codeql-action/*` form did not group them (#144 / #145
+      # were still opened separately) — match with a trailing `*` instead.
       codeql:
         patterns:
-          - github/codeql-action/*
+          - "github/codeql-action*"
