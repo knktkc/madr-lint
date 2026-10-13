@@ -80,7 +80,7 @@
     "@types/node": "^26.6.5",
     "@types/picomatch": "^4.0.3",
     "fast-check": "^4.10.2",
-    "oxlint": "^1.86.0",
+    "oxlint": "^1.87.0",
     "tinybench": "^6.2.1",
     "tsup": "^8.5.1",
     "tsx": "^4.23.15",
