@@ -71,10 +71,14 @@ updates:
     # PRs for the two can never pass CI (#106 / #107).
     # Neither `github/codeql-action/*` (#144 / #145) nor `github/codeql-action*`
     # (#173 / #174) grouped them: the Dependabot job log for this ecosystem
-    # shows `"dependency-groups":[]`, i.e. GitHub never handed the group to
-    # the updater. The comment block used to sit between `groups:` and the
-    # group name; it now sits above `groups:` to rule out that parse path.
+    # shows `"dependency-groups":[]` while the npm jobs receive theirs, so
+    # GitHub drops the group before the updater runs (comment placement ruled
+    # out by #180). Exact names avoid any glob semantics; `applies-to` is the
+    # default spelled out. Verify on the run that this config change triggers:
+    # its job definition must list the group.
     groups:
       codeql:
+        applies-to: version-updates
         patterns:
-          - "github/codeql-action*"
+          - github/codeql-action/init
+          - github/codeql-action/analyze
