@@ -71,7 +71,7 @@
     "mdast-util-to-string": "^4.0.0",
     "picocolors": "^1.1.1",
     "picomatch": "^4.0.7",
-    "safe-regex2": "^5.1.1"
+    "safe-regex2": "^5.1.2"
   },
   "devDependencies": {
     "@changesets/changelog-github": "^1.0.1",
