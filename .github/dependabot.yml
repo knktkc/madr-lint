@@ -66,13 +66,15 @@ updates:
     cooldown:
       default-days: 3
       semver-major-days: 7
+    # init and analyze must run the same version: the analyze post-step
+    # rejects a config file written by a different version, so separate
+    # PRs for the two can never pass CI (#106 / #107).
+    # Neither `github/codeql-action/*` (#144 / #145) nor `github/codeql-action*`
+    # (#173 / #174) grouped them: the Dependabot job log for this ecosystem
+    # shows `"dependency-groups":[]`, i.e. GitHub never handed the group to
+    # the updater. The comment block used to sit between `groups:` and the
+    # group name; it now sits above `groups:` to rule out that parse path.
     groups:
-      # init and analyze must run the same version: the analyze post-step
-      # rejects a config file written by a different version, so separate
-      # PRs for the two can never pass CI (#106 / #107).
-      # Dependabot names sub-path actions in full (github/codeql-action/init),
-      # and the `github/codeql-action/*` form did not group them (#144 / #145
-      # were still opened separately) — match with a trailing `*` instead.
       codeql:
         patterns:
           - "github/codeql-action*"
