@@ -73,9 +73,10 @@ updates:
     # (#173 / #174) grouped them: the Dependabot job log for this ecosystem
     # shows `"dependency-groups":[]` while the npm jobs receive theirs, so
     # GitHub drops the group before the updater runs (comment placement ruled
-    # out by #180). Exact names avoid any glob semantics; `applies-to` is the
-    # default spelled out. Verify on the run that this config change triggers:
-    # its job definition must list the group.
+    # out by #180).
+    # Exact names (#181) did not group them either: the 2026-10-29 run still
+    # shows `"dependency-groups":[]` and opened #186 / #187. Until this changes,
+    # bump both pins in one hand-made PR that supersedes Dependabot's (#194).
     groups:
       codeql:
         applies-to: version-updates
