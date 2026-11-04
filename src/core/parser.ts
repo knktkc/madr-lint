@@ -57,9 +57,21 @@ export interface ParsedFile {
  * retains every parsed document for the process lifetime, which for a
  * thousand-ADR repo is the whole corpus held live. Frozen because the single
  * instance is shared across all calls.
+ *
+ * `engines.javascript` replaces gray-matter's default, which `eval`s the block
+ * when a document opens with `---js`. ADR files are untrusted input, and
+ * `language: 'yaml'` cannot prevent this: the delimiter's language wins.
  */
 const GRAY_MATTER_OPTIONS: NonNullable<Parameters<typeof grayMatter>[1]> =
-  Object.freeze({});
+  Object.freeze({
+    engines: {
+      javascript: () => {
+        throw new Error(
+          'JavaScript frontmatter (---js) is not supported. Use YAML frontmatter.',
+        );
+      },
+    },
+  });
 
 /**
  * Character length of the frontmatter block that gray-matter strips from the

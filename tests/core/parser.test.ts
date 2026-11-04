@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { afterEach, describe, it, expect } from 'vitest';
 import {
   extractListMetadata,
   frontmatterOffset,
@@ -973,5 +973,34 @@ describe('parseFile — gray-matter content cache (#122)', () => {
     parseFile(doc);
     frontmatterOffset(doc);
     expect(Object.keys(grayMatterModule.cache)).toEqual([]);
+  });
+});
+
+describe('parser/executable frontmatter', () => {
+  const SENTINEL = '__madrLintFrontmatterExecuted';
+  const scope = globalThis as Record<string, unknown>;
+  const document = (language: string): string =>
+    `---${language}\n{ status: (globalThis.${SENTINEL} = true, 'accepted') }\n---\n\n# T\n`;
+
+  afterEach(() => {
+    delete scope[SENTINEL];
+  });
+
+  it.for(['js', 'javascript', 'JS', 'JavaScript'])(
+    'parseFile rejects ---%s without evaluating the block',
+    (language) => {
+      expect(() => parseFile(document(language))).toThrow(/not supported/);
+      expect(scope[SENTINEL]).toBeUndefined();
+    },
+  );
+
+  it('frontmatterOffset rejects ---js without evaluating the block', () => {
+    expect(() => frontmatterOffset(document('js'))).toThrow(/not supported/);
+    expect(scope[SENTINEL]).toBeUndefined();
+  });
+
+  it('still parses ---json frontmatter', () => {
+    const parsed = parseFile('---json\n{ "status": "accepted" }\n---\n\n# T\n');
+    expect(parsed.frontmatter).toEqual({ status: 'accepted' });
   });
 });
