@@ -246,13 +246,27 @@ madr-lint --format json
 madr-lint --format sarif > madr-lint.sarif
 ```
 
+## Symbolic links
+
+madr-lint does not follow a symbolic link out of the working directory:
+
+- The directory walk skips linked directories and linked files.
+- A path you pass, or `adrDir`, can be a link only if its real path is inside the
+  working directory. Otherwise madr-lint exits with code 2. Run from a directory
+  that contains the target, or pass the real path.
+- An explicit `.md` link counts only if its target is also named `.md`.
+- Cache, baseline, and `init` writes replace a link instead of writing to its target.
+
+A path outside the working directory that contains no link, such as
+`../real/docs/adr`, stays allowed.
+
 ## Exit codes
 
 | Exit code | Meaning |
 |---|---|
 | `0` | No errors; warning count within `--max-warnings` limit (if set) |
 | `1` | One or more `error`-severity diagnostics, or warning count exceeds `--max-warnings`. With `--fix` / `--fix-dry-run`, this reflects the problems that **remain** after fixing |
-| `2` | Usage or configuration error (invalid `--max-warnings` value, missing `--config` file, invalid rule options, unknown `--format`, `--update-baseline` combined with `--fix`, existing config on `madr-lint init` without `--force`) |
+| `2` | Usage or configuration error (invalid `--max-warnings` value, missing `--config` file, invalid rule options, unknown `--format`, `--update-baseline` combined with `--fix`, existing config on `madr-lint init` without `--force`, a path that a symbolic link takes outside the working directory, `--update-baseline` with a linked `.madr-lint`) |
 
 ## Caching
 

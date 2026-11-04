@@ -2,7 +2,7 @@ import type { List, ListItem, Paragraph, Root } from 'mdast';
 import { fromMarkdown } from 'mdast-util-from-markdown';
 import { toString } from 'mdast-util-to-string';
 import grayMatter from 'gray-matter';
-import { parseStaticJsFrontmatter } from './js-frontmatter.js';
+import { FrontmatterParseError, parseStaticJsFrontmatter } from './js-frontmatter.js';
 import { nullProtoMap } from './null-proto-map.js';
 
 /** Source position of a metadata list item, in body coordinates. */
@@ -72,6 +72,27 @@ const GRAY_MATTER_OPTIONS: NonNullable<Parameters<typeof grayMatter>[1]> =
   });
 
 /**
+ * js-yaml errors carry the source: `message` quotes the failing lines and
+ * `mark.buffer` the whole block, which Node prints for an uncaught error. CI logs
+ * can be public, so report only the position.
+ */
+function parseMatter(content: string): ReturnType<typeof grayMatter> {
+  try {
+    return grayMatter(content, GRAY_MATTER_OPTIONS);
+  } catch (error) {
+    if (error instanceof FrontmatterParseError) throw error;
+    // Not even `reason`: it quotes alias and tag names from the document.
+    // gray-matter keeps the newline after `---`, so `mark.line` + 1 is the file line.
+    const { mark } = error as { mark?: { line?: unknown } };
+    throw new FrontmatterParseError(
+      typeof mark?.line === 'number'
+        ? `Invalid frontmatter at line ${mark.line + 1}`
+        : 'Invalid frontmatter: the block could not be parsed',
+    );
+  }
+}
+
+/**
  * Character length of the frontmatter block that gray-matter strips from the
  * front of `content` — i.e. the offset at which the body begins in the whole
  * file. mdast positions are body-relative, so `fileOffset = bodyOffset +
@@ -80,7 +101,7 @@ const GRAY_MATTER_OPTIONS: NonNullable<Parameters<typeof grayMatter>[1]> =
  * leading-newline inputs). Used by the autofix fixer. See ADR-0008.
  */
 export function frontmatterOffset(content: string): number {
-  return content.length - grayMatter(content, GRAY_MATTER_OPTIONS).content.length;
+  return content.length - parseMatter(content).content.length;
 }
 
 /**
@@ -91,9 +112,16 @@ export function frontmatterOffset(content: string): number {
  * bold-key and canonical plain-key shapes (see ADR-0006).
  */
 export function parseFile(content: string): ParsedFile {
-  const matter = grayMatter(content, GRAY_MATTER_OPTIONS);
-  const data = matter.data as Record<string, unknown>;
-  const frontmatter = Object.keys(data).length > 0 ? data : null;
+  const matter = parseMatter(content);
+  // A YAML scalar or list is valid YAML but not metadata.
+  const data = matter.data as unknown;
+  const frontmatter =
+    typeof data === 'object' &&
+    data !== null &&
+    !Array.isArray(data) &&
+    Object.keys(data).length > 0
+      ? (data as Record<string, unknown>)
+      : null;
   const ast = fromMarkdown(matter.content);
   const listResult = extractListMetadataWithLoc(ast, matter.content);
   const listMetadata = listResult?.values ?? null;

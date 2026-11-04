@@ -14,8 +14,16 @@ function loadJson5(): Json5 {
   return json5;
 }
 
+/** A frontmatter block that cannot be read. The message never quotes the file. */
+export class FrontmatterParseError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'FrontmatterParseError';
+  }
+}
+
 function invalid(reason: string): Error {
-  return new Error(
+  return new FrontmatterParseError(
     `Invalid JavaScript frontmatter (---js): ${reason}. Only a static object literal is allowed (strings, numbers, booleans, null, arrays, objects). Use YAML frontmatter for anything else.`,
   );
 }
@@ -37,8 +45,14 @@ export function parseStaticJsFrontmatter(block: string): Record<string, unknown>
   try {
     root = loadJson5().parse(block);
   } catch (error) {
-    // Also covers the RangeError JSON5 raises on extremely nested arrays.
-    throw invalid(error instanceof Error ? error.message : 'parse failed');
+    // Position only: JSON5's message quotes the offending character. A RangeError
+    // from extremely nested arrays has no position.
+    const { lineNumber, columnNumber } = error as { lineNumber?: unknown; columnNumber?: unknown };
+    throw invalid(
+      typeof lineNumber === 'number'
+        ? `invalid syntax at line ${lineNumber}, column ${String(columnNumber)}`
+        : 'the block could not be parsed',
+    );
   }
   if (root === null || typeof root !== 'object' || Array.isArray(root)) {
     throw invalid('the top level must be an object');

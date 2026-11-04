@@ -122,5 +122,7 @@ jobs:
 - Scope the trigger with `paths:` so the job only runs when ADRs change.
 - Commit a config file (see [Configuration](/guides/configuration/)) so local
   and CI runs agree.
-- Keep the per-file cache out of CI runners (it is a local speed-up); a cold
-  run in CI is already fast.
+- The Action passes `--no-cache`, because a cold run in CI is already fast.
+- A run still loads the config file from the checkout and can run a `madr-lint`
+  binary committed there, so do not treat a run on an untrusted checkout as
+  sandboxed.

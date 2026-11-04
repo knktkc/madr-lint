@@ -1,8 +1,8 @@
-import { writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { defineCommand } from 'citty';
 import { CONFIG_FILES, resolveExtends } from '../core/config.js';
-import { findAdrFiles } from '../core/discover.js';
+import { findAdrFilesWithinRoot, PathOutsideRootError } from '../core/discover.js';
+import { writeFileReplacingLinks } from '../core/safe-fs.js';
 import {
   CONFIG_FILENAME_BY_FORMAT,
   GETTING_STARTED_URL,
@@ -85,9 +85,10 @@ export const initCommand = defineCommand({
     const configPath = CONFIG_FILENAME_BY_FORMAT[configFormat];
 
     // ── Write ────────────────────────────────────────────────────────
-    writeFileSync(
+    writeFileReplacingLinks(
       resolve(cwd, configPath),
       renderConfig(configFormat, { adrDir, madrVersion }),
+      cwd,
     );
     // --force replaces the canonical file for the DETECTED format. A
     // pre-existing config under a different name would still win (or lose)
@@ -107,7 +108,13 @@ export const initCommand = defineCommand({
     // Counts violations of the freshly scaffolded config so the epilogue can
     // suggest --update-baseline on legacy repos. Never fails init: a lint
     // crash is reported but the scaffold already succeeded.
-    const files = findAdrFiles(resolve(cwd, adrDir));
+    let files: string[] = [];
+    try {
+      files = findAdrFilesWithinRoot(adrDir, cwd);
+    } catch (err) {
+      if (!(err instanceof PathOutsideRootError)) throw err;
+      console.error(`Note: skipped the initial lint. ${err.message}`);
+    }
     let errors = 0;
     let warnings = 0;
     if (files.length > 0) {

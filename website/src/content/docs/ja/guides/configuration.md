@@ -210,4 +210,5 @@ export default defineConfig({
 ```
 
 CLI では `--no-cache` で無効化したり、`--cache-dir` で別の場所を指定したりできます。
+作業ディレクトリの外を指す `cacheLocation` は、警告を出して無視します。外の場所を指定できるのは `--cache-dir` だけです。
 [CLI リファレンス](/ja/guides/cli/) を参照してください。

@@ -1,7 +1,8 @@
-import { existsSync, readFileSync, readdirSync, type Dirent } from 'node:fs';
+import { existsSync, lstatSync, readFileSync, readdirSync, type Dirent } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { CONFIG_FILES } from './config.js';
 import { parseFile, type ParsedFile } from './parser.js';
+import { isRealDirectory, isRegularFile } from './safe-fs.js';
 import type { MadrVersion } from './types.js';
 
 /** Docs quickstart, surfaced in the init epilogue and --json payload. */
@@ -38,6 +39,7 @@ export interface AdrDirDetection {
  */
 export function detectAdrDir(cwd: string): AdrDirDetection {
   for (const candidate of ADR_DIR_CANDIDATES) {
+    if (!isRealDirectory(resolve(cwd, candidate), cwd)) continue;
     let entries: Dirent[];
     try {
       entries = readdirSync(resolve(cwd, candidate), { withFileTypes: true });
@@ -82,6 +84,7 @@ export function detectMadrVersion(
   adrDir: string,
 ): MadrVersion | 'auto' {
   const dir = resolve(cwd, adrDir);
+  if (!isRealDirectory(dir, cwd)) return 'auto';
   let entries: Dirent[];
   try {
     entries = readdirSync(dir, { withFileTypes: true });
@@ -132,6 +135,7 @@ export const CONFIG_FILENAME_BY_FORMAT: Record<ConfigFormat, string> = {
  */
 export function detectConfigFormat(cwd: string): ConfigFormat {
   if (existsSync(resolve(cwd, 'tsconfig.json'))) return 'ts';
+  if (!isRegularFile(resolve(cwd, 'package.json'), cwd)) return 'json';
   try {
     const pkg = JSON.parse(
       readFileSync(resolve(cwd, 'package.json'), 'utf8'),
@@ -158,7 +162,8 @@ export function detectConfigFormat(cwd: string): ConfigFormat {
  */
 export function findExistingConfigFile(cwd: string): string | null {
   for (const name of CONFIG_FILES) {
-    if (existsSync(resolve(cwd, name))) return name;
+    // lstat, so a dangling link counts as existing and is never written through.
+    if (lstatSync(resolve(cwd, name), { throwIfNoEntry: false })) return name;
   }
   return null;
 }

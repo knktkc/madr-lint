@@ -1,6 +1,6 @@
 import pc from 'picocolors';
 import { interpolate } from './interpolate.js';
-import type { AnyRule, Diagnostic } from './types.js';
+import { INTERNAL_ERROR_RULE_NAME, type AnyRule, type Diagnostic } from './types.js';
 
 /**
  * Run-level facts a reporter cannot derive from the diagnostics themselves.
@@ -107,6 +107,9 @@ function renderMessage(
   d: Diagnostic,
   rulesByName: Map<string, AnyRule>,
 ): string {
+  if (d.ruleName === INTERNAL_ERROR_RULE_NAME && typeof d.data?.error === 'string') {
+    return d.data.error;
+  }
   const rule = rulesByName.get(d.ruleName);
   const template = rule?.meta.messages[d.messageId] ?? d.messageId;
   return interpolate(template, d.data ?? {});
@@ -256,7 +259,8 @@ export const githubReporter: Reporter = {
         d.suggestion ? `${rendered} — ${d.suggestion}` : rendered,
       );
 
-      const linePart = d.loc ? `,line=${d.loc.line}` : '';
+      // `line` can come from a cache manifest, which is a file in the repository.
+      const linePart = d.loc ? `,line=${escapeGhProperty(String(d.loc.line))}` : '';
       lines.push(`::${level} file=${file}${linePart},title=${title}::${message}`);
     }
 

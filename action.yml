@@ -56,7 +56,7 @@ runs:
           # Escape hatch: run the locally-built CLI so the smoke workflow can
           # test action.yml against source changes before publishing to npm.
           # github.action_path is runner-controlled, safe to interpolate.
-          node "${{ github.action_path }}/dist/cli.js" $INPUT_PATH --format github $INPUT_ARGS
+          node "${{ github.action_path }}/dist/cli.js" $INPUT_PATH --format github --no-cache $INPUT_ARGS
         else
-          npx --yes "madr-lint@$INPUT_VERSION" $INPUT_PATH --format github $INPUT_ARGS
+          npx --yes "madr-lint@$INPUT_VERSION" $INPUT_PATH --format github --no-cache $INPUT_ARGS
         fi

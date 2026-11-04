@@ -99,6 +99,8 @@ export function collectFixes(
   diagnostics: readonly Diagnostic[],
   content: string,
 ): TextEdit[] {
+  // Parsing would throw on a file reported as unreadable, which has no fixes.
+  if (!diagnostics.some((d) => d.fix)) return [];
   const fixer = makeFixer(frontmatterOffset(content));
   const edits: TextEdit[] = [];
   for (const d of diagnostics) {

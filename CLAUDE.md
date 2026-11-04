@@ -160,3 +160,4 @@ ADRs use **MADR v4 frontmatter** format (this project's recommended target).
 - ADR-0007: Baseline fingerprint design (M2)
 - ADR-0008: Autofix via raw-text offset edits (v0.4.0)
 - ADR-0009: Read `---js` frontmatter as data with JSON5 (v0.5.0)
+- ADR-0010: Do not follow symbolic links out of the working directory (v0.5.1)

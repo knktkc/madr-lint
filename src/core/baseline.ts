@@ -8,9 +8,10 @@
 // This is the tsc-baseline-style count model; see ADR-0007 for the rationale
 // and the rejected line-based / content-hash alternatives.
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { nullProtoMap } from './null-proto-map.js';
+import { isRegularFile, writeFileReplacingLinks } from './safe-fs.js';
 import { INTERNAL_ERROR_RULE_NAME, type Diagnostic } from './types.js';
 
 /** Bumped only on a breaking change to the on-disk shape. */
@@ -90,8 +91,12 @@ export function serializeBaseline(baseline: Baseline): string {
  * a missing or corrupt baseline is treated as "no baseline" (a no-op),
  * never a hard error.
  */
-export function loadBaseline(path: string): Baseline | null {
-  if (!existsSync(path)) return null;
+export function loadBaseline(
+  path: string,
+  root: string = dirname(path),
+): Baseline | null {
+  // A link or FIFO is not a baseline this tool wrote, and reading a FIFO hangs.
+  if (!isRegularFile(path, root)) return null;
   try {
     const data = JSON.parse(readFileSync(path, 'utf8')) as Partial<Baseline>;
     if (typeof data.entries !== 'object' || data.entries === null) return null;
@@ -131,10 +136,16 @@ function rebuildEntries(raw: Record<string, unknown>): Baseline['entries'] {
   return entries;
 }
 
-/** Write the baseline deterministically, creating `.madr-lint/` if needed. */
-export function writeBaseline(path: string, baseline: Baseline): void {
-  mkdirSync(dirname(path), { recursive: true });
-  writeFileSync(path, serializeBaseline(baseline), 'utf8');
+/**
+ * Write the baseline deterministically, creating `.madr-lint/` if needed. `root`
+ * bounds the link check on parent directories. See `writeFileReplacingLinks`.
+ */
+export function writeBaseline(
+  path: string,
+  baseline: Baseline,
+  root: string = dirname(path),
+): void {
+  writeFileReplacingLinks(path, serializeBaseline(baseline), root);
 }
 
 // NUL cannot appear in paths, rule names, or messageIds, so joined keys

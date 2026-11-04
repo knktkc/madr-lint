@@ -13,6 +13,7 @@ import {
   type Severity,
 } from './types.js';
 import { interpolate } from './interpolate.js';
+import { FrontmatterParseError } from './js-frontmatter.js';
 import { parseFile, type ParsedFile } from './parser.js';
 import {
   collectDirectives,
@@ -170,6 +171,21 @@ export function runRulesOnFile(
   file: FileContext,
   runtime: RunRuleOptions = {},
 ): Diagnostic[] {
+  try {
+    return runRulesOnReadableFile(rules, file, runtime);
+  } catch (err) {
+    if (err instanceof FrontmatterParseError) {
+      return [parseErrorDiagnostic(file.path, err)];
+    }
+    throw err;
+  }
+}
+
+function runRulesOnReadableFile(
+  rules: readonly Rule[],
+  file: FileContext,
+  runtime: RunRuleOptions,
+): Diagnostic[] {
   const diagnostics: Diagnostic[] = [];
   const severity = runtime.severity ?? 'error';
 
@@ -248,6 +264,9 @@ export function runRulesOnFile(
       // .madrlintrc" message rather than burying it as a per-file
       // internal-error diagnostic.
       if (err instanceof RuleOptionsError) throw err;
+      // The file is unreadable, so this is not a fault of the rule. The caller
+      // reports it once instead of once per rule.
+      if (err instanceof FrontmatterParseError) throw err;
       diagnostics.push(
         internalErrorDiagnostic(rule.meta.name, 'create', err, file.path),
       );
@@ -306,6 +325,10 @@ function internalErrorDiagnostic(
       error: err instanceof Error ? err.message : String(err),
     },
   };
+}
+
+export function parseErrorDiagnostic(path: string, err: Error): Diagnostic {
+  return internalErrorDiagnostic('parser', 'create', err, path);
 }
 
 function collectListeners(

@@ -16,9 +16,11 @@ import {
   fixFileContent,
   MAX_FIX_PASSES,
 } from './fix.js';
+import { FrontmatterParseError } from './js-frontmatter.js';
 import { nullProtoMap } from './null-proto-map.js';
 import {
   buildProjectFile,
+  parseErrorDiagnostic,
   runRulesOnFile,
   runRulesOnProject,
 } from './runner.js';
@@ -131,7 +133,7 @@ export function lintFiles(opts: LintOptions): LintResult {
   let filesFromCache = 0;
   if (opts.cache) {
     const path = manifestPath(opts.cache.dir);
-    const loaded = loadManifest(path);
+    const loaded = loadManifest(path, opts.cwd);
     if (
       loaded &&
       loaded.version === opts.cache.pkgVersion &&
@@ -188,10 +190,11 @@ export function lintFiles(opts: LintOptions): LintResult {
     (rule) => resolveSeverity(opts.ruleSeverity[rule.meta.name]) !== 'off',
   );
   if (enabledProjectRules.length > 0) {
-    const projectFiles = fileEntries.map((f) =>
-      buildProjectFile({ path: f.relativePath, content: f.content }),
+    const { projectFiles, parseErrors } = buildProjectFiles(
+      fileEntries.map((f) => ({ path: f.relativePath, content: f.content })),
     );
     allDiagnostics.push(
+      ...withoutReported(parseErrors, allDiagnostics),
       ...runProjectPass(
         projectFiles,
         enabledProjectRules,
@@ -206,7 +209,14 @@ export function lintFiles(opts: LintOptions): LintResult {
   // Cache the PRE-baseline diagnostics: subtraction happens below, after the
   // save, so the on-disk cache is independent of the baseline file.
   if (manifest && opts.cache) {
-    saveManifest(manifestPath(opts.cache.dir), manifest);
+    // The cache only speeds up later runs, so losing it must not lose this result.
+    try {
+      saveManifest(manifestPath(opts.cache.dir), manifest, opts.cwd);
+    } catch (err) {
+      console.warn(
+        `Warning: the cache was not saved: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
   }
 
   // ── Baseline subtraction ─────────────────────────────────────────
@@ -345,8 +355,8 @@ export function lintAndFix(opts: LintAndFixOptions): LintAndFixResult {
     let projectDiags: Diagnostic[] = [];
     let passes = 0;
     for (;;) {
-      const projectFiles = files.map((f) =>
-        buildProjectFile({ path: f.path, content: contentByPath.get(f.path) ?? f.fixed }),
+      const { projectFiles, parseErrors } = buildProjectFiles(
+        files.map((f) => ({ path: f.path, content: contentByPath.get(f.path) ?? f.fixed })),
       );
       // runProjectPass returns suppression-filtered, PRE-baseline diagnostics.
       // Subtract the baseline BEFORE collecting fixes so a baselined problem is
@@ -365,7 +375,7 @@ export function lintAndFix(opts: LintAndFixOptions): LintAndFixResult {
         diags = sub.kept;
         hiddenThisPass = sub.hidden;
       }
-      projectDiags = diags;
+      projectDiags = [...parseErrors, ...diags];
 
       if (passes >= maxPasses) {
         baselineHidden += hiddenThisPass;
@@ -398,7 +408,13 @@ export function lintAndFix(opts: LintAndFixOptions): LintAndFixResult {
         f.changed = f.fixed !== f.original;
       }
     }
-    remaining.push(...projectDiags);
+    remaining.push(
+      ...withoutReported(
+        projectDiags.filter((d) => d.ruleName === INTERNAL_ERROR_RULE_NAME),
+        remaining,
+      ),
+      ...projectDiags.filter((d) => d.ruleName !== INTERNAL_ERROR_RULE_NAME),
+    );
   }
 
   return { files, diagnostics: remaining, fixed, baselineHidden };
@@ -484,6 +500,43 @@ function makeFileExists(cwd: string): (resolvedPath: string) => boolean {
     existsCache.set(resolvedPath, result);
     return result;
   };
+}
+
+/**
+ * Parse files for the project pass. A file with unreadable frontmatter becomes a
+ * diagnostic instead of stopping the lint for every other file.
+ */
+function buildProjectFiles(entries: readonly { path: string; content: string }[]): {
+  projectFiles: ProjectFile[];
+  parseErrors: Diagnostic[];
+} {
+  const projectFiles: ProjectFile[] = [];
+  const parseErrors: Diagnostic[] = [];
+  for (const entry of entries) {
+    try {
+      projectFiles.push(buildProjectFile(entry));
+    } catch (err) {
+      if (!(err instanceof FrontmatterParseError)) throw err;
+      parseErrors.push(parseErrorDiagnostic(entry.path, err));
+    }
+  }
+  return { projectFiles, parseErrors };
+}
+
+/** A file the per-file pass already reported as unreadable is not reported twice. */
+function withoutReported(
+  parseErrors: readonly Diagnostic[],
+  reported: readonly Diagnostic[],
+): Diagnostic[] {
+  return parseErrors.filter(
+    (error) =>
+      !reported.some(
+        (d) =>
+          d.ruleName === error.ruleName &&
+          d.path === error.path &&
+          d.data?.error === error.data?.error,
+      ),
+  );
 }
 
 /**

@@ -213,4 +213,5 @@ export default defineConfig({
 ```
 
 Disable it from the CLI with `--no-cache`, or point it elsewhere with
-`--cache-dir`. See the [CLI reference](/guides/cli/).
+`--cache-dir`. A `cacheLocation` outside the working directory is ignored with a
+warning; only `--cache-dir` can choose such a location. See the [CLI reference](/guides/cli/).

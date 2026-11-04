@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { findAdrFiles } from '../../src/core/discover.js';
+import { findAdrFiles, findAdrFilesWithinRoot } from '../../src/core/discover.js';
 
 describe('core/discover', () => {
   let dir: string;
@@ -13,6 +13,11 @@ describe('core/discover', () => {
 
   afterEach(() => {
     rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('finds nothing for an empty path', () => {
+    writeFileSync(join(dir, '0001-x.md'), '# x');
+    expect(findAdrFilesWithinRoot('', dir)).toEqual([]);
   });
 
   it('finds .md files at the top level', () => {

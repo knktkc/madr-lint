@@ -589,3 +589,24 @@ describe('core/reporter — registry', () => {
     expect(reporters.github).toBe(githubReporter);
   });
 });
+
+describe('githubReporter/line escaping', () => {
+  it('escapes a cached loc.line that contains a newline', () => {
+    const out = githubReporter.format(
+      [
+        {
+          ruleName: 'madr/status-enum',
+          messageId: 'x',
+          severity: 'error',
+          path: 'a.md',
+          suggestion: null,
+          docsUrl: '',
+          fixable: false,
+          loc: { line: '1\n::warning title=INJECT::M' as unknown as number, column: 1 },
+        },
+      ],
+      new Map(),
+    );
+    expect(out.split('\n').some((line) => line.startsWith('::warning'))).toBe(false);
+  });
+});

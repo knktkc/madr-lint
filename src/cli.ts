@@ -19,7 +19,8 @@ import {
   resolveExtends,
   type ResolvedConfig,
 } from './core/config.js';
-import { findAdrFiles } from './core/discover.js';
+import { findAdrFilesWithinRoot, isInside, PathOutsideRootError } from './core/discover.js';
+import { SymlinkedPathError } from './core/safe-fs.js';
 import { unifiedDiff } from './core/fix.js';
 import { shouldIgnore } from './core/ignore.js';
 import { lintAndFix, lintFiles, type CacheConfig } from './core/lint.js';
@@ -54,7 +55,6 @@ const main = defineCommand({
       type: 'boolean',
       description:
         'Use per-file content-hash cache (use --no-cache to disable)',
-      default: true,
     },
     'cache-dir': {
       type: 'string',
@@ -165,7 +165,17 @@ const main = defineCommand({
     const seen = new Set<string>();
     const allFiles: string[] = [];
     for (const input of inputs) {
-      for (const file of findAdrFiles(input)) {
+      let found: string[];
+      try {
+        found = findAdrFilesWithinRoot(input, cwd);
+      } catch (err) {
+        if (err instanceof PathOutsideRootError) {
+          console.error(err.message);
+          process.exit(2);
+        }
+        throw err;
+      }
+      for (const file of found) {
         if (!seen.has(file)) {
           seen.add(file);
           allFiles.push(file);
@@ -190,8 +200,18 @@ const main = defineCommand({
 
     // CLI flag wins over config — `--no-cache` sets args.cache=false,
     // overriding `cache: true` from .madrlintrc.json.
-    const cacheEnabled = (args.cache ?? config.cache) === true;
-    const cacheDir = (args['cache-dir'] ?? config.cacheLocation) as string;
+    // A cacheLocation can come from a config in the repository, so it may not
+    // place files outside the working directory. --cache-dir is the caller's.
+    const cacheDirFlag = args['cache-dir'] as string | undefined;
+    const cacheDir = cacheDirFlag ?? config.cacheLocation;
+    const cacheAllowed =
+      cacheDirFlag !== undefined || isInside(cwd, resolve(cwd, cacheDir));
+    if (!cacheAllowed) {
+      console.error(
+        `Warning: ignoring cacheLocation "${cacheDir}" because it is outside the working directory. Use --cache-dir to choose this location.`,
+      );
+    }
+    const cacheEnabled = cacheAllowed && (args.cache ?? config.cache) === true;
     const cacheConfig: CacheConfig | null = cacheEnabled
       ? {
           dir: resolve(cwd, cacheDir),
@@ -209,7 +229,7 @@ const main = defineCommand({
     const baselineFile = baselinePath(cwd);
     const updateBaseline = args['update-baseline'] === true;
     const useBaseline = !updateBaseline && args.baseline !== false;
-    const baseline = useBaseline ? loadBaseline(baselineFile) : null;
+    const baseline = useBaseline ? loadBaseline(baselineFile, cwd) : null;
     // Absent → silent no-op. Present but unusable → warn: silently ignoring a
     // corrupt baseline would flip CI red with zero explanation.
     if (useBaseline && baseline === null && existsSync(baselineFile)) {
@@ -376,7 +396,15 @@ const main = defineCommand({
     // Rebuild the baseline from the full (pre-baseline) diagnostics and exit.
     if (updateBaseline) {
       const built = buildBaseline(result.diagnostics);
-      writeBaseline(baselineFile, built);
+      try {
+        writeBaseline(baselineFile, built, cwd);
+      } catch (err) {
+        if (err instanceof SymlinkedPathError) {
+          console.error(err.message);
+          process.exit(2);
+        }
+        throw err;
+      }
       console.log(baselineWriteSummary(built));
       process.exit(0);
     }

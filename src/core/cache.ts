@@ -1,7 +1,8 @@
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { nullProtoMap } from './null-proto-map.js';
+import { isRegularFile, writeFileReplacingLinks } from './safe-fs.js';
 import type { Diagnostic } from './types.js';
 
 /**
@@ -76,8 +77,12 @@ export function manifestPath(cacheDir: string): string {
   return join(cacheDir, 'manifest.json');
 }
 
-export function loadManifest(path: string): CacheManifest | null {
-  if (!existsSync(path)) return null;
+export function loadManifest(
+  path: string,
+  root: string = dirname(path),
+): CacheManifest | null {
+  // A link or FIFO is not a manifest this tool wrote, and reading a FIFO hangs.
+  if (!isRegularFile(path, root)) return null;
   try {
     const data = JSON.parse(readFileSync(path, 'utf8')) as Partial<CacheManifest>;
     if (
@@ -108,7 +113,11 @@ export function loadManifest(path: string): CacheManifest | null {
   }
 }
 
-export function saveManifest(path: string, manifest: CacheManifest): void {
-  mkdirSync(dirname(path), { recursive: true });
-  writeFileSync(path, JSON.stringify(manifest), 'utf8');
+/** `root` bounds the link check on parent directories. See `writeFileReplacingLinks`. */
+export function saveManifest(
+  path: string,
+  manifest: CacheManifest,
+  root: string = dirname(path),
+): void {
+  writeFileReplacingLinks(path, JSON.stringify(manifest), root);
 }

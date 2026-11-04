@@ -1,4 +1,6 @@
 import { afterEach, describe, it, expect } from 'vitest';
+import { inspect } from 'node:util';
+import { FrontmatterParseError } from '../../src/core/js-frontmatter.js';
 import {
   extractListMetadata,
   frontmatterOffset,
@@ -1120,5 +1122,54 @@ describe('parser/JavaScript frontmatter', () => {
   it('still parses ---json frontmatter', () => {
     const parsed = parseFile('---json\n{ "status": "accepted" }\n---\n\n# T\n');
     expect(parsed.frontmatter).toEqual({ status: 'accepted' });
+  });
+});
+
+describe('parser/invalid frontmatter', () => {
+  const invalid = '---\nkey: CANARY_ABOVE\nbad: [x\nother: CANARY_BELOW\n---\n\n# T\n';
+
+  it.for([
+    ['parseFile', () => parseFile(invalid)],
+    ['frontmatterOffset', () => frontmatterOffset(invalid)],
+  ] as const)('%s throws without the document content', ([, run]) => {
+    let error: unknown;
+    try {
+      run();
+    } catch (err) {
+      error = err;
+    }
+    expect(error).toBeInstanceOf(FrontmatterParseError);
+    expect((error as Error).message).toMatch(/^Invalid frontmatter/);
+    expect(inspect(error, { depth: 5 })).not.toMatch(/CANARY_/);
+  });
+
+  it.for([
+    ['an unknown alias', '---\nkey: *CANARY\n---\n\n# T\n'],
+    ['an unknown tag', '---\nkey: !CANARY x\n---\n\n# T\n'],
+    ['an invalid ---js character', '---js\n{ a: Q }\n---\n\n# T\n'],
+  ])('does not quote %s', ([, document]) => {
+    let message = '';
+    try {
+      parseFile(document as string);
+    } catch (err) {
+      message = (err as Error).message;
+    }
+    expect(message).toMatch(/line 2/);
+    expect(message).not.toMatch(/CANARY|'Q'/);
+  });
+
+  it.for([
+    ['a scalar', '---\nCANARY\n---\n\n# T\n'],
+    ['an array', '---\n- CANARY\n---\n\n# T\n'],
+  ])('treats %s as no frontmatter', ([, document]) => {
+    const parsed = parseFile(document as string);
+    expect(parsed.frontmatter).toBeNull();
+    expect(parsed.metadata).toBeNull();
+  });
+
+  it('does not echo content from invalid ---json', () => {
+    const run = () => parseFile('---json\nAPI_KEY=CANARY\n---\n\n# T\n');
+    expect(run).toThrow(FrontmatterParseError);
+    expect(run).not.toThrow(/API_KEY/);
   });
 });
