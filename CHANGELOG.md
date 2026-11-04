@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.0
+
+### Minor Changes
+
+- [#200](https://github.com/knktkc/madr-lint/pull/200) [`c67293d`](https://github.com/knktkc/madr-lint/commit/c67293dc6f3f94afe6e32180f4c86221f0d21d6d) Thanks [@knktkc](https://github.com/knktkc)! - Read `---js` and `---javascript` frontmatter that is a static object literal: strings, numbers, booleans, null, arrays, and nested objects, with comments, unquoted keys, and trailing commas. The block is parsed as data and never executed, so calls, variables, expressions, template literals, getters, methods, spread, and computed keys still fail with an error. `madr/supersedes-bidirectional` no longer offers a `--fix` for targets whose frontmatter is `---js` or `---json`, because inserting a YAML line would corrupt them.
+
 ## 0.4.3
 
 ### Patch Changes
