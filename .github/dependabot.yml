@@ -1,7 +1,11 @@
 version: 2
 
-# Cooldown mirrors the pnpm `minimumReleaseAge` guard (3 days): Dependabot
-# resolves versions itself and would otherwise bypass it. Majors wait a week.
+# Cooldown: npm waits 3 days, matching pnpm `minimumReleaseAge`, and 7 for majors.
+# github-actions waits 7 days for every update: that ecosystem rejects
+# `semver-*-days`, and an invalid key makes Dependabot report this whole file as
+# invalid (#50 until this fix), so its later changes did not reach update jobs.
+# After editing, check the `.github/dependabot.yml` check run on the main commit;
+# it does not appear on PRs.
 # Cooldown applies to VERSION updates only — SECURITY updates land immediately.
 updates:
   - package-ecosystem: npm
@@ -21,9 +25,9 @@ updates:
       # `versions` rather than `update-types`: inside a group Dependabot does
       # not honour update-types ignores (dependabot-core#10122) — verified on
       # #103, which kept TS 7 after two recreates with the update-types form.
-      # NOTE: neither form took effect on `@dependabot recreate` of the open
-      # group PR, so the rule actually in force is the one stored on GitHub's
-      # side by `@dependabot ignore typescript major version` (#103, 2026-09-02).
+      # NOTE: this file was invalid when both forms were tried, so that test said
+      # nothing about either form. A second rule is stored on GitHub's side by
+      # `@dependabot ignore typescript major version` (#103, 2026-09-02).
       # To re-enable TS 7 you must do BOTH: delete this entry AND comment
       # `@dependabot unignore typescript` on any open Dependabot PR.
       - dependency-name: typescript
@@ -64,18 +68,13 @@ updates:
     schedule:
       interval: weekly
     cooldown:
-      default-days: 3
-      semver-major-days: 7
+      default-days: 7
     # init and analyze must run the same version: the analyze post-step
     # rejects a config file written by a different version, so separate
     # PRs for the two can never pass CI (#106 / #107).
-    # Neither `github/codeql-action/*` (#144 / #145) nor `github/codeql-action*`
-    # (#173 / #174) grouped them: the Dependabot job log for this ecosystem
-    # shows `"dependency-groups":[]` while the npm jobs receive theirs, so
-    # GitHub drops the group before the updater runs (comment placement ruled
-    # out by #180).
-    # Exact names (#181) did not group them either: the 2026-10-29 run still
-    # shows `"dependency-groups":[]` and opened #186 / #187. Until this changes,
+    # This group has not fired yet: every job so far ran while this file was
+    # invalid, so `"dependency-groups":[]` in those logs (#186 / #187) says
+    # nothing about the patterns. If the next version job still splits the PRs,
     # bump both pins in one hand-made PR that supersedes Dependabot's (#194).
     groups:
       codeql:
