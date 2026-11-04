@@ -163,6 +163,25 @@ Metadata-reading rules such as `madr/status-enum` and `madr/date-iso8601` read a
 combined view of YAML frontmatter **and** v2 body-list metadata, so they work
 across versions.
 
+### JavaScript frontmatter
+
+`---js` and `---javascript` blocks are read as data and never executed. A block
+must be a static object literal of strings, numbers, booleans, `null`, arrays,
+and objects. Comments, unquoted keys, and trailing commas are allowed.
+
+```markdown
+---js
+{
+  status: 'accepted', // reviewed in the architecture meeting
+  date: '2026-11-04',
+}
+---
+```
+
+Calls, variables, expressions, template literals, getters, methods, spread, and
+computed keys stop the lint with an error. Move those values to YAML frontmatter
+as plain values.
+
 ## Ignore patterns
 
 `ignorePatterns` skips files by path. Patterns are matched with

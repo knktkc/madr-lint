@@ -2,6 +2,7 @@ import type { List, ListItem, Paragraph, Root } from 'mdast';
 import { fromMarkdown } from 'mdast-util-from-markdown';
 import { toString } from 'mdast-util-to-string';
 import grayMatter from 'gray-matter';
+import { parseStaticJsFrontmatter } from './js-frontmatter.js';
 import { nullProtoMap } from './null-proto-map.js';
 
 /** Source position of a metadata list item, in body coordinates. */
@@ -11,7 +12,7 @@ export interface MetadataPosition {
 }
 
 export interface ParsedFile {
-  /** Parsed YAML frontmatter (v3/v4), or null if absent. */
+  /** Parsed frontmatter (v3/v4), or null if absent. */
   frontmatter: Record<string, unknown> | null;
   /**
    * v2 body-list metadata extracted from the leading metadata block, or null if
@@ -60,16 +61,13 @@ export interface ParsedFile {
  *
  * `engines.javascript` replaces gray-matter's default, which `eval`s the block
  * when a document opens with `---js`. ADR files are untrusted input, and
- * `language: 'yaml'` cannot prevent this: the delimiter's language wins.
+ * `language: 'yaml'` cannot prevent this: the delimiter's language wins. See
+ * ADR-0009.
  */
 const GRAY_MATTER_OPTIONS: NonNullable<Parameters<typeof grayMatter>[1]> =
   Object.freeze({
     engines: {
-      javascript: () => {
-        throw new Error(
-          'JavaScript frontmatter (---js) is not supported. Use YAML frontmatter.',
-        );
-      },
+      javascript: parseStaticJsFrontmatter,
     },
   });
 

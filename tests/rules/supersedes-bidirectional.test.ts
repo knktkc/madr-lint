@@ -305,6 +305,37 @@ describe('madr/supersedes-bidirectional', () => {
       expect(d?.fix).toBeUndefined();
     });
 
+    it.for([
+      ['js', `{ status: 'accepted' }`],
+      ['javascript', `{ status: 'accepted' }`],
+      ['json', '{ "status": "accepted" }'],
+    ])('declines when the target frontmatter is ---%s (a YAML line would corrupt it)', ([language, block]) => {
+      const target = buildProjectFile({
+        path: '0001-old.md',
+        content: `---${language}\n${block}\n---\n\n# B\n`,
+      });
+      const source = buildProjectFile({
+        path: '0042-new.md',
+        content: '---\nsupersedes: ADR-0001\n---\n\n# A\n',
+      });
+      const d = runRulesOnProject([rule], [target, source])[0];
+      expect(d?.messageId).toBe('missingBackReference');
+      expect(d?.fixable).toBe(false);
+      expect(d?.fix).toBeUndefined();
+    });
+
+    it('still reports a back-reference read from ---js frontmatter as satisfied', () => {
+      const target = buildProjectFile({
+        path: '0001-old.md',
+        content: `---js\n{ 'superseded-by': 'ADR-0042' }\n---\n\n# B\n`,
+      });
+      const source = buildProjectFile({
+        path: '0042-new.md',
+        content: '---\nsupersedes: ADR-0001\n---\n\n# A\n',
+      });
+      expect(runRulesOnProject([rule], [target, source])).toEqual([]);
+    });
+
     it('declines when the key already exists with a WRONG value (value rewrite out of scope)', () => {
       // B already has `superseded-by: ADR-0007` (a correct back-ref to C), so no
       // unknownReference fires; but source A (ADR-0042) still needs a back-ref B

@@ -34,6 +34,7 @@ function escapeRegExp(s: string): string {
  * mechanically safe. Frontmatter is treated as opaque lines — NO YAML parsing or
  * serialization (which would reflow the block). Guard rails:
  *   - no frontmatter block (v2 list-sourced or bare body) → null;
+ *   - a block opened with a language (`---js`, `---json`) → null;
  *   - `key` already present as a top-level frontmatter key → null (rewriting a
  *     wrong value, or appending to an existing key, is out of scope). Matched
  *     CASE-INSENSITIVELY: inserting `superseded-by:` next to an existing
@@ -51,6 +52,8 @@ function frontmatterInsertEdit(
   if (fmEnd === 0) return null; // no frontmatter block
 
   const fmBlock = content.slice(0, fmEnd);
+  // `---js` and `---json` blocks are not YAML, so a `key: value` line breaks them.
+  if (!/^\uFEFF?---[ \t]*\r?\n/.test(fmBlock)) return null;
   // The closing fence is the final `---` line of the block (its own newline is
   // part of fmBlock, so anchor at end). Capture the fence line to derive EOL.
   const closeMatch = /\r?\n(---[ \t]*\r?\n)$/.exec(fmBlock);

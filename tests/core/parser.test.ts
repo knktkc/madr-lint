@@ -976,27 +976,145 @@ describe('parseFile — gray-matter content cache (#122)', () => {
   });
 });
 
-describe('parser/executable frontmatter', () => {
+describe('parser/JavaScript frontmatter', () => {
   const SENTINEL = '__madrLintFrontmatterExecuted';
   const scope = globalThis as Record<string, unknown>;
-  const document = (language: string): string =>
-    `---${language}\n{ status: (globalThis.${SENTINEL} = true, 'accepted') }\n---\n\n# T\n`;
+  const document = (language: string, block: string): string =>
+    `---${language}\n${block}\n---\n\n# T\n`;
+  const dynamic = `{ status: (globalThis.${SENTINEL} = true, 'accepted') }`;
 
   afterEach(() => {
     delete scope[SENTINEL];
   });
 
-  it.for(['js', 'javascript', 'JS', 'JavaScript'])(
-    'parseFile rejects ---%s without evaluating the block',
-    (language) => {
-      expect(() => parseFile(document(language))).toThrow(/not supported/);
-      expect(scope[SENTINEL]).toBeUndefined();
-    },
-  );
+  describe('static object literals', () => {
+    it.for(['js', 'javascript', 'JS', 'JavaScript'])(
+      'parseFile reads ---%s frontmatter',
+      (language) => {
+        const parsed = parseFile(document(language, `{ status: 'accepted' }`));
+        expect(parsed.frontmatter).toEqual({ status: 'accepted' });
+        expect(parsed.metadata).toEqual({ status: 'accepted' });
+        expect(parsed.body.trim()).toBe('# T');
+      },
+    );
 
-  it('frontmatterOffset rejects ---js without evaluating the block', () => {
-    expect(() => frontmatterOffset(document('js'))).toThrow(/not supported/);
-    expect(scope[SENTINEL]).toBeUndefined();
+    it('reads every supported value type', () => {
+      const parsed = parseFile(
+        document(
+          'js',
+          `{ text: "a", count: -1.5, done: true, none: null, tags: ['x', 1], nested: { key: 'v' } }`,
+        ),
+      );
+      expect(parsed.frontmatter).toEqual({
+        text: 'a',
+        count: -1.5,
+        done: true,
+        none: null,
+        tags: ['x', 1],
+        nested: { key: 'v' },
+      });
+    });
+
+    it('allows comments, unquoted keys, and trailing commas', () => {
+      const parsed = parseFile(
+        document('js', `// note\n{\n  status: 'accepted', /* why */\n  tags: ['a',],\n}`),
+      );
+      expect(parsed.frontmatter).toEqual({ status: 'accepted', tags: ['a'] });
+    });
+
+    it('treats an empty block as no frontmatter', () => {
+      expect(parseFile('---js\n---\n\n# T\n').frontmatter).toBeNull();
+    });
+
+    it('frontmatterOffset returns where the body begins', () => {
+      const content = document('js', `{ status: 'accepted' }`);
+      expect(content.slice(frontmatterOffset(content))).toBe(
+        parseFile(content).body,
+      );
+    });
+  });
+
+  describe('everything else', () => {
+    it.for(['js', 'javascript', 'JS', 'JavaScript'])(
+      'parseFile rejects dynamic ---%s without evaluating the block',
+      (language) => {
+        expect(() => parseFile(document(language, dynamic))).toThrow(
+          /static object literal/,
+        );
+        expect(scope[SENTINEL]).toBeUndefined();
+      },
+    );
+
+    it('frontmatterOffset rejects a dynamic block without evaluating it', () => {
+      expect(() => frontmatterOffset(document('js', dynamic))).toThrow(
+        /static object literal/,
+      );
+      expect(scope[SENTINEL]).toBeUndefined();
+    });
+
+    it.for([
+      ['a call', `{ a: process.exit() }`],
+      ['a variable', `{ a: b }`],
+      ['an arithmetic expression', `{ a: 1 + 1 }`],
+      ['a template literal', '{ a: `plain` }'],
+      ['a template substitution', `{ a: \`\${globalThis.${SENTINEL} = true}\` }`],
+      ['a getter', `{ get a() { return 1; } }`],
+      ['a method', `{ a() { return 1; } }`],
+      ['a spread', `{ ...a }`],
+      ['a computed key', `{ [a]: 1 }`],
+      ['a shorthand property', `{ a }`],
+      ['a regular expression', `{ a: /x/ }`],
+      ['an arrow function', `{ a: () => 1 }`],
+      ['undefined', `{ a: undefined }`],
+      ['Infinity', `{ a: Infinity }`],
+      ['negative Infinity', `{ a: { b: -Infinity } }`],
+      ['NaN', `{ a: [NaN] }`],
+      ['a statement after the literal', `{ a: 1 }; globalThis.${SENTINEL} = true`],
+      ['an immediately invoked function', `(function () { globalThis.${SENTINEL} = true; }())`],
+      ['a top-level array', `['a']`],
+      ['a top-level string', `'a'`],
+      ['a top-level null', `null`],
+    ])('rejects %s', ([, block]) => {
+      expect(() => parseFile(document('js', block as string))).toThrow(
+        /static object literal/,
+      );
+      expect(scope[SENTINEL]).toBeUndefined();
+    });
+
+    it.for([
+      ['unquoted', `{ __proto__: { polluted: 1 } }`],
+      ['quoted', `{ "__proto__": { polluted: 1 } }`],
+      ['nested', `{ a: [{ __proto__: { polluted: 1 } }] }`],
+    ])('rejects a %s __proto__ key', ([, block]) => {
+      expect(() => parseFile(document('js', block as string))).toThrow(
+        /static object literal/,
+      );
+      expect(({} as Record<string, unknown>).polluted).toBeUndefined();
+    });
+
+    const nested = (open: string, leaf: string, close: string, depth: number) =>
+      open.repeat(depth - 1) + leaf + close.repeat(depth - 1);
+
+    it('accepts nesting up to 64 levels', () => {
+      const block = nested('{ a: ', '{ a: 1 }', ' }', 64);
+      expect(parseFile(document('js', block)).frontmatter).not.toBeNull();
+    });
+
+    it('rejects nesting beyond 64 levels', () => {
+      const block = nested('{ a: ', '{ a: 1 }', ' }', 65);
+      expect(() => parseFile(document('js', block))).toThrow(
+        /static object literal/,
+      );
+    });
+
+    it.for([
+      ['arrays', '{ a: ' + '['.repeat(100_000) + ']'.repeat(100_000) + ' }'],
+      ['objects', '{ a: '.repeat(100_000) + '1' + ' }'.repeat(100_000)],
+    ])('rejects extreme %s nesting with the same error', ([, block]) => {
+      expect(() => parseFile(document('js', block as string))).toThrow(
+        /static object literal/,
+      );
+    });
   });
 
   it('still parses ---json frontmatter', () => {
