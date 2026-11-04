@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.3
+
+### Patch Changes
+
+- [`f854ca3`](https://github.com/knktkc/madr-lint/commit/f854ca3a84e2694307356117bfd23c9d5db3ef2c) Thanks [@knktkc](https://github.com/knktkc)! - Reject JavaScript frontmatter instead of evaluating it. A document that opens with `---js` or `---javascript` now fails with an error, and its frontmatter block is not executed.
+
 ## 0.4.2
 
 ### Patch Changes
