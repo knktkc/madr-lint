@@ -33,8 +33,9 @@ work without a build step.
 > when loaded — the same trust model as ESLint configs. Only run lints with
 > `--config` paths or config files from sources you trust.
 
-If **no** config file is found and you don't set any rules, the CLI falls back
-to the `madr-lint:recommended` preset so it is useful with zero config.
+If you don't set any rules and don't pass `--config`, the CLI falls back to the
+rules of the `madr-lint:recommended` preset so it is useful with zero config.
+Other settings in a discovered config file, such as `adrDir`, still apply.
 
 ## `defineConfig`
 
