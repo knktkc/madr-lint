@@ -1,9 +1,18 @@
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { recommended } from '../src/configs/recommended.js';
+import { computeConfigHash } from '../src/core/cache.js';
 
 // Run the real CLI via node + tsx ESM hook. We avoid node_modules/.bin/tsx
 // because on Windows those are .cmd wrapper scripts that execFileSync cannot
@@ -332,6 +341,80 @@ describe('cli (end-to-end)', () => {
 
       const r = runCli(dir, ['wrong.md', '0001-a.md', '--no-cache', '--config', cfgPath]);
       expect(r.status).toBe(0);
+    }, 30_000);
+  });
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // recommended fallback for an auto-detected config without rules (#205)
+  // The fallback fills in the rules only; every other setting in the file
+  // must survive it.
+  // ──────────────────────────────────────────────────────────────────────────
+
+  describe('recommended fallback (auto-detected config without rules)', () => {
+    it('lints adrDir from the file with the recommended rules', () => {
+      writeFileSync(join(dir, '.madrlintrc.json'), JSON.stringify({ adrDir: 'decisions' }));
+      mkdirSync(join(dir, 'decisions'));
+      // wrong.md breaks madr/filename-format, which recommended sets to error.
+      writeFileSync(join(dir, 'decisions', 'wrong.md'), '# x\n');
+
+      const r = runCli(dir, ['--no-cache']);
+      expect(r.stdout).not.toContain('No .md files to lint');
+      expect(r.stdout).toContain('madr/filename-format');
+      expect(r.status).toBe(1);
+    }, 30_000);
+
+    it('keeps ignorePatterns from the file', () => {
+      writeFileSync(
+        join(dir, '.madrlintrc.json'),
+        JSON.stringify({ ignorePatterns: ['wrong.md'] }),
+      );
+      mkdirSync(join(dir, 'docs', 'adr'), { recursive: true });
+      writeFileSync(join(dir, 'docs', 'adr', 'wrong.md'), '# x\n');
+
+      const r = runCli(dir, ['--no-cache']);
+      expect(r.stdout).toContain('No .md files to lint in docs/adr (1 ignored by config)');
+      expect(r.status).toBe(0);
+    }, 30_000);
+
+    it('keeps cacheLocation from the file', () => {
+      writeFileSync(
+        join(dir, '.madrlintrc.json'),
+        JSON.stringify({ cacheLocation: 'custom-cache' }),
+      );
+      writeFileSync(join(dir, 'wrong.md'), '# x\n');
+
+      runCli(dir, ['wrong.md']);
+      expect(existsSync(join(dir, 'custom-cache', 'manifest.json'))).toBe(true);
+      expect(existsSync(join(dir, '.madr-lint', 'cache'))).toBe(false);
+    }, 30_000);
+
+    it('keeps cache: false from the file', () => {
+      writeFileSync(join(dir, '.madrlintrc.json'), JSON.stringify({ cache: false }));
+      writeFileSync(join(dir, 'wrong.md'), '# x\n');
+
+      const r = runCli(dir, ['wrong.md']);
+      expect(r.status).toBe(1); // still linted with recommended
+      expect(existsSync(join(dir, '.madr-lint', 'cache'))).toBe(false);
+    }, 30_000);
+
+    it('keeps madrVersion from the file (observable through the cache configHash)', () => {
+      writeFileSync(
+        join(dir, '.madrlintrc.json'),
+        JSON.stringify({ madrVersion: 'v3' }),
+      );
+      writeFileSync(join(dir, 'wrong.md'), '# x\n');
+
+      runCli(dir, ['wrong.md']);
+      const manifest = JSON.parse(
+        readFileSync(join(dir, '.madr-lint', 'cache', 'manifest.json'), 'utf8'),
+      ) as { configHash: string };
+      expect(manifest.configHash).toBe(
+        computeConfigHash({
+          rules: { ...recommended },
+          ignorePatterns: [],
+          madrVersion: 'v3',
+        }),
+      );
     }, 30_000);
   });
 

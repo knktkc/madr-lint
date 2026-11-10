@@ -126,8 +126,8 @@ const main = defineCommand({
     }
 
     // --config bypasses the config discovery walk. When the user explicitly
-    // points to a config file we skip the recommended fallback — they chose
-    // the config intentionally (even if it has no rules).
+    // points to a config file we skip the recommended rules fallback — they
+    // chose the config intentionally (even if it has no rules).
     let config: ResolvedConfig;
     let configExplicit = false;
     const configArg = args.config as string | undefined;
@@ -151,10 +151,14 @@ const main = defineCommand({
     }
 
     // When no rules are configured and no explicit config was provided, fall
-    // back to `recommended` so users get useful output without authoring a
-    // config first.
+    // back to the `recommended` rules so users get useful output without
+    // authoring rules first. Only the rules are filled in; every other
+    // setting from a discovered config file is kept (#205).
     if (!configExplicit && Object.keys(config.rules).length === 0) {
-      config = resolveExtends({ extends: ['madr-lint:recommended'] });
+      config = {
+        ...config,
+        rules: resolveExtends({ extends: ['madr-lint:recommended'] }).rules,
+      };
     }
 
     // citty: positionals collect into `args._` (array of strings). If
