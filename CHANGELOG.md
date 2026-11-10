@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.2
+
+### Patch Changes
+
+- [#208](https://github.com/knktkc/madr-lint/pull/208) [`319f6ce`](https://github.com/knktkc/madr-lint/commit/319f6cecfc80ee3513ea9cde79b0ce2fac78f566) Thanks [@knktkc](https://github.com/knktkc)! - Keep the settings of a discovered config file that sets no rules. The CLI still fills in the `recommended` rules, but `adrDir`, `ignorePatterns`, `cache`, and `cacheLocation` from the file now apply instead of being reset to their defaults, so a config with only `adrDir` lints that directory. Such a repository used to print "No .md files to lint" and exit 0, so CI can now report errors that were hidden before.
+
 ## 0.5.1
 
 ### Patch Changes
