@@ -629,6 +629,22 @@ describe('cli (end-to-end)', () => {
       return out.results.map((d) => d.messageId);
     }
 
+    it('rejects an unknown madrVersion with exit 2', () => {
+      writeFileSync(join(dir, '.madrlintrc.json'), JSON.stringify({ madrVersion: 'V3' }));
+      writeFileSync(join(dir, '0001-a.md'), V2);
+      const r = runCli(dir, ['--no-cache', '0001-a.md']);
+      expect(r.status).toBe(2);
+      expect(r.stderr).toContain('madrVersion');
+    }, 30_000);
+
+    it('rejects an unknown madrVersion in an explicit --config with exit 2', () => {
+      writeFileSync(join(dir, 'custom.json'), JSON.stringify({ madrVersion: 'v5' }));
+      writeFileSync(join(dir, '0001-a.md'), V2);
+      const r = runCli(dir, ['--no-cache', '--config', 'custom.json', '0001-a.md']);
+      expect(r.status).toBe(2);
+      expect(r.stderr).toContain('madrVersion');
+    }, 30_000);
+
     it('reads the body list under auto', () => {
       setup('auto');
       const r = runCli(dir, ['--no-cache', '--format', 'json', '0001-a.md']);

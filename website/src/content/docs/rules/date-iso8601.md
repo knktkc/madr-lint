@@ -11,7 +11,7 @@ The rule reads `context.metadata[field]`, which is YAML frontmatter **merged** w
 
 ## What it checks
 
-- `missingDate` — the configured field is absent, or its value is not a string / `Date`. Message: `Metadata does not contain a "<field>" field (checked frontmatter and v2 bold-list)`, with `data.field`.
+- `missingDate` — the configured field is absent, or its value is not a string / `Date`. The metadata is read from the source [`madrVersion`](/guides/configuration/#madr-version) selects. Message: `Metadata does not contain a "<field>" field`, with `data.field`.
 - `invalidDate` — the value is present but not a real `YYYY-MM-DD` date: wrong shape (`2026-5-1`, `26-05-01`, `today`) or a non-existent calendar date (`2026-13-01`, `2026-02-31`, `2025-02-29`). Message: `Date "<date>" is not a valid ISO 8601 calendar date (YYYY-MM-DD)`, with `data.date`.
 
 ## Examples

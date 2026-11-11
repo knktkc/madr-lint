@@ -165,8 +165,9 @@ two things: where metadata is read from, and which rules apply.
 | `v3` / `v4` | YAML frontmatter only | v3 / v4 |
 
 Metadata-reading rules such as `madr/status-enum` and `madr/date-iso8601` read
-the selected source. With `v3` or `v4`, a status written in a body list is not
-read, so `madr/status-enum` reports it as missing. With `v2`, frontmatter is not
+the selected source. With `v3` or `v4`, a status and date written in a body list
+are not read, so `madr/status-enum` and `madr/date-iso8601` report them as
+missing. With `v2`, frontmatter is not
 read. [`madr/metadata-format`](/rules/metadata-format/) reports a file whose
 metadata is in the format the configured version does not read.
 

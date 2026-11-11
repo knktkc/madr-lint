@@ -11,7 +11,7 @@ ADR の `date` フィールドが `YYYY-MM-DD` 形式の有効な ISO 8601 カ�
 
 ## チェック内容
 
-- `missingDate` — 設定されたフィールドが存在しない、またはその値が文字列 / `Date` ではありません。メッセージ: `Metadata does not contain a "<field>" field (checked frontmatter and v2 bold-list)`。`data.field` を含みます。
+- `missingDate` — 設定されたフィールドが存在しない、またはその値が文字列 / `Date` ではありません。メタデータは [`madrVersion`](/ja/guides/configuration/#madr-バージョン) が選ぶ読み取り元から読みます。メッセージ: `Metadata does not contain a "<field>" field`。`data.field` を含みます。
 - `invalidDate` — 値は存在するものの、実在する `YYYY-MM-DD` 日付ではありません: 形式が不正（`2026-5-1`, `26-05-01`, `today`）か、存在しないカレンダー日付（`2026-13-01`, `2026-02-31`, `2025-02-29`）です。メッセージ: `Date "<date>" is not a valid ISO 8601 calendar date (YYYY-MM-DD)`。`data.date` を含みます。
 
 ## 例

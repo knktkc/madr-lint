@@ -9,7 +9,7 @@ The rule reads `context.metadata.status`, which is YAML frontmatter **merged** w
 
 ## What it checks
 
-- `missingStatus` — no `status` field is found in the merged metadata (checked in both frontmatter and v2 bold-list), or the value is not a string. Message: `Metadata does not contain a "status" field (checked frontmatter and v2 bold-list)`.
+- `missingStatus` — no `status` field is found in the metadata, or the value is not a string. The metadata is read from the source [`madrVersion`](/guides/configuration/#madr-version) selects: frontmatter and the v2 list merged under `auto`, the v2 list only under `v2`, frontmatter only under `v3`/`v4`. Message: `Metadata does not contain a "status" field`.
 - `invalidStatus` — `status` is present but is neither an exact match against `values` nor a prefix match against `prefixValues`. Message: `Status "<status>" is not one of: <allowed>`, with `data.status` and `data.allowed` (the allowed values plus each prefix rendered as `"<prefix> ..."`).
 
 Comparison is case-insensitive by default (`caseSensitive: false`). Prefix matching handles transitional states such as `superseded by ADR-0042` matching the `superseded by` prefix.

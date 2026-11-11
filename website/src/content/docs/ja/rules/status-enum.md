@@ -9,7 +9,7 @@ ADR の `status` フィールドが許可された値のいずれかであるこ
 
 ## チェック内容
 
-- `missingStatus` — マージ後のメタデータに `status` フィールドが見つからない（frontmatter と v2 太字リストの両方を確認）か、値が文字列ではありません。メッセージ: `Metadata does not contain a "status" field (checked frontmatter and v2 bold-list)`。
+- `missingStatus` — メタデータに `status` フィールドが見つからないか、値が文字列ではありません。メタデータは [`madrVersion`](/ja/guides/configuration/#madr-バージョン) が選ぶ読み取り元から読みます（`auto` は frontmatter と v2 のリストを統合、`v2` は v2 のリストのみ、`v3`/`v4` は frontmatter のみ）。メッセージ: `Metadata does not contain a "status" field`。
 - `invalidStatus` — `status` は存在するものの、`values` との完全一致でも `prefixValues` との前方一致でもありません。メッセージ: `Status "<status>" is not one of: <allowed>`。`data.status` と `data.allowed`（許可された値に加え、各プレフィックスを `"<prefix> ..."` として表現したもの）を含みます。
 
 比較はデフォルトで大文字小文字を区別しません（`caseSensitive: false`）。前方一致は `superseded by ADR-0042` が `superseded by` プレフィックスにマッチするような、遷移中の状態を扱います。

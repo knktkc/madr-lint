@@ -107,7 +107,7 @@ const rule: Rule<DateIso8601Options> = {
       recommended: true,
     },
     messages: {
-      missingDate: 'Metadata does not contain a "{{field}}" field (checked frontmatter and v2 bold-list)',
+      missingDate: 'Metadata does not contain a "{{field}}" field',
       invalidDate: 'Date "{{date}}" is not a valid ISO 8601 calendar date (YYYY-MM-DD)',
     },
     suggestions: {

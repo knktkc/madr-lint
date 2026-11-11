@@ -91,11 +91,11 @@ export interface RunRuleOptions {
   madrVersion?: MadrVersion | 'auto';
 }
 
-const ALL_VERSIONS = 3;
+const ALL_VERSIONS: readonly MadrVersion[] = ['v2', 'v3', 'v4'];
 
 /** Whether `rule` declares support for every MADR version. */
 function supportsEveryVersion(rule: AnyRule): boolean {
-  return rule.meta.versionCompat.length >= ALL_VERSIONS;
+  return ALL_VERSIONS.every((v) => rule.meta.versionCompat.includes(v));
 }
 
 /**

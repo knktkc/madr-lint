@@ -2,7 +2,11 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { loadConfig, resolveExtends } from '../../src/core/config.js';
+import {
+  InvalidConfigError,
+  loadConfig,
+  resolveExtends,
+} from '../../src/core/config.js';
 
 describe('core/config', () => {
   describe('resolveExtends (pure)', () => {
@@ -37,6 +41,17 @@ describe('core/config', () => {
 
     it('passes through madrVersion', () => {
       expect(resolveExtends({ madrVersion: 'v4' }).madrVersion).toBe('v4');
+    });
+
+    // madrVersion now selects the metadata source and which rules run (#207),
+    // so a typo must not silently skip every project rule.
+    it.for(['V3', 'v5', '', 'latest'])('rejects madrVersion %j', (value) => {
+      expect(() =>
+        resolveExtends({ madrVersion: value as 'v3' }),
+      ).toThrow(InvalidConfigError);
+      expect(() => resolveExtends({ madrVersion: value as 'v3' })).toThrow(
+        /madrVersion.*"v2", "v3", "v4", "auto"/,
+      );
     });
 
     it('passes through ignorePatterns', () => {

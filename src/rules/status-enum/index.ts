@@ -85,7 +85,7 @@ const rule: Rule<StatusEnumOptions> = {
       recommended: true,
     },
     messages: {
-      missingStatus: 'Metadata does not contain a "status" field (checked frontmatter and v2 bold-list)',
+      missingStatus: 'Metadata does not contain a "status" field',
       invalidStatus: 'Status "{{status}}" is not one of: {{allowed}}',
     },
     // No suggestion for invalidStatus: the message already lists the allowed

@@ -662,6 +662,28 @@ describe('core/runner', () => {
     });
   });
 
+  it('gives a project rule every file under auto, whatever each file version is', () => {
+    let seen: string[] = [];
+    const rule = dummyProjectRule({
+      meta: { versionCompat: ['v3', 'v4'] } as Partial<ProjectRule['meta']> as ProjectRule['meta'],
+      check(context) {
+        seen = context.files.map((f) => f.path);
+      },
+    });
+    runRulesOnProject(
+      [rule],
+      [
+        buildProjectFile({ path: 'v2.md', content: '# T\n\n* Status: accepted\n' }),
+        buildProjectFile({
+          path: 'v4.md',
+          content: '---\nstatus: accepted\ndecision-makers: alice\n---\n\n# T\n',
+        }),
+      ],
+      { madrVersion: 'auto' },
+    );
+    expect(seen).toEqual(['v2.md', 'v4.md']);
+  });
+
   describe('buildProjectFile', () => {
     it('parses frontmatter and AST', () => {
       const projectFile = buildProjectFile({
@@ -1055,6 +1077,18 @@ describe('core/runner — madrVersion (#207)', () => {
       const { rule, runs } = v3v4Rule();
       runRulesOnFile([rule], { path: 'a.md', content }, { madrVersion: configured });
       expect(runs()).toBe(expected);
+    });
+
+    it('treats a duplicated versionCompat entry as not covering every version', () => {
+      let count = 0;
+      const rule = dummyRule({
+        meta: { versionCompat: ['v2', 'v2', 'v3'] } as Partial<Rule['meta']> as Rule['meta'],
+        create() {
+          count++;
+        },
+      });
+      runRulesOnFile([rule], { path: 'a.md', content: V4 }, { madrVersion: 'auto' });
+      expect(count).toBe(0);
     });
 
     it('does not parse a file to decide a rule that supports every version', () => {
