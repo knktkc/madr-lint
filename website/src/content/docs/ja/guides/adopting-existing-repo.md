@@ -61,7 +61,7 @@ madr-lint
 ```bash
 madr-lint
 # docs/adr/0060-new-decision.md
-#   error  madr/required-sections  Missing required section: "Consequences"
+#   error  madr/required-sections  Missing required section: "Considered Options"
 #
 # 1 error
 #   exit code 1

@@ -3,10 +3,11 @@
 - Status: Proposed
 - Date: 2026-05-01
 
+## Considered Options
+
+* X
+* Y
+
 ## Decision Outcome
 
 Adopted X.
-
-## Consequences
-
-OK.
