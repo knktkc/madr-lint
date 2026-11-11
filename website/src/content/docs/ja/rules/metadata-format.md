@@ -11,10 +11,12 @@ description: ADR のメタデータが、madrVersion の読み取る形式で書
 
 ## チェック内容
 
-- `expectedFrontmatter` — `madrVersion` が `v3` または `v4` で、ファイルにタイトルの下のメタデータの箇条書きがあり、frontmatter がありません。
-- `expectedList` — `madrVersion` が `v2` で、ファイルに frontmatter があります。
+- `expectedFrontmatter` — `madrVersion` が `v3` または `v4` で、ファイルにタイトルの下のメタデータの箇条書きがあり、MADR の frontmatter がありません。
+- `expectedList` — `madrVersion` が `v2` で、ファイルに MADR の frontmatter があります。
 
 どちらもファイル単位の診断で、`data.version` には設定した版が入ります。メタデータがないファイルは有効です。MADR のテンプレートでは、メタデータの項目はすべて省略可です。
+
+MADR の項目（`status`、`date`、`deciders`、`decision-makers`、`consulted`、`informed`）を1つ以上含む frontmatter を、MADR の frontmatter として扱います。Jekyll の `title` や `nav_order` のようなサイト生成用のキーだけの frontmatter は MADR のメタデータではないため、v2 の ADR でもメタデータの箇条書きと一緒に置けます。
 
 ## 例
 

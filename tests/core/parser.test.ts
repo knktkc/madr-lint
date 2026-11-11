@@ -1190,6 +1190,10 @@ describe('parseFile — madrVersion selects the metadata source (#207)', () => {
       ['v2 body list', LIST_V2, 'v2'],
       ['frontmatter and list', BOTH, 'v3'],
       ['no metadata', NEITHER, null],
+      // Site-generator keys (Jekyll, Docusaurus) are not MADR metadata.
+      ['site frontmatter and list', '---\ntitle: T\nnav_order: 3\n---\n\n# T\n\n* Status: accepted\n', 'v2'],
+      ['site frontmatter only', '---\ntitle: T\n---\n\n# T\n', null],
+      ['MADR keys in any case', '---\nStatus: accepted\n---\n\n# T\n', 'v3'],
     ] as const)('%s → %s', ([, content, version]) => {
       expect(parseFile(content).version).toBe(version);
       expect(parseFile(content, 'auto').version).toBe(version);

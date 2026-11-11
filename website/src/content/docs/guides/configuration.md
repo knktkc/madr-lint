@@ -160,7 +160,7 @@ two things: where metadata is read from, and which rules apply.
 
 | `madrVersion` | Metadata is read from | Version of each file |
 |---|---|---|
-| `auto` (default) | YAML frontmatter **and** the body list, merged (frontmatter wins on conflict) | Detected: frontmatter with `decision-makers` ⇒ v4, other frontmatter ⇒ v3, body list ⇒ v2 |
+| `auto` (default) | YAML frontmatter **and** the body list, merged (frontmatter wins on conflict) | Detected: frontmatter with `decision-makers` ⇒ v4, other frontmatter with MADR fields ⇒ v3, body list ⇒ v2 |
 | `v2` | The body list under the title only (`* Status:` / `- **Status**:`) | v2 |
 | `v3` / `v4` | YAML frontmatter only | v3 / v4 |
 

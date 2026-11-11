@@ -1,3 +1,4 @@
+import { hasMadrFrontmatter } from '../../core/parser.js';
 import type { Rule } from '../../core/types.js';
 import schema from './schema.json' with { type: 'json' };
 
@@ -6,6 +7,8 @@ import schema from './schema.json' with { type: 'json' };
  * v3/v4 read YAML frontmatter (#207). Metadata in the other format is not read
  * at all, so without this rule its fields would silently go unchecked. Under
  * `auto` the version is detected from the format, so the two always agree.
+ * Frontmatter counts as metadata only when it holds MADR fields: site-generator
+ * keys (Jekyll `title`, `nav_order`) beside a v2 body list are not a mismatch.
  */
 const rule: Rule<Record<string, never>> = {
   meta: {
@@ -36,14 +39,14 @@ const rule: Rule<Record<string, never>> = {
     const version = context.madrVersion;
     if (version === null) return;
     if (version === 'v2') {
-      if (context.frontmatter !== null) {
+      if (hasMadrFrontmatter(context.frontmatter)) {
         context.report({ messageId: 'expectedList', data: { version } });
       }
       return;
     }
     // v3/v4 read frontmatter. Report a body list only when it is the sole
-    // metadata; next to frontmatter, v3/v4 treat it as ordinary body content.
-    if (context.frontmatter === null && context.listMetadata !== null) {
+    // metadata; next to MADR frontmatter, v3/v4 treat it as body content.
+    if (!hasMadrFrontmatter(context.frontmatter) && context.listMetadata !== null) {
       context.report({ messageId: 'expectedFrontmatter', data: { version } });
     }
   },

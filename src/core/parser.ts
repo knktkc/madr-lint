@@ -113,15 +113,36 @@ export function frontmatterOffset(content: string): number {
 }
 
 /**
- * The MADR version a file's metadata format indicates: YAML frontmatter means
- * v3/v4 (v4 when the v4-renamed `decision-makers` key is present), a body list
- * means v2. null when the file has neither.
+ * Whether `frontmatter` carries MADR metadata — at least one canonical MADR
+ * field (status, date, deciders, …), in any key case. Frontmatter holding only
+ * site-generator keys (Jekyll `title` / `nav_order`, Docusaurus `sidebar_*`)
+ * is not MADR metadata: a v2 ADR may have it alongside its body list.
+ */
+export function hasMadrFrontmatter(
+  frontmatter: Record<string, unknown> | null,
+): boolean {
+  if (!frontmatter) return false;
+  return Object.keys(frontmatter).some((k) =>
+    RECOGNIZED_METADATA_KEYS.has(normalizeKey(k)),
+  );
+}
+
+/**
+ * The MADR version a file's metadata format indicates: frontmatter with MADR
+ * fields means v3/v4 (v4 when the v4-renamed `decision-makers` key is
+ * present), a body list means v2. null when the file has neither.
  */
 export function detectVersion(
   frontmatter: Record<string, unknown> | null,
   listMetadata: Record<string, unknown> | null,
 ): MadrVersion | null {
-  if (frontmatter) return 'decision-makers' in frontmatter ? 'v4' : 'v3';
+  if (frontmatter && hasMadrFrontmatter(frontmatter)) {
+    return Object.keys(frontmatter).some(
+      (k) => normalizeKey(k) === 'decision-makers',
+    )
+      ? 'v4'
+      : 'v3';
+  }
   if (listMetadata) return 'v2';
   return null;
 }

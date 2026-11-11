@@ -11,10 +11,12 @@ Under `madrVersion: 'auto'` (the default), the version is detected from each fil
 
 ## What it checks
 
-- `expectedFrontmatter` — `madrVersion` is `v3` or `v4`, and the file has a metadata list under the title but no frontmatter.
-- `expectedList` — `madrVersion` is `v2`, and the file has frontmatter.
+- `expectedFrontmatter` — `madrVersion` is `v3` or `v4`, and the file has a metadata list under the title but no MADR frontmatter.
+- `expectedList` — `madrVersion` is `v2`, and the file has MADR frontmatter.
 
 Both are file-level diagnostics with `data.version` set to the configured version. A file with no metadata is valid: every metadata field is optional in the MADR templates.
+
+Frontmatter counts as MADR frontmatter when it holds at least one MADR field: `status`, `date`, `deciders`, `decision-makers`, `consulted`, or `informed`. Frontmatter with only site-generator keys, such as Jekyll's `title` and `nav_order`, is not MADR metadata, so a v2 ADR can keep it beside its metadata list.
 
 ## Examples
 

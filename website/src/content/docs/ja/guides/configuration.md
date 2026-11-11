@@ -156,7 +156,7 @@ export default defineConfig({
 
 | `madrVersion` | メタデータの読み取り元 | 各ファイルの版 |
 |---|---|---|
-| `auto`（デフォルト） | YAML frontmatter **と**本文リストを統合（重複時は frontmatter を優先） | 判定: `decision-makers` を含む frontmatter ⇒ v4、その他の frontmatter ⇒ v3、本文リスト ⇒ v2 |
+| `auto`（デフォルト） | YAML frontmatter **と**本文リストを統合（重複時は frontmatter を優先） | 判定: `decision-makers` を含む frontmatter ⇒ v4、その他の MADR の項目を含む frontmatter ⇒ v3、本文リスト ⇒ v2 |
 | `v2` | タイトルの下の本文リストのみ（`* Status:` / `- **Status**:`） | v2 |
 | `v3` / `v4` | YAML frontmatter のみ | v3 / v4 |
 

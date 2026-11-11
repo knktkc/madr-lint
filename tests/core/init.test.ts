@@ -183,6 +183,13 @@ describe('core/init', () => {
       expect(detectMadrVersion(dir, 'docs/adr')).toBe('v3');
     });
 
+    it('counts a body-list ADR with site-generator frontmatter as v2', () => {
+      const SITE_V2 = '---\ntitle: A\nnav_order: 1\n---\n\n# A\n\n* Status: accepted\n';
+      writeAdr(join(dir, 'docs/adr'), '0001-a.md', SITE_V2);
+      writeAdr(join(dir, 'docs/adr'), '0002-b.md', SITE_V2);
+      expect(detectMadrVersion(dir, 'docs/adr')).toBe('v2');
+    });
+
     it('returns "auto" when frontmatter and body-list files are mixed (#207)', () => {
       // A fixed version reads one format only, so the minority files' metadata
       // would go unread and fail madr/metadata-format.
