@@ -21,6 +21,7 @@ violations qualify.
 | [`madr/status-enum`](/rules/status-enum/) | `status` is one of the allowed values | Yes | Yes | `error` |
 | [`madr/date-iso8601`](/rules/date-iso8601/) | `date` is a valid ISO-8601 date | Yes | Yes | `error` |
 | [`madr/filename-format`](/rules/filename-format/) | Filename matches the ADR convention | Yes | No | `error` |
+| [`madr/metadata-format`](/rules/metadata-format/) | Metadata uses the format `madrVersion` reads | No | No | `error` |
 
 ## Project (cross-file) rules
 

@@ -176,12 +176,21 @@ describe('core/init', () => {
       expect(detectMadrVersion(dir, 'docs/adr')).toBe('v2');
     });
 
-    it('majority wins across a mixed-vintage sample', () => {
+    it('majority wins between v3 and v4, which share the frontmatter format', () => {
+      writeAdr(join(dir, 'docs/adr'), '0001-a.md', V3_FRONTMATTER);
+      writeAdr(join(dir, 'docs/adr'), '0002-b.md', V3_FRONTMATTER);
+      writeAdr(join(dir, 'docs/adr'), '0003-c.md', V4_FRONTMATTER);
+      expect(detectMadrVersion(dir, 'docs/adr')).toBe('v3');
+    });
+
+    it('returns "auto" when frontmatter and body-list files are mixed (#207)', () => {
+      // A fixed version reads one format only, so the minority files' metadata
+      // would go unread and fail madr/metadata-format.
       writeAdr(join(dir, 'docs/adr'), '0001-a.md', V3_FRONTMATTER);
       writeAdr(join(dir, 'docs/adr'), '0002-b.md', V3_FRONTMATTER);
       writeAdr(join(dir, 'docs/adr'), '0003-c.md', V3_FRONTMATTER);
       writeAdr(join(dir, 'docs/adr'), '0004-d.md', V2_BODY_LIST);
-      expect(detectMadrVersion(dir, 'docs/adr')).toBe('v3');
+      expect(detectMadrVersion(dir, 'docs/adr')).toBe('auto');
     });
 
     it('returns "auto" on an exact tie', () => {

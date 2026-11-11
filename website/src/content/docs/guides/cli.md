@@ -86,9 +86,10 @@ npx madr-lint init
   linter's default) and says so.
 - **MADR version** — samples up to 20 existing ADRs and lets the majority
   win: YAML frontmatter with `decision-makers` counts as v4, other
-  frontmatter as v3, a v2 metadata list as v2. An empty directory, a tie, or
-  no recognizable metadata yields `auto` (the default, so it is omitted from
-  the written config).
+  frontmatter as v3, a v2 metadata list as v2. An empty directory, a tie, no
+  recognizable metadata, or a mix of frontmatter and v2-list files yields
+  `auto` (the default, so it is omitted from the written config). A fixed
+  version reads one metadata format only, so a mixed directory keeps `auto`.
 - **Config format** — `madr-lint.config.ts` when the project looks
   TypeScript-ish (a `tsconfig.json`, or `typescript` among `package.json`
   dependencies), `.madrlintrc.json` otherwise.

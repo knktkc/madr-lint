@@ -47,6 +47,7 @@ import {
   isProjectRule,
   type AnyRule,
   type Diagnostic,
+  type MadrVersion,
   type ProjectFile,
   type ProjectRule,
   type Rule,
@@ -86,6 +87,11 @@ export interface LintOptions {
    * baseline file takes effect without cache invalidation). See ADR-0007.
    */
   baseline?: Baseline | null;
+  /**
+   * The configured MADR version. Selects the metadata source and which rules
+   * apply via `meta.versionCompat` (#207). Defaults to `'auto'`.
+   */
+  madrVersion?: MadrVersion | 'auto';
 }
 
 export interface LintResult {
@@ -106,6 +112,7 @@ export interface LintResult {
  * File contents are read once and shared between both passes.
  */
 export function lintFiles(opts: LintOptions): LintResult {
+  const madrVersion = opts.madrVersion ?? 'auto';
   const allDiagnostics: Diagnostic[] = [];
 
   // Read all file contents once — shared between per-file and project passes.
@@ -166,6 +173,7 @@ export function lintFiles(opts: LintOptions): LintResult {
         opts.ruleSeverity,
         optionsByRule,
         file,
+        madrVersion,
       );
       allDiagnostics.push(...fileDiagnostics);
       const next: CacheEntry = {
@@ -180,6 +188,7 @@ export function lintFiles(opts: LintOptions): LintResult {
           opts.ruleSeverity,
           optionsByRule,
           file,
+          madrVersion,
         ),
       );
     }
@@ -192,6 +201,7 @@ export function lintFiles(opts: LintOptions): LintResult {
   if (enabledProjectRules.length > 0) {
     const { projectFiles, parseErrors } = buildProjectFiles(
       fileEntries.map((f) => ({ path: f.relativePath, content: f.content })),
+      madrVersion,
     );
     allDiagnostics.push(
       ...withoutReported(parseErrors, allDiagnostics),
@@ -201,6 +211,7 @@ export function lintFiles(opts: LintOptions): LintResult {
         opts.ruleSeverity,
         optionsByRule,
         opts.cwd,
+        madrVersion,
       ),
     );
   }
@@ -276,6 +287,8 @@ export interface LintAndFixOptions {
   baseline?: Baseline | null;
   /** Fixpoint pass cap; defaults to the applier's MAX_FIX_PASSES. */
   maxPasses?: number;
+  /** See `LintOptions.madrVersion`. */
+  madrVersion?: MadrVersion | 'auto';
 }
 
 /**
@@ -287,6 +300,7 @@ export interface LintAndFixOptions {
  * diff for a dry run). Per-file only — project-rule fixes are #29.
  */
 export function lintAndFix(opts: LintAndFixOptions): LintAndFixResult {
+  const madrVersion = opts.madrVersion ?? 'auto';
   const perFileRules: Rule[] = [];
   const projectRules: ProjectRule[] = [];
   for (const rule of opts.rules) {
@@ -315,6 +329,7 @@ export function lintAndFix(opts: LintAndFixOptions): LintAndFixResult {
         opts.ruleSeverity,
         optionsByRule,
         { relativePath, content },
+        madrVersion,
       );
       if (!baseline) {
         lastHidden = 0;
@@ -357,6 +372,7 @@ export function lintAndFix(opts: LintAndFixOptions): LintAndFixResult {
     for (;;) {
       const { projectFiles, parseErrors } = buildProjectFiles(
         files.map((f) => ({ path: f.path, content: contentByPath.get(f.path) ?? f.fixed })),
+        madrVersion,
       );
       // runProjectPass returns suppression-filtered, PRE-baseline diagnostics.
       // Subtract the baseline BEFORE collecting fixes so a baselined problem is
@@ -368,6 +384,7 @@ export function lintAndFix(opts: LintAndFixOptions): LintAndFixResult {
         opts.ruleSeverity,
         optionsByRule,
         opts.cwd,
+        madrVersion,
       );
       let hiddenThisPass = 0;
       if (baseline) {
@@ -425,6 +442,7 @@ function runPerFileRulesForFile(
   ruleSeverity: Record<string, RuleSeverity>,
   optionsByRule: Record<string, Record<string, unknown>>,
   file: { relativePath: string; content: string },
+  madrVersion: MadrVersion | 'auto',
 ): Diagnostic[] {
   const fileContext = {
     content: file.content,
@@ -446,6 +464,7 @@ function runPerFileRulesForFile(
       ...runRulesOnFile(errorRules, fileContext, {
         severity: 'error',
         optionsByRule,
+        madrVersion,
       }),
     );
   }
@@ -454,6 +473,7 @@ function runPerFileRulesForFile(
       ...runRulesOnFile(warnRules, fileContext, {
         severity: 'warn',
         optionsByRule,
+        madrVersion,
       }),
     );
   }
@@ -506,7 +526,10 @@ function makeFileExists(cwd: string): (resolvedPath: string) => boolean {
  * Parse files for the project pass. A file with unreadable frontmatter becomes a
  * diagnostic instead of stopping the lint for every other file.
  */
-function buildProjectFiles(entries: readonly { path: string; content: string }[]): {
+function buildProjectFiles(
+  entries: readonly { path: string; content: string }[],
+  madrVersion: MadrVersion | 'auto',
+): {
   projectFiles: ProjectFile[];
   parseErrors: Diagnostic[];
 } {
@@ -514,7 +537,7 @@ function buildProjectFiles(entries: readonly { path: string; content: string }[]
   const parseErrors: Diagnostic[] = [];
   for (const entry of entries) {
     try {
-      projectFiles.push(buildProjectFile(entry));
+      projectFiles.push(buildProjectFile(entry, madrVersion));
     } catch (err) {
       if (!(err instanceof FrontmatterParseError)) throw err;
       parseErrors.push(parseErrorDiagnostic(entry.path, err));
@@ -551,6 +574,7 @@ function runProjectPass(
   ruleSeverity: Record<string, RuleSeverity>,
   optionsByRule: Record<string, Record<string, unknown>>,
   cwd: string,
+  madrVersion: MadrVersion | 'auto',
 ): Diagnostic[] {
   const fileExists = makeFileExists(cwd);
   const errorRules: ProjectRule[] = [];
@@ -568,6 +592,7 @@ function runProjectPass(
         severity: 'error',
         fileExists,
         optionsByRule,
+        madrVersion,
       }),
     );
   }
@@ -577,6 +602,7 @@ function runProjectPass(
         severity: 'warn',
         fileExists,
         optionsByRule,
+        madrVersion,
       }),
     );
   }

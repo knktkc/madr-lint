@@ -107,6 +107,7 @@ export default defineConfig({
             { slug: 'rules/status-enum' },
             { slug: 'rules/date-iso8601' },
             { slug: 'rules/filename-format' },
+            { slug: 'rules/metadata-format' },
             { slug: 'rules/no-broken-links' },
             { slug: 'rules/no-duplicate-numbering' },
             { slug: 'rules/no-numbering-gap' },

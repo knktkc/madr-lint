@@ -975,3 +975,137 @@ describe('core/runner', () => {
     });
   });
 });
+
+describe('core/runner — madrVersion (#207)', () => {
+  const V2 = '# T\n\n* Status: accepted\n';
+  const V4 = '---\nstatus: accepted\ndecision-makers: alice\n---\n\n# T\n';
+  const NONE = '# T\n\nprose\n';
+
+  function captureVersion(): {
+    rule: Rule;
+    seen: Array<{ version: unknown; metadata: unknown; list: unknown }>;
+  } {
+    const seen: Array<{ version: unknown; metadata: unknown; list: unknown }> = [];
+    const rule = dummyRule({
+      create(context) {
+        seen.push({
+          version: context.madrVersion,
+          metadata: context.metadata,
+          list: context.listMetadata,
+        });
+      },
+    });
+    return { rule, seen };
+  }
+
+  describe('context.madrVersion', () => {
+    it.for([
+      ['auto', V2, 'v2'],
+      ['auto', V4, 'v4'],
+      ['auto', NONE, null],
+      ['v3', V2, 'v3'],
+      ['v2', V4, 'v2'],
+    ] as const)('%s on %j → %s', ([configured, content, expected]) => {
+      const { rule, seen } = captureVersion();
+      runRulesOnFile([rule], { path: 'a.md', content }, { madrVersion: configured });
+      expect(seen[0]?.version).toBe(expected);
+    });
+
+    it('defaults to auto', () => {
+      const { rule, seen } = captureVersion();
+      runRulesOnFile([rule], { path: 'a.md', content: V2 });
+      expect(seen[0]?.version).toBe('v2');
+    });
+  });
+
+  describe('context.metadata follows the version, context.listMetadata stays raw', () => {
+    it("'v4' reads no metadata from a body list", () => {
+      const { rule, seen } = captureVersion();
+      runRulesOnFile([rule], { path: 'a.md', content: V2 }, { madrVersion: 'v4' });
+      expect(seen[0]?.metadata).toBeNull();
+      expect(seen[0]?.list).toEqual({ status: 'accepted' });
+    });
+
+    it("'v2' reads no metadata from frontmatter", () => {
+      const { rule, seen } = captureVersion();
+      runRulesOnFile([rule], { path: 'a.md', content: V4 }, { madrVersion: 'v2' });
+      expect(seen[0]?.metadata).toBeNull();
+    });
+  });
+
+  describe('meta.versionCompat is honored for per-file rules', () => {
+    function v3v4Rule(): { rule: Rule; runs: () => number } {
+      let count = 0;
+      const rule = dummyRule({
+        meta: { versionCompat: ['v3', 'v4'] } as Partial<Rule['meta']> as Rule['meta'],
+        create() {
+          count++;
+        },
+      });
+      return { rule, runs: () => count };
+    }
+
+    it.for([
+      ['v2', NONE, 0],
+      ['auto', V2, 0],
+      ['v4', V2, 1],
+      ['auto', V4, 1],
+      ['auto', NONE, 1],
+    ] as const)('%s on %j runs %d time(s)', ([configured, content, expected]) => {
+      const { rule, runs } = v3v4Rule();
+      runRulesOnFile([rule], { path: 'a.md', content }, { madrVersion: configured });
+      expect(runs()).toBe(expected);
+    });
+
+    it('does not parse a file to decide a rule that supports every version', () => {
+      // A filename-only rule must keep its zero-parse fast path: unparseable
+      // frontmatter would surface as a parse error if anything parsed it.
+      const rule = dummyRule({ create: () => undefined });
+      const diagnostics = runRulesOnFile(
+        [rule],
+        { path: 'a.md', content: '---\n: : :\n---\n' },
+        { madrVersion: 'auto' },
+      );
+      expect(diagnostics).toEqual([]);
+    });
+  });
+
+  describe('meta.versionCompat is honored for project rules', () => {
+    function v3v4ProjectRule(): { rule: ProjectRule; runs: () => number } {
+      let count = 0;
+      const rule = dummyProjectRule({
+        meta: { versionCompat: ['v3', 'v4'] } as Partial<ProjectRule['meta']> as ProjectRule['meta'],
+        check() {
+          count++;
+        },
+      });
+      return { rule, runs: () => count };
+    }
+
+    it('skips the rule when the configured version is outside versionCompat', () => {
+      const { rule, runs } = v3v4ProjectRule();
+      runRulesOnProject([rule], [fakeProjectFile('a.md')], { madrVersion: 'v2' });
+      expect(runs()).toBe(0);
+    });
+
+    it.for(['auto', 'v3', 'v4'] as const)(
+      'runs the rule over every file under %s',
+      (configured) => {
+        const { rule, runs } = v3v4ProjectRule();
+        runRulesOnProject([rule], [fakeProjectFile('a.md')], {
+          madrVersion: configured,
+        });
+        expect(runs()).toBe(1);
+      },
+    );
+  });
+
+  describe('buildProjectFile', () => {
+    it('reads metadata for the configured version', () => {
+      expect(buildProjectFile({ path: 'a.md', content: V2 }, 'v4').metadata).toBeNull();
+      expect(buildProjectFile({ path: 'a.md', content: V2 }).metadata).toEqual({
+        status: 'accepted',
+      });
+    });
+  });
+});

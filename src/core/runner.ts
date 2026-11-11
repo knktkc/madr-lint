@@ -1,8 +1,10 @@
 import Ajv, { type AnySchemaObject, type ValidateFunction } from 'ajv';
 import {
   INTERNAL_ERROR_RULE_NAME,
+  type AnyRule,
   type Diagnostic,
   type FileContext,
+  type MadrVersion,
   type MdastNode,
   type ProjectFile,
   type ProjectRule,
@@ -82,6 +84,18 @@ export interface RunRuleOptions {
    * ProjectRuleContext.fileExists.
    */
   fileExists?: (resolvedPath: string) => boolean;
+  /**
+   * The configured MADR version. Selects the metadata source and decides
+   * which rules apply via `meta.versionCompat`. Defaults to `'auto'`.
+   */
+  madrVersion?: MadrVersion | 'auto';
+}
+
+const ALL_VERSIONS = 3;
+
+/** Whether `rule` declares support for every MADR version. */
+function supportsEveryVersion(rule: AnyRule): boolean {
+  return rule.meta.versionCompat.length >= ALL_VERSIONS;
 }
 
 /**
@@ -117,6 +131,14 @@ class PerFileRuleContext implements RuleContext {
 
   get metadata(): Record<string, unknown> | null {
     return this.ensureParsed().metadata;
+  }
+
+  get listMetadata(): Record<string, unknown> | null {
+    return this.ensureParsed().listMetadata;
+  }
+
+  get madrVersion(): MadrVersion | null {
+    return this.ensureParsed().version;
   }
 
   get metadataLoc(): Record<string, { line: number; column: number }> | null {
@@ -189,9 +211,10 @@ function runRulesOnReadableFile(
   const diagnostics: Diagnostic[] = [];
   const severity = runtime.severity ?? 'error';
 
+  const madrVersion = runtime.madrVersion ?? 'auto';
   let parsed: ParsedFile | null = null;
   const ensureParsed = (): ParsedFile => {
-    parsed ??= parseFile(file.content);
+    parsed ??= parseFile(file.content, madrVersion);
     return parsed;
   };
 
@@ -200,6 +223,16 @@ function runRulesOnReadableFile(
   let hasASTRule = false;
 
   for (const rule of rules) {
+    // Only a rule that excludes some version needs the file's version, so a
+    // rule supporting all of them keeps the zero-parse fast path.
+    if (!supportsEveryVersion(rule)) {
+      const version =
+        madrVersion === 'auto' ? ensureParsed().version : madrVersion;
+      if (version !== null && !rule.meta.versionCompat.includes(version)) {
+        continue;
+      }
+    }
+
     const perRuleOptions =
       runtime.optionsByRule?.[rule.meta.name] ?? runtime.options;
     const mergedOptions = {
@@ -389,8 +422,11 @@ function walk(
  * a raw file. Used by `runRulesOnProject` and by the lint orchestrator
  * to share parsing between per-file and project passes when needed.
  */
-export function buildProjectFile(file: FileContext): ProjectFile {
-  const parsed: ParsedFile = parseFile(file.content);
+export function buildProjectFile(
+  file: FileContext,
+  madrVersion: MadrVersion | 'auto' = 'auto',
+): ProjectFile {
+  const parsed: ParsedFile = parseFile(file.content, madrVersion);
   return {
     path: file.path,
     content: file.content,
@@ -416,8 +452,19 @@ export function runRulesOnProject(
 ): Diagnostic[] {
   const diagnostics: Diagnostic[] = [];
   const severity = runtime.severity ?? 'error';
+  const madrVersion = runtime.madrVersion ?? 'auto';
 
   for (const rule of rules) {
+    // Skip by the configured version only. Under `auto` the rule sees every
+    // file: dropping files of other versions would turn valid cross-file
+    // references into dangling ones.
+    if (
+      madrVersion !== 'auto' &&
+      !rule.meta.versionCompat.includes(madrVersion)
+    ) {
+      continue;
+    }
+
     const perRuleOptions =
       runtime.optionsByRule?.[rule.meta.name] ?? runtime.options;
     const mergedOptions = {

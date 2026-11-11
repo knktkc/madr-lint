@@ -4,6 +4,7 @@ import { toString } from 'mdast-util-to-string';
 import grayMatter from 'gray-matter';
 import { FrontmatterParseError, parseStaticJsFrontmatter } from './js-frontmatter.js';
 import { nullProtoMap } from './null-proto-map.js';
+import type { MadrVersion } from './types.js';
 
 /** Source position of a metadata list item, in body coordinates. */
 export interface MetadataPosition {
@@ -43,6 +44,13 @@ export interface ParsedFile {
    * is stripped before parsing → no body offset). null when nothing qualifies.
    */
   metadataValueLoc: Record<string, { start: number; end: number }> | null;
+  /**
+   * The MADR version this file is linted against: the configured version, or
+   * under `auto` the one detected from the file (frontmatter with
+   * `decision-makers` ⇒ v4, other frontmatter ⇒ v3, a body list ⇒ v2). null
+   * under `auto` when the file has no metadata to detect from.
+   */
+  version: MadrVersion | null;
   /** mdast root of the body (frontmatter stripped). */
   ast: Root;
   /** Body content with frontmatter stripped. */
@@ -105,13 +113,34 @@ export function frontmatterOffset(content: string): number {
 }
 
 /**
+ * The MADR version a file's metadata format indicates: YAML frontmatter means
+ * v3/v4 (v4 when the v4-renamed `decision-makers` key is present), a body list
+ * means v2. null when the file has neither.
+ */
+export function detectVersion(
+  frontmatter: Record<string, unknown> | null,
+  listMetadata: Record<string, unknown> | null,
+): MadrVersion | null {
+  if (frontmatter) return 'decision-makers' in frontmatter ? 'v4' : 'v3';
+  if (listMetadata) return 'v2';
+  return null;
+}
+
+/**
  * Parse a Markdown file: extract YAML frontmatter via gray-matter, then
  * feed the body into mdast-util-from-markdown directly (per ADR-0002,
  * we skip the unified+remark pipeline overhead). Additionally, extract
  * v2-style list metadata from the body's leading metadata block — both
  * bold-key and canonical plain-key shapes (see ADR-0006).
+ *
+ * `madrVersion` selects where `metadata` comes from: `v2` reads the body list
+ * only, `v3`/`v4` read frontmatter only, and `auto` merges both (#207). The raw
+ * `frontmatter` and `listMetadata` are exposed either way.
  */
-export function parseFile(content: string): ParsedFile {
+export function parseFile(
+  content: string,
+  madrVersion: MadrVersion | 'auto' = 'auto',
+): ParsedFile {
   const matter = parseMatter(content);
   // A YAML scalar or list is valid YAML but not metadata.
   const data = matter.data as unknown;
@@ -135,7 +164,14 @@ export function parseFile(content: string): ParsedFile {
     listResult && Object.keys(listResult.valueOffsets).length > 0
       ? { ...listResult.valueOffsets }
       : null;
-  if (frontmatter && listMetadata) {
+  if (madrVersion === 'v2') {
+    metadata = listMetadata;
+  } else if (madrVersion !== 'auto') {
+    // v3/v4: metadata lives in frontmatter, which has no body coordinates.
+    metadata = frontmatter;
+    metadataLoc = null;
+    metadataValueLoc = null;
+  } else if (frontmatter && listMetadata) {
     // Frontmatter wins on conflict, BUT explicit null/undefined are
     // skipped so that `status: ~` in YAML doesn't blank a present
     // list value (counterintuitive UX otherwise).
@@ -169,6 +205,10 @@ export function parseFile(content: string): ParsedFile {
     metadata,
     metadataLoc,
     metadataValueLoc,
+    version:
+      madrVersion === 'auto'
+        ? detectVersion(frontmatter, listMetadata)
+        : madrVersion,
     ast,
     body: matter.content,
   };

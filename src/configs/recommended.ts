@@ -12,6 +12,7 @@ import type { RuleSeverity } from '../core/types.js';
 export const recommended: Record<string, RuleSeverity> = {
   'madr/date-iso8601': 'error',
   'madr/filename-format': 'error',
+  'madr/metadata-format': 'error',
   'madr/no-broken-links': 'error',
   'madr/no-duplicate-numbering': 'error',
   // Convention-only — opt in if your team treats ADR numbering as a

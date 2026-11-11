@@ -332,6 +332,7 @@ const main = defineCommand({
           files,
           cwd,
           baseline,
+          madrVersion: config.madrVersion,
         });
       } catch (err) {
         if (err instanceof RuleOptionsError) {
@@ -385,6 +386,7 @@ const main = defineCommand({
         cwd,
         cache: cacheConfig,
         baseline,
+        madrVersion: config.madrVersion,
       });
     } catch (err) {
       // Invalid rule options in the user's config fail AJV validation now that

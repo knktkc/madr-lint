@@ -20,6 +20,7 @@ description: madr-lint の組み込みルール — 各ルールが何をチェ�
 | [`madr/status-enum`](/ja/rules/status-enum/) | `status` が許可された値のいずれかであること | あり | あり | `error` |
 | [`madr/date-iso8601`](/ja/rules/date-iso8601/) | `date` が有効な ISO-8601 の日付であること | あり | あり | `error` |
 | [`madr/filename-format`](/ja/rules/filename-format/) | ファイル名が ADR の規約に一致すること | あり | なし | `error` |
+| [`madr/metadata-format`](/ja/rules/metadata-format/) | メタデータが `madrVersion` の読み取る形式で書かれていること | なし | なし | `error` |
 
 ## プロジェクト（ファイル間）のルール
 

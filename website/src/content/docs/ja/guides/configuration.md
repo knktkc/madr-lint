@@ -78,7 +78,7 @@ JSON での同等の記述（`.madrlintrc.json`）:
 | オプション | 型 | デフォルト | 説明 |
 |---|---|---|---|
 | `extends` | `string[]` | `[]` | 継承するプリセット。現在は `'madr-lint:recommended'`。 |
-| `madrVersion` | `'v2' \| 'v3' \| 'v4' \| 'auto'` | `'auto'` | 対象の MADR バージョン。`auto` はファイルごとに検出します。 |
+| `madrVersion` | `'v2' \| 'v3' \| 'v4' \| 'auto'` | `'auto'` | 対象の MADR バージョン。メタデータの読み取り元を決めます（[MADR バージョン](#madr-バージョン) を参照）。`auto` はファイルごとに検出します。 |
 | `adrDir` | `string` | `'docs/adr'` | CLI でパスを渡さなかったときに lint されるディレクトリ。 |
 | `rules` | `Record<string, RuleSeverity>` | `{}` | ルールごとの重大度とオプション（後述）。 |
 | `ignorePatterns` | `string[]` | `[]` | スキップするパス（[Ignore パターン](#ignore-パターン) を参照）。 |
@@ -131,6 +131,7 @@ Invalid rule options in config: Invalid options for rule madr/filename-format: d
 | `madr/status-enum` | `error` |
 | `madr/date-iso8601` | `error` |
 | `madr/filename-format` | `error` |
+| `madr/metadata-format` | `error` |
 | `madr/no-broken-links` | `error` |
 | `madr/no-duplicate-numbering` | `error` |
 | `madr/supersedes-bidirectional` | `error` |
@@ -151,14 +152,19 @@ export default defineConfig({
 
 ## MADR バージョン
 
-`madrVersion` は、ルールがどの MADR 仕様に対して検証を行うかを選択します。
+`madrVersion` は、ルールがどの MADR 仕様に対して検証を行うかを選択します。決まるのは、メタデータの読み取り元と、実行するルールの2つです。
 
-- **`auto`**（デフォルト） — ファイルごとに検出します（frontmatter ⇒ v3/v4、本文リスト ⇒ v2）。
-- **`v2`** — メタデータは本文リスト（`* Status:` / `- **Status**:`）です。
-- **`v3` / `v4`** — メタデータは YAML frontmatter です。
+| `madrVersion` | メタデータの読み取り元 | 各ファイルの版 |
+|---|---|---|
+| `auto`（デフォルト） | YAML frontmatter **と**本文リストを統合（重複時は frontmatter を優先） | 判定: `decision-makers` を含む frontmatter ⇒ v4、その他の frontmatter ⇒ v3、本文リスト ⇒ v2 |
+| `v2` | タイトルの下の本文リストのみ（`* Status:` / `- **Status**:`） | v2 |
+| `v3` / `v4` | YAML frontmatter のみ | v3 / v4 |
 
-`madr/status-enum` や `madr/date-iso8601` のようなメタデータを読むルールは、YAML frontmatter
-**と** v2 の本文リストメタデータを統合したビューを読むため、バージョンをまたいで機能します。
+`madr/status-enum` や `madr/date-iso8601` のようなメタデータを読むルールは、選択された読み取り元を読みます。`v3` または `v4` では本文リストに書いた status は読まれないため、`madr/status-enum` は status がないと報告します。`v2` では frontmatter は読まれません。設定した版が読み取らない形式でメタデータを書いたファイルは、[`madr/metadata-format`](/ja/rules/metadata-format/) が報告します。
+
+ルールは、対応する版でだけ実行されます。`madr/supersedes-bidirectional` は v3 と v4 に対応するため、`madrVersion: 'v2'` では実行されません。`auto` では、ファイル単位のルールは対応外の版と判定したファイルを飛ばします。ファイル間のルールは、ファイル間の参照が欠けないよう、すべてのファイルを対象にします。メタデータがないファイルは版を判定できないため、すべてのルールを実行します。
+
+形式が混在するリポジトリでは `auto` を使ってください。すべての ADR を1つの形式にそろえる場合は、版を固定します。
 
 ### JavaScript frontmatter
 

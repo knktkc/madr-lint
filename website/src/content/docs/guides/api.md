@@ -30,7 +30,18 @@ import { parseFile } from 'madr-lint';
 const parsed = parseFile('---\nstatus: accepted\n---\n\n# ADR-0001\n');
 parsed.frontmatter; // { status: 'accepted' }
 parsed.metadata;    // { status: 'accepted' }  (frontmatter + v2 list)
+parsed.version;     // 'v3'  (detected from the format)
 parsed.ast;         // mdast Root
+```
+
+Pass a MADR version as the second argument to read metadata the way
+[`madrVersion`](/guides/configuration/#madr-version) does: `'v2'` reads the
+body list only, `'v3'`/`'v4'` read frontmatter only, and `'auto'` (the default)
+merges both. `frontmatter` and `listMetadata` always hold what the file
+contains.
+
+```typescript
+parseFile('# ADR-0001\n\n* Status: accepted\n', 'v4').metadata; // null
 ```
 
 ## Run a single rule
@@ -90,6 +101,22 @@ const diagnostics = runRulesOnFile(
   { path: '0001-x.md', content: fileContents },
   { severity: 'error' },
 );
+```
+
+## MADR version
+
+`runRule`, `runRulesOnFile`, and `runRulesOnProject` take `madrVersion` in their
+options (default `'auto'`), and `buildProjectFile` takes it as its second
+argument. It selects the metadata source and which rules run, as described in
+[MADR version](/guides/configuration/#madr-version).
+
+A per-file rule reads the file's version from `context.madrVersion`: the
+configured version, or under `'auto'` the detected one (`null` when the file has
+no metadata). `context.listMetadata` holds the body-list metadata as written,
+whatever the version.
+
+```typescript
+runRulesOnFile([rules.metadataFormat], { path: '0001-x.md', content }, { madrVersion: 'v4' });
 ```
 
 ## Run project (cross-file) rules
@@ -219,7 +246,7 @@ bounds filtering.
 
 | Export | Description |
 |---|---|
-| `parseFile` | Parse content → frontmatter, metadata, mdast, body |
+| `parseFile` | Parse content → frontmatter, metadata, version, mdast, body |
 | `extractListMetadata` | Extract v2 body-list metadata from an mdast tree |
 | `frontmatterOffset` | Length gray-matter strips (`fileOffset = bodyOffset + this`) |
 | `applyEdits` | Apply `TextEdit`s to a string (sorted, overlaps dropped, one pass) |

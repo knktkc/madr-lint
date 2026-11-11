@@ -1,0 +1,26 @@
+[
+  {
+    "Task name": "madr/metadata-format — frontmatter (auto)",
+    "Latency avg (ns)": "36310 ± 0.75%",
+    "Latency med (ns)": "33375 ± 1000.00",
+    "Throughput avg (ops/s)": "28833 ± 0.21%",
+    "Throughput med (ops/s)": "29963 ± 885",
+    "Samples": 13771
+  },
+  {
+    "Task name": "madr/metadata-format — typical body list (v2)",
+    "Latency avg (ns)": "405189 ± 1.05%",
+    "Latency med (ns)": "376271 ± 22479",
+    "Throughput avg (ops/s)": "2533 ± 0.78%",
+    "Throughput med (ops/s)": "2658 ± 164",
+    "Samples": 1234
+  },
+  {
+    "Task name": "madr/metadata-format — typical body list (v4, mismatch)",
+    "Latency avg (ns)": "407762 ± 1.27%",
+    "Latency med (ns)": "381708 ± 24458",
+    "Throughput avg (ops/s)": "2520 ± 0.76%",
+    "Throughput med (ops/s)": "2620 ± 170",
+    "Samples": 1227
+  }
+]
