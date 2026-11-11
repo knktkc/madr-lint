@@ -69,7 +69,7 @@ npx madr-lint docs/adr docs/decisions/0007-use-x.md
 ```text
 docs/adr/0003-use-postgres.md
   error  madr/status-enum        Status "decided" is not one of: proposed,rejected,accepted,deprecated,superseded by ...
-  error  madr/required-sections  Missing required section: "Consequences"
+  error  madr/required-sections  Missing required section: "Considered Options"
 
 2 errors
 ```

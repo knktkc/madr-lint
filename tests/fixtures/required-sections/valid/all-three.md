@@ -7,10 +7,11 @@
 
 Some context.
 
+## Considered Options
+
+* X
+* Y
+
 ## Decision Outcome
 
 We chose X.
-
-## Consequences
-
-Trade-offs explained.

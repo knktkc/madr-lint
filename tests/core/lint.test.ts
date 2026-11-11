@@ -56,11 +56,11 @@ describe('core/lint', () => {
         '',
         'ok',
         '',
-        '## Decision Outcome',
+        '## Considered Options',
         '',
         'ok',
         '',
-        '## Consequences',
+        '## Decision Outcome',
         '',
         'ok',
       ].join('\n'),
@@ -150,7 +150,7 @@ describe('core/lint', () => {
   it('handles multiple files independently', () => {
     const file1 = join(dir, '0001-a.md');
     const file2 = join(dir, '0002-b.md');
-    writeFileSync(file1, '# Good\n\n## Context and Problem Statement\n## Decision Outcome\n## Consequences\n');
+    writeFileSync(file1, '# Good\n\n## Context and Problem Statement\n## Considered Options\n## Decision Outcome\n');
     writeFileSync(file2, '# Bad\n');
     const result = lintFiles({
       rules: [requiredSections],

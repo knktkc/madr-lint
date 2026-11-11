@@ -53,20 +53,20 @@ describe('madr/required-sections', () => {
       });
     });
 
-    it('missing-consequences.md produces exactly 1 missingSection diagnostic', () => {
+    it('missing-options.md produces exactly 1 missingSection diagnostic', () => {
       const content = readFileSync(
-        join(fixturesDir, 'invalid', 'missing-consequences.md'),
+        join(fixturesDir, 'invalid', 'missing-options.md'),
         'utf8',
       );
       const diagnostics = runRule(rule, {
         content,
-        path: 'missing-consequences.md',
+        path: 'missing-options.md',
       });
       expect(diagnostics).toHaveLength(1);
       expect(diagnostics[0]).toMatchObject({
         ruleName: 'madr/required-sections',
         messageId: 'missingSection',
-        data: { section: 'Consequences' },
+        data: { section: 'Considered Options' },
       });
     });
 
@@ -79,8 +79,20 @@ describe('madr/required-sections', () => {
       expect(diagnostics).toHaveLength(3);
       const sections = diagnostics.map((d) => d.data?.section).toSorted();
       expect(sections).toEqual([
-        'Consequences',
+        'Considered Options',
         'Context and Problem Statement',
+        'Decision Outcome',
+      ]);
+    });
+  });
+
+  describe('default sections follow the MADR templates (#214)', () => {
+    // The headings that the MADR 2.1.2, 3.0.0 and 4.0.0 templates do not mark
+    // as optional. `Consequences` is optional in v3/v4 and absent from v2.
+    it('requires exactly the mandatory template headings', () => {
+      expect(rule.meta.defaultOptions?.sections).toEqual([
+        'Context and Problem Statement',
+        'Considered Options',
         'Decision Outcome',
       ]);
     });
@@ -88,7 +100,7 @@ describe('madr/required-sections', () => {
 
   describe('matchMode option', () => {
     it('startsWith allows headings with suffixes', () => {
-      const content = `# ADR-0001\n\n## Context and Problem Statement (background)\n\n## Decision Outcome (architectural)\n\n## Consequences\n`;
+      const content = `# ADR-0001\n\n## Context and Problem Statement (background)\n\n## Considered Options (shortlist)\n\n## Decision Outcome (architectural)\n`;
       const diagnostics = runRule(
         rule,
         { content, path: 'startswith.md' },
@@ -98,7 +110,7 @@ describe('madr/required-sections', () => {
     });
 
     it('exact (default) rejects headings with suffixes', () => {
-      const content = `# ADR-0001\n\n## Context and Problem Statement (background)\n\n## Decision Outcome\n\n## Consequences\n`;
+      const content = `# ADR-0001\n\n## Context and Problem Statement (background)\n\n## Considered Options\n\n## Decision Outcome\n`;
       const diagnostics = runRule(rule, { content, path: 'exact.md' });
       expect(diagnostics).toHaveLength(1);
       expect(diagnostics[0]?.data?.section).toBe('Context and Problem Statement');
@@ -107,7 +119,7 @@ describe('madr/required-sections', () => {
 
   describe('headings with inline markup', () => {
     it('extracts text via mdast-util-to-string (e.g. ## **Bold** Context)', () => {
-      const content = `# ADR-0001\n\n## **Bold** Context and Problem Statement\n\n## Decision Outcome\n\n## Consequences\n`;
+      const content = `# ADR-0001\n\n## **Bold** Context and Problem Statement\n\n## Considered Options\n\n## Decision Outcome\n`;
       // The matched text would be "Bold Context and Problem Statement" — strict match would fail
       const diagnostics = runRule(rule, { content, path: 'inline-markup.md' });
       expect(diagnostics.length).toBeGreaterThan(0);

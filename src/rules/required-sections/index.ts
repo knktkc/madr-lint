@@ -25,10 +25,12 @@ const rule: Rule<RequiredSectionsOptions> = {
         'add a "## {{section}}" heading to the document body',
     },
     defaultOptions: {
+      // The headings the MADR 2.1.2, 3.0.0 and 4.0.0 templates do not mark as
+      // optional. `Consequences` is optional in v3/v4 and absent from v2 (#214).
       sections: [
         'Context and Problem Statement',
+        'Considered Options',
         'Decision Outcome',
-        'Consequences',
       ],
       matchMode: 'exact',
     },

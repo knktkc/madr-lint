@@ -25,11 +25,11 @@ ADR の Markdown ファイルが `sections` オプションに列挙されたす
 ## Context and Problem Statement
 ...
 
+## Considered Options
+* ...
+
 ## Decision Outcome
 Adopted: ...
-
-## Consequences
-...
 ```
 
 ### 無効
@@ -37,10 +37,10 @@ Adopted: ...
 ```markdown
 # ADR-0001: Missing context
 
-## Decision Outcome
-...
+## Considered Options
+* ...
 
-## Consequences
+## Decision Outcome
 ...
 ```
 
@@ -50,7 +50,7 @@ Adopted: ...
 
 | オプション | 型 | デフォルト | 説明 |
 |---|---|---|---|
-| `sections` | `string[]` | `['Context and Problem Statement', 'Decision Outcome', 'Consequences']` | 必須の見出しテキスト。順序は問いません。 |
+| `sections` | `string[]` | `['Context and Problem Statement', 'Considered Options', 'Decision Outcome']` | 必須の見出しテキスト。順序は問いません。 |
 | `matchMode` | `'exact' \| 'startsWith'` | `'exact'` | 各必須エントリを見出しと比較する方法。`startsWith` にすると `Decision Outcome (Architectural)` が `Decision Outcome` を満たします。 |
 
 ```ts
@@ -74,7 +74,9 @@ export default defineConfig({
 | v3 | はい |
 | v4 | はい |
 
-デフォルトのセクションはすべての MADR バージョンのテンプレートに登場するため、見出し名は v2/v3/v4 で一貫しています。
+デフォルトのセクションは、MADR のテンプレートで省略可とされていない見出しです（[v2 (2.1.2)](https://github.com/adr/madr/blob/2.1.2/template/template.md), [v3 (3.0.0)](https://github.com/adr/madr/blob/3.0.0/template/adr-template.md), [v4 (4.0.0)](https://github.com/adr/madr/blob/4.0.0/template/adr-template.md)）。3 つのバージョンで同じため、v2/v3/v4 のどれにも同じデフォルトが適用されます。
+
+`Consequences` はデフォルトに含まれません。v3/v4 では省略可で、v2 のテンプレートには代わりに `Positive Consequences` と `Negative Consequences`（どちらも省略可）があります。必須にする場合は、`sections` に追加してください。
 
 ## 無効化する場合
 

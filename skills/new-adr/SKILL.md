@@ -128,14 +128,13 @@ Chosen option: "<option>", because <justification>.
 ```
 
 This is the upstream MADR v4 template trimmed to the sections madr-lint's
-`recommended` preset actually requires by default (`Context and Problem
-Statement`, `Decision Outcome`, `Consequences`), plus `Decision Drivers` and
-`Considered Options`, which are conventional and cheap to include. **Note
-`### Consequences` is a level-3 heading nested under `## Decision Outcome`**
-— that's how the upstream template does it, and it still satisfies
-`madr/required-sections`, which matches heading *text* at any heading level,
-not a specific `##` depth. Verified during dogfooding: this exact shape
-produces zero diagnostics against the `recommended` preset.
+`recommended` preset requires by default (`Context and Problem Statement`,
+`Considered Options`, `Decision Outcome` — the headings the MADR templates do
+not mark as optional), plus the optional `Decision Drivers` and
+`### Consequences`, which are conventional and cheap to include.
+`madr/required-sections` matches heading *text* at any heading level, not a
+specific `##` depth, so `### Consequences` nested under `## Decision Outcome`
+(as upstream does it) is fine.
 
 Date fact, verified against `madr/date-iso8601`'s default: must be a real
 calendar date in `YYYY-MM-DD` form (4-digit year, zero-padded month/day) —
@@ -174,23 +173,21 @@ useful.>
 
 Chosen option: "<option>", because <justification>.
 
-## Consequences
+### Positive Consequences
 
-* Good, because <positive consequence>
-* Bad, because <negative consequence>
+* <positive consequence>
+
+### Negative Consequences
+
+* <negative consequence>
 ```
 
-**This deviates from the literal upstream MADR v2.1.2 template on purpose —
-verify this if grounding against upstream again later.** The real upstream
-v2 template splits consequences into `### Positive Consequences` and
-`### Negative Consequences`, with no plain `Consequences` heading anywhere.
-Verified during dogfooding: that literal upstream shape fails
-`madr/required-sections` (`missingSection` for `"Consequences"`), because
-the rule's default `sections` list requires an exact heading named
-`Consequences` and `matchMode` defaults to `exact` — `"Positive
-Consequences"` doesn't match. Use a single `## Consequences` heading (with
-`Good, because` / `Bad, because` bullets, matching this project's own
-`recommended`-preset-compliant fixtures) instead of the upstream split.
+This follows the upstream MADR v2.1.2 template, which splits consequences
+into the optional `### Positive Consequences` and `### Negative Consequences`
+headings. It satisfies the `recommended` preset: the default `sections` of
+`madr/required-sections` are the headings the MADR templates do not mark as
+optional (`Context and Problem Statement`, `Considered Options`,
+`Decision Outcome`), which are the same in v2, v3, and v4.
 
 Keep the `* Status:` / `* Date:` / `* Deciders:` lines in one Markdown list,
 and use the same bullet marker for every item anyway. A marker change

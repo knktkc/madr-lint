@@ -7,10 +7,11 @@
 
 Minimal context.
 
+## Considered Options
+
+* X
+* Y
+
 ## Decision Outcome
 
 X.
-
-## Consequences
-
-None.
