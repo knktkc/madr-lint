@@ -33,7 +33,7 @@ madr-lint --fix
 
 `--fix` mutates files in place and its exit code reflects what's *left*
 unfixed, not what it repaired — a non-zero exit here is normal. Only 3 of
-`madr-lint`'s 8 rules are fixable today (`madr/status-enum`,
+`madr-lint`'s 9 rules are fixable today (`madr/status-enum`,
 `madr/date-iso8601`, `madr/supersedes-bidirectional`), so this is a dent, not
 a solution — the baseline in the next step absorbs the rest.
 

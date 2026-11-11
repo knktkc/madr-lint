@@ -80,9 +80,13 @@ npx madr-lint init
   デフォルト）にフォールバックし、その旨を出力します。
 - **MADR バージョン** — 既存 ADR を最大 20 ファイルサンプリングし、多数決で
   決定します。`decision-makers` を含む YAML frontmatter は v4、それ以外の
-  frontmatter は v3、v2 のメタデータリストは v2 としてカウントします。空の
-  ディレクトリ、同数、認識できるメタデータなしの場合は `auto`（デフォルト
-  なので、書き出される設定からは省略されます）。
+  MADR の項目を含む frontmatter は v3、v2 のメタデータリストは v2 として
+  カウントします（`title` などのサイト生成用のキーだけの frontmatter は
+  数えません）。空の
+  ディレクトリ、同数、認識できるメタデータなし、frontmatter と v2 のリストの
+  ファイルが混在する場合は `auto`（デフォルトなので、書き出される設定からは
+  省略されます）。固定の版は1つのメタデータ形式しか読まないため、混在する
+  ディレクトリでは `auto` のままにします。
 - **設定ファイル形式** — プロジェクトが TypeScript を使っていそうな場合
   （`tsconfig.json` がある、または `package.json` の依存に `typescript` が
   ある）は `madr-lint.config.ts`、それ以外は `.madrlintrc.json`。

@@ -193,6 +193,28 @@ describe('cli init (end-to-end)', () => {
     expect(r.stdout).toMatch(/--update-baseline/);
   }, 30_000);
 
+  it('runs the initial lint with the madrVersion it writes (#207)', () => {
+    // Detection samples the first 20 files, so it writes v3 here; the body-list
+    // ADR beyond the sample must then be linted as v3 and reported.
+    for (let i = 1; i <= 20; i++) {
+      writeAdr(dir, `docs/adr/${String(i).padStart(4, '0')}-example.md`, VALID_V3_ADR);
+    }
+    const v2 = VALID_V3_ADR.replace(/^---[\s\S]*?---\n\n(# .*\n)/, '$1\n* Status: accepted\n* Date: 2026-01-01\n');
+    expect(v2).toContain('* Status: accepted');
+    writeAdr(dir, 'docs/adr/0021-example.md', v2);
+
+    const r = runCli(dir, ['init', '--json']);
+    expect(r.status).toBe(0);
+    const payload = JSON.parse(r.stdout) as {
+      madrVersion: string;
+      errors: number;
+      suggestUpdateBaseline: boolean;
+    };
+    expect(payload.madrVersion).toBe('v3');
+    expect(payload.errors).toBeGreaterThan(0);
+    expect(payload.suggestUpdateBaseline).toBe(true);
+  }, 30_000);
+
   it('does not suggest --update-baseline when the initial lint is clean', () => {
     writeAdr(dir, 'docs/adr/0001-example.md', VALID_V3_ADR);
 

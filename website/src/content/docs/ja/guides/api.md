@@ -30,7 +30,14 @@ import { parseFile } from 'madr-lint';
 const parsed = parseFile('---\nstatus: accepted\n---\n\n# ADR-0001\n');
 parsed.frontmatter; // { status: 'accepted' }
 parsed.metadata;    // { status: 'accepted' }  (frontmatter + v2 list)
+parsed.version;     // 'v3'  (detected from the format)
 parsed.ast;         // mdast Root
+```
+
+第2引数に MADR のバージョンを渡すと、[`madrVersion`](/ja/guides/configuration/#madr-バージョン) と同じ方法でメタデータを読みます。`'v2'` は本文リストのみ、`'v3'`/`'v4'` は frontmatter のみを読み、`'auto'`（デフォルト）は両方を統合します。`frontmatter` と `listMetadata` には、常にファイルに書かれている内容が入ります。
+
+```typescript
+parseFile('# ADR-0001\n\n* Status: accepted\n', 'v4').metadata; // null
 ```
 
 ## 単一のルールを実行する
@@ -88,6 +95,16 @@ const diagnostics = runRulesOnFile(
   { path: '0001-x.md', content: fileContents },
   { severity: 'error' },
 );
+```
+
+## MADR バージョン
+
+`runRule`、`runRulesOnFile`、`runRulesOnProject` はオプションで `madrVersion`（デフォルトは `'auto'`）を受け取り、`buildProjectFile` は第2引数で受け取ります。メタデータの読み取り元と実行するルールが決まります。詳しくは [MADR バージョン](/ja/guides/configuration/#madr-バージョン) を参照してください。
+
+ファイル単位のルールは、`context.madrVersion` でファイルの版を読みます。設定した版、または `'auto'` では判定した版が入ります（メタデータがないファイルでは `null`）。`context.listMetadata` には、版に関係なく、書かれたとおりの本文リストのメタデータが入ります。
+
+```typescript
+runRulesOnFile([rules.metadataFormat], { path: '0001-x.md', content }, { madrVersion: 'v4' });
 ```
 
 ## プロジェクト（ファイル間）ルールを実行する
@@ -214,7 +231,7 @@ contentByPath)` が修正の編集を対象ファイルの `path` ごとにグ�
 
 | エクスポート | 説明 |
 |---|---|
-| `parseFile` | コンテンツをパース → frontmatter、metadata、mdast、body |
+| `parseFile` | コンテンツをパース → frontmatter、metadata、version、mdast、body |
 | `extractListMetadata` | mdast ツリーから v2 の本文リストメタデータを抽出 |
 | `frontmatterOffset` | gray-matter が除去する長さ（`fileOffset = bodyOffset + this`） |
 | `applyEdits` | `TextEdit` を文字列に適用（ソート、重複除去、1 パス） |

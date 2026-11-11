@@ -769,3 +769,78 @@ describe('core/lint', () => {
     });
   });
 });
+
+describe('core/lint — madrVersion (#207)', () => {
+  let dir: string;
+
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), 'madr-lint-version-'));
+  });
+
+  afterEach(() => {
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  // A v2 body-list ADR with an invalid status.
+  const V2_BAD_STATUS = '# T\n\n* Status: decided\n* Date: 2026-11-11\n';
+
+  function lintV2(madrVersion?: 'auto' | 'v2' | 'v3' | 'v4') {
+    const file = join(dir, '0001-a.md');
+    writeFileSync(file, V2_BAD_STATUS);
+    return lintFiles({
+      rules: [statusEnum],
+      ruleSeverity: { 'madr/status-enum': 'error' },
+      files: [file],
+      cwd: dir,
+      ...(madrVersion ? { madrVersion } : {}),
+    });
+  }
+
+  it.for([undefined, 'auto', 'v2'] as const)(
+    'reads the body-list status under %s',
+    (madrVersion) => {
+      expect(lintV2(madrVersion).diagnostics.map((d) => d.messageId)).toEqual([
+        'invalidStatus',
+      ]);
+    },
+  );
+
+  it.for(['v3', 'v4'] as const)(
+    'reads frontmatter only under %s, so the body-list status is not seen',
+    (madrVersion) => {
+      expect(lintV2(madrVersion).diagnostics.map((d) => d.messageId)).toEqual([
+        'missingStatus',
+      ]);
+    },
+  );
+
+  it('skips a project rule whose versionCompat excludes the configured version', () => {
+    const a = join(dir, '0001-a.md');
+    writeFileSync(a, '---\nstatus: accepted\nsupersedes: "9999"\n---\n\n# A\n');
+    const run = (madrVersion: 'auto' | 'v2') =>
+      lintFiles({
+        rules: [supersedesBidirectional],
+        ruleSeverity: { 'madr/supersedes-bidirectional': 'error' },
+        files: [a],
+        cwd: dir,
+        madrVersion,
+      }).diagnostics.length;
+    expect(run('auto')).toBeGreaterThan(0);
+    expect(run('v2')).toBe(0);
+  });
+
+  it('threads madrVersion through lintAndFix', () => {
+    const file = join(dir, '0001-a.md');
+    writeFileSync(file, V2_BAD_STATUS);
+    const run = (madrVersion: 'auto' | 'v4') =>
+      lintAndFix({
+        rules: [statusEnum],
+        ruleSeverity: { 'madr/status-enum': 'error' },
+        files: [file],
+        cwd: dir,
+        madrVersion,
+      }).diagnostics.map((d) => d.messageId);
+    expect(run('auto')).toEqual(['invalidStatus']);
+    expect(run('v4')).toEqual(['missingStatus']);
+  });
+});

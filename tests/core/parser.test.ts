@@ -1173,3 +1173,85 @@ describe('parser/invalid frontmatter', () => {
     expect(run).not.toThrow(/API_KEY/);
   });
 });
+
+describe('parseFile — madrVersion selects the metadata source (#207)', () => {
+  const FRONTMATTER_V3 = '---\nstatus: accepted\ndeciders: alice\n---\n\n# T\n';
+  const FRONTMATTER_V4 =
+    '---\nstatus: accepted\ndecision-makers: alice\n---\n\n# T\n';
+  const LIST_V2 = '# T\n\n* Status: accepted\n* Date: 2026-11-11\n\n## Context and Problem Statement\n';
+  const BOTH =
+    '---\nstatus: proposed\n---\n\n# T\n\n* Status: accepted\n* Date: 2026-11-11\n';
+  const NEITHER = '# T\n\nJust prose.\n';
+
+  describe('auto (default) detects the version per file', () => {
+    it.for([
+      ['v3 frontmatter', FRONTMATTER_V3, 'v3'],
+      ['v4 frontmatter (decision-makers)', FRONTMATTER_V4, 'v4'],
+      ['v2 body list', LIST_V2, 'v2'],
+      ['frontmatter and list', BOTH, 'v3'],
+      ['no metadata', NEITHER, null],
+      // Site-generator keys (Jekyll, Docusaurus) are not MADR metadata.
+      ['site frontmatter and list', '---\ntitle: T\nnav_order: 3\n---\n\n# T\n\n* Status: accepted\n', 'v2'],
+      ['site frontmatter only', '---\ntitle: T\n---\n\n# T\n', null],
+      ['MADR keys in any case', '---\nStatus: accepted\n---\n\n# T\n', 'v3'],
+    ] as const)('%s → %s', ([, content, version]) => {
+      expect(parseFile(content).version).toBe(version);
+      expect(parseFile(content, 'auto').version).toBe(version);
+    });
+
+    it('merges frontmatter and the body list (frontmatter wins)', () => {
+      expect(parseFile(BOTH).metadata).toEqual({
+        status: 'proposed',
+        date: '2026-11-11',
+      });
+    });
+  });
+
+  describe('a configured version is used for every file', () => {
+    it.for(['v2', 'v3', 'v4'] as const)('%s', (version) => {
+      expect(parseFile(NEITHER, version).version).toBe(version);
+      expect(parseFile(LIST_V2, version).version).toBe(version);
+    });
+  });
+
+  describe("'v2' reads metadata from the body list only", () => {
+    it('ignores frontmatter for metadata', () => {
+      const parsed = parseFile(BOTH, 'v2');
+      expect(parsed.metadata).toEqual({ status: 'accepted', date: '2026-11-11' });
+      expect(parsed.metadataLoc?.status).toBeDefined();
+      expect(parsed.metadataValueLoc?.status).toBeDefined();
+    });
+
+    it('has no metadata for a frontmatter-only file', () => {
+      expect(parseFile(FRONTMATTER_V3, 'v2').metadata).toBeNull();
+    });
+
+    it('still exposes the raw frontmatter', () => {
+      expect(parseFile(FRONTMATTER_V3, 'v2').frontmatter).toEqual({
+        status: 'accepted',
+        deciders: 'alice',
+      });
+    });
+  });
+
+  describe("'v3' and 'v4' read metadata from frontmatter only", () => {
+    it.for(['v3', 'v4'] as const)('%s ignores the body list', (version) => {
+      const parsed = parseFile(BOTH, version);
+      expect(parsed.metadata).toEqual({ status: 'proposed' });
+      expect(parsed.metadataLoc).toBeNull();
+      expect(parsed.metadataValueLoc).toBeNull();
+    });
+
+    it.for(['v3', 'v4'] as const)(
+      '%s has no metadata for a list-only file',
+      (version) => {
+        const parsed = parseFile(LIST_V2, version);
+        expect(parsed.metadata).toBeNull();
+        expect(parsed.listMetadata).toEqual({
+          status: 'accepted',
+          date: '2026-11-11',
+        });
+      },
+    );
+  });
+});

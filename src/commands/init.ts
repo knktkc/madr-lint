@@ -128,6 +128,9 @@ export const initCommand = defineCommand({
           cwd,
           cache: null,
           baseline: null,
+          // Lint as the written config will, so the counts and the baseline
+          // hint match the next `madr-lint` run (#207).
+          madrVersion,
         });
         for (const d of result.diagnostics) {
           if (d.severity === 'error') errors++;

@@ -182,7 +182,7 @@ line).
 
 ### Step 4: Run `--fix` before deciding what to do with the rest
 
-`madr-lint` can mechanically repair violations from 3 of the 8 rules today
+`madr-lint` can mechanically repair violations from 3 of the 9 rules today
 (`madr/status-enum`, `madr/date-iso8601`, `madr/supersedes-bidirectional`).
 Do this now, before the fix-or-baseline decision in Step 5 — it shrinks the
 legacy debt to only what genuinely needs a human judgment call, so there's

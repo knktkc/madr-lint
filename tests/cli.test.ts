@@ -609,4 +609,61 @@ describe('cli (end-to-end)', () => {
       expect(r.stderr).toContain('+- Status: accepted');
     }, 30_000);
   });
+
+  describe('madrVersion from the config (#207)', () => {
+    // A v2 body-list ADR whose status is a fixable typo.
+    const V2 = '# A\n\n- Status: depricated\n- Date: 2026-11-11\n';
+
+    function setup(madrVersion: string): string {
+      writeFileSync(
+        join(dir, '.madrlintrc.json'),
+        JSON.stringify({ madrVersion, rules: { 'madr/status-enum': 'error' } }),
+      );
+      const file = join(dir, '0001-a.md');
+      writeFileSync(file, V2);
+      return file;
+    }
+
+    function messageIds(r: CliResult): string[] {
+      const out = JSON.parse(r.stdout) as { results: Array<{ messageId: string }> };
+      return out.results.map((d) => d.messageId);
+    }
+
+    it('rejects an unknown madrVersion with exit 2', () => {
+      writeFileSync(join(dir, '.madrlintrc.json'), JSON.stringify({ madrVersion: 'V3' }));
+      writeFileSync(join(dir, '0001-a.md'), V2);
+      const r = runCli(dir, ['--no-cache', '0001-a.md']);
+      expect(r.status).toBe(2);
+      expect(r.stderr).toContain('madrVersion');
+    }, 30_000);
+
+    it('rejects an unknown madrVersion in an explicit --config with exit 2', () => {
+      writeFileSync(join(dir, 'custom.json'), JSON.stringify({ madrVersion: 'v5' }));
+      writeFileSync(join(dir, '0001-a.md'), V2);
+      const r = runCli(dir, ['--no-cache', '--config', 'custom.json', '0001-a.md']);
+      expect(r.status).toBe(2);
+      expect(r.stderr).toContain('madrVersion');
+    }, 30_000);
+
+    it('reads the body list under auto', () => {
+      setup('auto');
+      const r = runCli(dir, ['--no-cache', '--format', 'json', '0001-a.md']);
+      expect(messageIds(r)).toEqual(['invalidStatus']);
+    }, 30_000);
+
+    it('reads only frontmatter under v4', () => {
+      setup('v4');
+      const r = runCli(dir, ['--no-cache', '--format', 'json', '0001-a.md']);
+      expect(messageIds(r)).toEqual(['missingStatus']);
+    }, 30_000);
+
+    it.for([
+      ['auto', V2.replace('depricated', 'deprecated')],
+      ['v4', V2],
+    ] as const)('applies to --fix under %s', { timeout: 30_000 }, ([madrVersion, expected]) => {
+      const file = setup(madrVersion);
+      runCli(dir, ['--no-cache', '--fix', '0001-a.md']);
+      expect(readFileSync(file, 'utf8')).toBe(expected);
+    });
+  });
 });

@@ -80,7 +80,7 @@ The JSON equivalent (`.madrlintrc.json`):
 | Option | Type | Default | Description |
 |---|---|---|---|
 | `extends` | `string[]` | `[]` | Presets to extend. Currently `'madr-lint:recommended'`. |
-| `madrVersion` | `'v2' \| 'v3' \| 'v4' \| 'auto'` | `'auto'` | Target MADR version. `auto` detects per file. |
+| `madrVersion` | `'v2' \| 'v3' \| 'v4' \| 'auto'` | `'auto'` | Target MADR version. Selects where metadata is read from (see [MADR version](#madr-version)). `auto` detects per file. |
 | `adrDir` | `string` | `'docs/adr'` | Directory linted when no paths are passed on the CLI. |
 | `rules` | `Record<string, RuleSeverity>` | `{}` | Per-rule severity and options (see below). |
 | `ignorePatterns` | `string[]` | `[]` | Paths to skip (see [Ignore patterns](#ignore-patterns)). |
@@ -134,6 +134,7 @@ individual rules as needed.
 | `madr/status-enum` | `error` |
 | `madr/date-iso8601` | `error` |
 | `madr/filename-format` | `error` |
+| `madr/metadata-format` | `error` |
 | `madr/no-broken-links` | `error` |
 | `madr/no-duplicate-numbering` | `error` |
 | `madr/supersedes-bidirectional` | `error` |
@@ -154,15 +155,30 @@ export default defineConfig({
 
 ## MADR version
 
-`madrVersion` selects which MADR spec the rules validate against:
+`madrVersion` selects which MADR spec the rules validate against. It decides
+two things: where metadata is read from, and which rules apply.
 
-- **`auto`** (default) — detect per file (frontmatter ⇒ v3/v4, body-list ⇒ v2).
-- **`v2`** — metadata is a body list (`* Status:` / `- **Status**:`).
-- **`v3` / `v4`** — metadata is YAML frontmatter.
+| `madrVersion` | Metadata is read from | Version of each file |
+|---|---|---|
+| `auto` (default) | YAML frontmatter **and** the body list, merged (frontmatter wins on conflict) | Detected: frontmatter with `decision-makers` ⇒ v4, other frontmatter with MADR fields ⇒ v3, body list ⇒ v2 |
+| `v2` | The body list under the title only (`* Status:` / `- **Status**:`) | v2 |
+| `v3` / `v4` | YAML frontmatter only | v3 / v4 |
 
-Metadata-reading rules such as `madr/status-enum` and `madr/date-iso8601` read a
-combined view of YAML frontmatter **and** v2 body-list metadata, so they work
-across versions.
+Metadata-reading rules such as `madr/status-enum` and `madr/date-iso8601` read
+the selected source. With `v3` or `v4`, a status and date written in a body list
+are not read, so `madr/status-enum` and `madr/date-iso8601` report them as
+missing. With `v2`, frontmatter is not
+read. [`madr/metadata-format`](/rules/metadata-format/) reports a file whose
+metadata is in the format the configured version does not read.
+
+A rule runs only for the versions it supports. `madr/supersedes-bidirectional`
+supports v3 and v4, so it does not run with `madrVersion: 'v2'`. Under `auto`,
+per-file rules skip files detected as an unsupported version, and cross-file
+rules see every file so that references between files stay complete. A file
+with no metadata has no detectable version, and every rule runs on it.
+
+Use `auto` for a repository that mixes formats. Set a fixed version to hold
+every ADR to one format.
 
 ### JavaScript frontmatter
 

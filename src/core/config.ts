@@ -41,6 +41,20 @@ export const CONFIG_FILES = [
   'madr-lint.config.cjs',
 ];
 
+/** The config file loaded but holds a value madr-lint does not accept. */
+export class InvalidConfigError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'InvalidConfigError';
+  }
+}
+
+const MADR_VERSIONS = ['v2', 'v3', 'v4', 'auto'] as const;
+
+function isMadrVersion(value: unknown): value is ResolvedConfig['madrVersion'] {
+  return MADR_VERSIONS.some((v) => v === value);
+}
+
 export class ConfigFileNotFoundError extends Error {
   constructor(message: string) {
     super(message);
@@ -122,6 +136,15 @@ export function loadConfig(cwd: string): ResolvedConfig {
  * with defaults filled in and `extends` presets merged.
  */
 export function resolveExtends(config: MadrLintConfig): ResolvedConfig {
+  // madrVersion selects the metadata source and which rules run (#207). An
+  // unknown value would read frontmatter only and skip every project rule, so
+  // stop instead of linting with a silently different setup.
+  const madrVersion: unknown = config.madrVersion ?? 'auto';
+  if (!isMadrVersion(madrVersion)) {
+    throw new InvalidConfigError(
+      `Invalid madrVersion ${JSON.stringify(madrVersion)}: use one of ${MADR_VERSIONS.map((v) => `"${v}"`).join(', ')}.`,
+    );
+  }
   const baseRules: Record<string, RuleSeverity> = config.extends?.includes(
     'madr-lint:recommended',
   )
@@ -132,7 +155,7 @@ export function resolveExtends(config: MadrLintConfig): ResolvedConfig {
     adrDir: config.adrDir ?? 'docs/adr',
     rules: { ...baseRules, ...config.rules },
     ignorePatterns: config.ignorePatterns ?? [],
-    madrVersion: config.madrVersion ?? 'auto',
+    madrVersion,
     cache: config.cache ?? true,
     cacheLocation: config.cacheLocation ?? '.madr-lint/cache',
   };

@@ -44,7 +44,7 @@ A fast, configurable linter for [MADR](https://adr.github.io/madr/) (Markdown Ar
 - **ESLint-style rules** — named `madr/*` rules with `error` / `warn` / `off` and per-rule options validated by a JSON Schema.
 - **Per-file & cross-file** — fast single-pass checks plus project rules for unique numbering, the supersedes graph, and link rot.
 - **CLI, library & CI** — `text` / `json` / `sarif` / `github` reporters, a programmatic API, and a drop-in GitHub Actions step.
-- **Autofix** — `--fix` / `--fix-dry-run` mechanically repair the violations that have a safe, unambiguous correction (3 of 8 rules today); everything else still reports with a `suggestion`.
+- **Autofix** — `--fix` / `--fix-dry-run` mechanically repair the violations that have a safe, unambiguous correction (3 of 9 rules today); everything else still reports with a `suggestion`.
 - **Gradual adoption** — [inline suppression comments](https://knktkc.github.io/madr-lint/guides/suppressing-rules/) for one-off exceptions and a [baseline file](https://knktkc.github.io/madr-lint/guides/adopting-existing-repo/) to snapshot legacy debt so only new violations fail the build.
 
 ## Install
@@ -99,7 +99,7 @@ Rule values are a severity (`'error' | 'warn' | 'off'`) or a `[severity, options
 
 ## Rules
 
-8 rules — 7 enabled by `recommended`, 1 opt-in. 🔧 marks the 3 rules `--fix` can repair. Each page documents its options, examples, and MADR-version compatibility.
+9 rules — 8 enabled by `recommended`, 1 opt-in. 🔧 marks the 3 rules `--fix` can repair. Each page documents its options, examples, and MADR-version compatibility.
 
 | Rule | Type | Default | Checks |
 |---|---|:---:|---|
@@ -107,6 +107,7 @@ Rule values are a severity (`'error' | 'warn' | 'off'`) or a `[severity, options
 | [`madr/status-enum`](https://knktkc.github.io/madr-lint/rules/status-enum/) 🔧 | per-file | `error` | `status` is one of the allowed values |
 | [`madr/date-iso8601`](https://knktkc.github.io/madr-lint/rules/date-iso8601/) 🔧 | per-file | `error` | `date` is a valid ISO-8601 calendar date |
 | [`madr/filename-format`](https://knktkc.github.io/madr-lint/rules/filename-format/) | per-file | `error` | Filename matches the ADR convention |
+| [`madr/metadata-format`](https://knktkc.github.io/madr-lint/rules/metadata-format/) | per-file | `error` | Metadata uses the format `madrVersion` reads |
 | [`madr/no-broken-links`](https://knktkc.github.io/madr-lint/rules/no-broken-links/) | project | `error` | Relative links resolve to existing files |
 | [`madr/no-duplicate-numbering`](https://knktkc.github.io/madr-lint/rules/no-duplicate-numbering/) | project | `error` | ADR numbers are unique |
 | [`madr/supersedes-bidirectional`](https://knktkc.github.io/madr-lint/rules/supersedes-bidirectional/) 🔧 | project | `error` | `supersedes` / `superseded-by` agree |

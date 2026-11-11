@@ -1,7 +1,7 @@
 import { existsSync, lstatSync, readFileSync, readdirSync, type Dirent } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { CONFIG_FILES } from './config.js';
-import { parseFile, type ParsedFile } from './parser.js';
+import { parseFile } from './parser.js';
 import { isRealDirectory, isRegularFile } from './safe-fs.js';
 import type { MadrVersion } from './types.js';
 
@@ -54,30 +54,24 @@ export function detectAdrDir(cwd: string): AdrDirDetection {
 }
 
 /**
- * Per-file MADR version detection, reusing the parser's metadata bridge
- * (ADR-0006): YAML frontmatter means v3/v4 — v4 when the v4-renamed
- * `decision-makers` key is present, v3 otherwise; a v2 body-list metadata
- * block means v2. A file with neither casts no vote.
+ * Per-file MADR version detection: the parser's `auto` detection (see
+ * `detectVersion`), which the linter also uses for `madrVersion: 'auto'`.
+ * A file with no metadata casts no vote.
  */
 function detectFileVersion(content: string): MadrVersion | null {
-  let parsed: ParsedFile;
   try {
-    parsed = parseFile(content);
+    return parseFile(content).version;
   } catch {
     return null; // unparseable (e.g. malformed YAML) — no vote
   }
-  if (parsed.frontmatter) {
-    return 'decision-makers' in parsed.frontmatter ? 'v4' : 'v3';
-  }
-  if (parsed.listMetadata) return 'v2';
-  return null;
 }
 
 /**
  * Detect the dominant MADR version of an ADR directory by sampling up to 20
  * `NNNN-*.md` files (lexicographically first, for determinism) and letting
- * the majority win. An empty directory, no recognizable metadata, or an
- * exact tie yields `'auto'` — the config default, safe for mixed vintages.
+ * the majority win. An empty directory, no recognizable metadata, a mix of
+ * body-list and frontmatter files, or an exact tie yields `'auto'` — the
+ * config default, safe for mixed vintages.
  */
 export function detectMadrVersion(
   cwd: string,
@@ -112,6 +106,10 @@ export function detectMadrVersion(
 
   const max = Math.max(votes.v2, votes.v3, votes.v4);
   if (max === 0) return 'auto';
+  // A fixed version reads one metadata format only (#207). When body-list and
+  // frontmatter files are mixed, any fixed version leaves some files' metadata
+  // unread, so keep `auto`.
+  if (votes.v2 > 0 && votes.v3 + votes.v4 > 0) return 'auto';
   const winners = (['v2', 'v3', 'v4'] as const).filter(
     (v) => votes[v] === max,
   );

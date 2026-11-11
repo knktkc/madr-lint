@@ -14,6 +14,7 @@ import {
 import { computeConfigHash } from './core/cache.js';
 import {
   ConfigFileNotFoundError,
+  InvalidConfigError,
   loadConfig,
   loadConfigFromPath,
   resolveExtends,
@@ -147,7 +148,13 @@ const main = defineCommand({
         process.exit(2);
       }
     } else {
-      config = loadConfig(cwd);
+      try {
+        config = loadConfig(cwd);
+      } catch (err) {
+        if (!(err instanceof InvalidConfigError)) throw err;
+        console.error(err.message);
+        process.exit(2);
+      }
     }
 
     // When no rules are configured and no explicit config was provided, fall
@@ -332,6 +339,7 @@ const main = defineCommand({
           files,
           cwd,
           baseline,
+          madrVersion: config.madrVersion,
         });
       } catch (err) {
         if (err instanceof RuleOptionsError) {
@@ -385,6 +393,7 @@ const main = defineCommand({
         cwd,
         cache: cacheConfig,
         baseline,
+        madrVersion: config.madrVersion,
       });
     } catch (err) {
       // Invalid rule options in the user's config fail AJV validation now that

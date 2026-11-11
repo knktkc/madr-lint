@@ -87,7 +87,13 @@ export interface RuleMeta<TOptions = Record<string, unknown>> {
   name: string;
   /** Whether the rule operates per-file or across the project. */
   type: 'perFile' | 'project';
-  /** Which MADR versions this rule applies to. */
+  /**
+   * Which MADR versions this rule applies to. A per-file rule is skipped for a
+   * file whose version (configured, or detected under `auto`) is not listed;
+   * it still runs when `auto` cannot detect a version. A project rule is
+   * skipped when the configured version is not listed, and otherwise sees
+   * every file, so cross-file references stay complete.
+   */
   versionCompat: readonly MadrVersion[];
   docs: {
     description: string;
@@ -178,11 +184,24 @@ export interface RuleContext<TOptions = Record<string, unknown>> {
    */
   frontmatter: Record<string, unknown> | null;
   /**
-   * Combined metadata: YAML frontmatter merged with v2 bold-list extracted
-   * from the body. Frontmatter wins on key conflict. null only when both
-   * are absent. See ADR-0006. Use this for format-agnostic field reads.
+   * The file's metadata, read from the source that `madrVersion` selects:
+   * the v2 body list for `v2`, YAML frontmatter for `v3`/`v4`, and under
+   * `auto` both merged (frontmatter wins on key conflict, see ADR-0006). null
+   * when the selected source has none. Use this for format-agnostic field
+   * reads.
    */
   metadata: Record<string, unknown> | null;
+  /**
+   * The v2 body-list metadata as written, whatever `madrVersion` is, or null
+   * if the file has no leading metadata list.
+   */
+  listMetadata: Record<string, unknown> | null;
+  /**
+   * The MADR version this file is linted against: the configured
+   * `madrVersion`, or under `auto` the version detected from the file. null
+   * under `auto` when the file has no metadata to detect from.
+   */
+  madrVersion: MadrVersion | null;
   /**
    * Body-coordinate positions for `metadata` keys whose effective value came
    * from the v2 leading list (the list item's start). Frontmatter-sourced
@@ -261,8 +280,8 @@ export interface ProjectFile {
   /** Parsed YAML frontmatter (v3/v4 only), or null if absent. */
   frontmatter: Record<string, unknown> | null;
   /**
-   * Combined metadata: frontmatter merged with v2 bold-list extracted
-   * from the body. Frontmatter wins on key conflict. See ADR-0006.
+   * The file's metadata, read from the source that `madrVersion` selects
+   * (see `RuleContext.metadata`).
    */
   metadata: Record<string, unknown> | null;
   /** mdast root of the body (frontmatter stripped). */
