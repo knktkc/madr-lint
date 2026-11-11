@@ -102,11 +102,11 @@ npx madr-lint --format json
       "ruleName": "madr/required-sections",
       "messageId": "missingSection",
       "severity": "error",
-      "message": "Missing required section: \"Consequences\"",
-      "suggestion": "add a \"## Consequences\" heading to the document body",
+      "message": "Missing required section: \"Considered Options\"",
+      "suggestion": "add a \"## Considered Options\" heading to the document body",
       "docsUrl": "https://knktkc.github.io/madr-lint/rules/required-sections/",
       "fixable": false,
-      "data": { "section": "Consequences", "found": ["Context and Problem Statement", "Decision Outcome"] }
+      "data": { "section": "Considered Options", "found": ["Context and Problem Statement", "Decision Outcome"] }
     }
   ]
 }

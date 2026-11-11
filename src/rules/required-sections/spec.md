@@ -3,19 +3,27 @@
 ## Description
 
 Enforces that an ADR Markdown file contains every heading listed in the
-`sections` option. Default sections are the minimum that every MADR
-document should have regardless of version.
+`sections` option. Default sections are the headings that the MADR
+templates do not mark as optional; they are the same in v2, v3, and v4.
 
 ## MADR version compatibility
 
-Applies to v2, v3, v4. Heading section names are largely consistent
-across MADR versions:
+Applies to v2, v3, v4. Templates:
 
-- v2 template: <https://github.com/adr/madr/tree/v2.1.2>
-- v3 template: <https://github.com/adr/madr/tree/v3.0.0>
-- v4 template: <https://github.com/adr/madr/blob/develop/template/adr-template.md>
+- v2: <https://github.com/adr/madr/blob/2.1.2/template/template.md>
+- v3: <https://github.com/adr/madr/blob/3.0.0/template/adr-template.md>
+- v4: <https://github.com/adr/madr/blob/4.0.0/template/adr-template.md>
 
-The default `sections` (`'Context and Problem Statement'`, `'Decision Outcome'`, `'Consequences'`) appear in all three versions' templates.
+| Heading | v2 | v3 | v4 |
+|---|---|---|---|
+| Context and Problem Statement | required | required | required |
+| Considered Options | required | required | required |
+| Decision Outcome | required | required | required |
+| Consequences | absent (`Positive Consequences` / `Negative Consequences`, optional) | optional | optional |
+
+The default `sections` are the three required headings (#214). The 4.0.0
+README says the minimal template "only contains mandatory sections"; it
+also includes `### Consequences`, marked optional.
 
 ## Diagnostic
 
@@ -32,8 +40,8 @@ The default `sections` (`'Context and Problem Statement'`, `'Decision Outcome'`,
 {
   "sections": [
     "Context and Problem Statement",
-    "Decision Outcome",
-    "Consequences"
+    "Considered Options",
+    "Decision Outcome"
   ],
   "matchMode": "exact"
 }
@@ -49,7 +57,9 @@ The default `sections` (`'Context and Problem Statement'`, `'Decision Outcome'`,
 | Fixture | Reason |
 |---|---|
 | `all-three.md` | exactly the 3 default required headings |
-| `all-three-extra.md` | required + additional optional headings (Decision Drivers, Considered Options, Links) |
+| `v2-template.md` | v2 template headings, including `Positive Consequences` / `Negative Consequences` |
+| `v4-template.md` | v4 frontmatter with the 3 required headings and no optional `Consequences` |
+| `all-three-extra.md` | required + additional optional headings (Decision Drivers, Consequences, Links) |
 
 ### Invalid
 
@@ -57,7 +67,7 @@ The default `sections` (`'Context and Problem Statement'`, `'Decision Outcome'`,
 |---|---|
 | `missing-context.md` | no `## Context and Problem Statement` → 1 diagnostic |
 | `missing-outcome.md` | no `## Decision Outcome` → 1 diagnostic |
-| `missing-consequences.md` | no `## Consequences` → 1 diagnostic |
+| `missing-options.md` | no `## Considered Options` → 1 diagnostic |
 | `missing-all.md` | none of the required headings → 3 diagnostics |
 
 ## Heading text extraction

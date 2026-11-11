@@ -25,11 +25,11 @@ A file with the three default required sections:
 ## Context and Problem Statement
 ...
 
+## Considered Options
+* ...
+
 ## Decision Outcome
 Adopted: ...
-
-## Consequences
-...
 ```
 
 ### Invalid
@@ -37,10 +37,10 @@ Adopted: ...
 ```markdown
 # ADR-0001: Missing context
 
-## Decision Outcome
-...
+## Considered Options
+* ...
 
-## Consequences
+## Decision Outcome
 ...
 ```
 
@@ -50,7 +50,7 @@ Emits 1 diagnostic: `Missing required section: "Context and Problem Statement"`.
 
 | Option | Type | Default | Description |
 |---|---|---|---|
-| `sections` | `string[]` | `['Context and Problem Statement', 'Decision Outcome', 'Consequences']` | Required heading texts. Order does not matter. |
+| `sections` | `string[]` | `['Context and Problem Statement', 'Considered Options', 'Decision Outcome']` | Required heading texts. Order does not matter. |
 | `matchMode` | `'exact' \| 'startsWith'` | `'exact'` | How each required entry is compared against a heading. `startsWith` lets `Decision Outcome (Architectural)` satisfy `Decision Outcome`. |
 
 ```ts
@@ -74,7 +74,9 @@ export default defineConfig({
 | v3 | yes |
 | v4 | yes |
 
-The default sections appear in every MADR version's template, so heading names are consistent across v2/v3/v4.
+The default sections are the headings that the MADR templates do not mark as optional: [v2 (2.1.2)](https://github.com/adr/madr/blob/2.1.2/template/template.md), [v3 (3.0.0)](https://github.com/adr/madr/blob/3.0.0/template/adr-template.md), [v4 (4.0.0)](https://github.com/adr/madr/blob/4.0.0/template/adr-template.md). They are the same in all three versions, so the defaults apply to v2/v3/v4 alike.
+
+`Consequences` is not in the defaults. It is optional in v3/v4, and the v2 template uses `Positive Consequences` and `Negative Consequences` (both optional) instead. To require it, add it to `sections`.
 
 ## When to disable
 

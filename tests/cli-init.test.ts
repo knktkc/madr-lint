@@ -67,13 +67,13 @@ deciders: alice
 
 x
 
+## Considered Options
+
+* y
+
 ## Decision Outcome
 
 y
-
-## Consequences
-
-z
 `;
 
 describe('cli init (end-to-end)', () => {

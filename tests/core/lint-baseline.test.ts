@@ -7,7 +7,7 @@ import { lintFiles, type CacheConfig } from '../../src/core/lint.js';
 import requiredSections from '../../src/rules/required-sections/index.js';
 
 // A bare heading with no MADR sections trips madr/required-sections three
-// times (Context / Decision Outcome / Consequences all missing).
+// times (Context / Considered Options / Decision Outcome all missing).
 const BARE = '# Just a heading\n\nNo sections here.\n';
 
 describe('core/lint — baseline subtraction', () => {

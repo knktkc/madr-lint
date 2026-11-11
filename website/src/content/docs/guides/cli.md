@@ -197,8 +197,8 @@ diagnostic, so output stays compact):
 docs/adr/0003-use-postgres.md
   error  madr/date-iso8601       Date "2026-13-01" is not a valid ISO 8601 calendar date (YYYY-MM-DD)
                                  → use the YYYY-MM-DD calendar-date format, e.g. 2025-03-14
-  error  madr/required-sections  Missing required section: "Consequences"
-                                 → add a "## Consequences" heading to the document body
+  error  madr/required-sections  Missing required section: "Considered Options"
+                                 → add a "## Considered Options" heading to the document body
   madr/date-iso8601       https://knktkc.github.io/madr-lint/rules/date-iso8601/
   madr/required-sections  https://knktkc.github.io/madr-lint/rules/required-sections/
 
@@ -229,11 +229,11 @@ madr-lint --format json
       "ruleName": "madr/required-sections",
       "messageId": "missingSection",
       "severity": "error",
-      "message": "Missing required section: \"Consequences\"",
-      "suggestion": "add a \"## Consequences\" heading to the document body",
+      "message": "Missing required section: \"Considered Options\"",
+      "suggestion": "add a \"## Considered Options\" heading to the document body",
       "docsUrl": "https://knktkc.github.io/madr-lint/rules/required-sections/",
       "fixable": false,
-      "data": { "section": "Consequences", "found": ["Context and Problem Statement", "Decision Outcome"] }
+      "data": { "section": "Considered Options", "found": ["Context and Problem Statement", "Decision Outcome"] }
     }
   ]
 }

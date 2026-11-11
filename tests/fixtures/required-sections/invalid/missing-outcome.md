@@ -7,6 +7,7 @@
 
 Some context.
 
-## Consequences
+## Considered Options
 
-OK.
+* X
+* Y

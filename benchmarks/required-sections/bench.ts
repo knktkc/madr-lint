@@ -9,12 +9,12 @@ const tiny = readFileSync(new URL('./fixtures/tiny.md', import.meta.url), 'utf8'
 const typical = readFileSync(new URL('./fixtures/typical.md', import.meta.url), 'utf8');
 
 // One unique document per iteration, so the parse is really measured — see
-// benchmarks/unique-content.ts. The `Consequences` → `Notes` rewrite is
+// benchmarks/unique-content.ts. The `Considered Options` → `Notes` rewrite is
 // hoisted out of the loop with it: it always produced the same string, so it
 // measured String.replace on top of a memoized parse.
 const nextTiny = uniqueDocs(tiny);
 const nextTypical = uniqueDocs(typical);
-const nextMissing = uniqueDocs(typical.replace('## Consequences', '## Notes'));
+const nextMissing = uniqueDocs(typical.replace('## Considered Options', '## Notes'));
 
 const bench = new Bench({ time: 500 });
 bench
