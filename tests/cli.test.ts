@@ -64,6 +64,21 @@ function setupFixable(d: string) {
   writeFileSync(join(d, '0001-a.md'), '# T\n\n- Status: Accepted\n');
 }
 
+// The exact reproduction from issue #206: a typo'd preset and a typo'd rule ID.
+const ISSUE_206_CONFIG = JSON.stringify({
+  extends: ['madr-lint:recomended'],
+  rules: { 'madr/status-enmu': 'error' },
+});
+
+function expectIssue206Error(r: CliResult): void {
+  expect(r.status).toBe(2);
+  expect(r.stderr).toContain('"madr-lint:recomended"');
+  expect(r.stderr).toContain('Did you mean "madr-lint:recommended"?');
+  expect(r.stderr).toContain('"madr/status-enmu"');
+  expect(r.stderr).toContain('Did you mean "madr/status-enum"?');
+  expect(r.stdout).toBe('');
+}
+
 describe('cli (end-to-end)', () => {
   let dir: string;
 
@@ -665,5 +680,45 @@ describe('cli (end-to-end)', () => {
       runCli(dir, ['--no-cache', '--fix', '0001-a.md']);
       expect(readFileSync(file, 'utf8')).toBe(expected);
     });
+  });
+
+  // Before #206 this config checked nothing and exited 0.
+  describe('unknown rule IDs and extends entries (#206)', () => {
+    it('exits 2 for the issue reproduction in a discovered config', () => {
+      writeFileSync(join(dir, '.madrlintrc.json'), ISSUE_206_CONFIG);
+      writeFileSync(join(dir, 'wrong.md'), '# x\n');
+      expectIssue206Error(runCli(dir, ['--no-cache', 'wrong.md']));
+    }, 30_000);
+
+    it('exits 2 for the issue reproduction in an explicit --config', () => {
+      writeFileSync(join(dir, 'custom.json'), ISSUE_206_CONFIG);
+      writeFileSync(join(dir, 'wrong.md'), '# x\n');
+      expectIssue206Error(
+        runCli(dir, ['--no-cache', '--config', 'custom.json', 'wrong.md']),
+      );
+    }, 30_000);
+
+    it('exits 2 when a reserved core/ ID is configured', () => {
+      writeFileSync(
+        join(dir, '.madrlintrc.json'),
+        JSON.stringify({ rules: { 'core/internal-error': 'off' } }),
+      );
+      writeFileSync(join(dir, 'wrong.md'), '# x\n');
+      const r = runCli(dir, ['--no-cache', 'wrong.md']);
+      expect(r.status).toBe(2);
+      expect(r.stderr).toContain('"core/internal-error"');
+      expect(r.stderr).toMatch(/reserved/);
+    }, 30_000);
+
+    it('still lints with a bare-string extends of the recommended preset', () => {
+      writeFileSync(
+        join(dir, '.madrlintrc.json'),
+        JSON.stringify({ extends: 'madr-lint:recommended' }),
+      );
+      writeFileSync(join(dir, 'wrong.md'), '# x\n');
+      const r = runCli(dir, ['--no-cache', '--format', 'json', 'wrong.md']);
+      expect(r.status).toBe(1);
+      expect(r.stdout).toContain('madr/filename-format');
+    }, 30_000);
   });
 });
