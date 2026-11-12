@@ -134,7 +134,7 @@ export function loadConfig(cwd: string): ResolvedConfig {
 }
 
 /** The rule IDs and presets a config may name. */
-export interface KnownConfigNames {
+interface KnownConfigNames {
   rules: ReadonlySet<string>;
   presets: ReadonlyMap<string, Readonly<Record<string, RuleSeverity>>>;
 }
@@ -144,7 +144,7 @@ export interface KnownConfigNames {
  * configurable as soon as it is registered, and plugins (#31) can add their
  * namespaces here later.
  */
-export const BUILTIN_CONFIG_NAMES: KnownConfigNames = {
+const BUILTIN_CONFIG_NAMES: KnownConfigNames = {
   rules: new Set(
     Object.values(builtinRules).map((rule: AnyRule) => rule.meta.name),
   ),
