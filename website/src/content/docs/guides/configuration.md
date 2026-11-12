@@ -79,7 +79,7 @@ The JSON equivalent (`.madrlintrc.json`):
 
 | Option | Type | Default | Description |
 |---|---|---|---|
-| `extends` | `string[]` | `[]` | Presets to extend. Currently `'madr-lint:recommended'`. |
+| `extends` | `string[]` | `[]` | Presets to extend. Currently `'madr-lint:recommended'`. An unknown name is a config error (see [Unknown names](#unknown-names)). |
 | `madrVersion` | `'v2' \| 'v3' \| 'v4' \| 'auto'` | `'auto'` | Target MADR version. Selects where metadata is read from (see [MADR version](#madr-version)). `auto` detects per file. |
 | `adrDir` | `string` | `'docs/adr'` | Directory linted when no paths are passed on the CLI. |
 | `rules` | `Record<string, RuleSeverity>` | `{}` | Per-rule severity and options (see below). |
@@ -118,6 +118,22 @@ message and exit code `2`:
 ```text
 Invalid rule options in config: Invalid options for rule madr/filename-format: data/pattern must be string
 ```
+
+### Unknown names
+
+A rule name in `rules` that madr-lint does not know, or an `extends` entry that
+is not a preset, also fails with exit code `2`. This includes a rule set to
+`'off'`. The message names the closest known value and lists every problem in
+the config at once:
+
+```text
+Invalid config (2 problems):
+  - Unknown preset "madr-lint:recomended" in extends. Did you mean "madr-lint:recommended"?
+  - Unknown rule "madr/status-enmu" in rules. Did you mean "madr/status-enum"?
+```
+
+Rule IDs starting with `core/`, such as `core/internal-error`, are reserved for
+madr-lint's own diagnostics and cannot be configured.
 
 See the [Rules reference](/rules/) for the options each rule accepts.
 

@@ -260,7 +260,7 @@ madr-lint は、作業ディレクトリの外へ向かうシンボリックリ�
 |---|---|
 | `0` | エラーなし。`--max-warnings` を設定している場合は警告数が上限以内 |
 | `1` | 1 件以上の `error` 重大度の診断、または警告数が `--max-warnings` を超過。`--fix` / `--fix-dry-run` の場合は、修正後に**残った**問題を反映 |
-| `2` | 使用法または設定エラー（`--max-warnings` の値が不正、`--config` ファイルが存在しない、無効なルールオプション、未知の `--format`、`--update-baseline` と `--fix` の併用、`--force` なしの `madr-lint init` で既存の設定ファイルがある場合、シンボリックリンクで作業ディレクトリの外へ向かうパス、`.madr-lint` がリンクの状態での `--update-baseline`） |
+| `2` | 使用法または設定エラー（`--max-warnings` の値が不正、`--config` ファイルが存在しない、無効なルールオプション、設定内の未知のルール名・`extends` の値・`madrVersion`、`core/` ルール ID の設定、未知の `--format`、`--update-baseline` と `--fix` の併用、`--force` なしの `madr-lint init` で既存の設定ファイルがある場合、シンボリックリンクで作業ディレクトリの外へ向かうパス、`.madr-lint` がリンクの状態での `--update-baseline`） |
 
 ## キャッシュ
 

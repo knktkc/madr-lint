@@ -77,7 +77,7 @@ JSON での同等の記述（`.madrlintrc.json`）:
 
 | オプション | 型 | デフォルト | 説明 |
 |---|---|---|---|
-| `extends` | `string[]` | `[]` | 継承するプリセット。現在は `'madr-lint:recommended'`。 |
+| `extends` | `string[]` | `[]` | 継承するプリセット。現在は `'madr-lint:recommended'`。未知の名前は設定エラーです（[未知の名前](#未知の名前)を参照）。 |
 | `madrVersion` | `'v2' \| 'v3' \| 'v4' \| 'auto'` | `'auto'` | 対象の MADR バージョン。メタデータの読み取り元を決めます（[MADR バージョン](#madr-バージョン) を参照）。`auto` はファイルごとに検出します。 |
 | `adrDir` | `string` | `'docs/adr'` | CLI でパスを渡さなかったときに lint されるディレクトリ。 |
 | `rules` | `Record<string, RuleSeverity>` | `{}` | ルールごとの重大度とオプション（後述）。 |
@@ -115,6 +115,21 @@ rules: {
 ```text
 Invalid rule options in config: Invalid options for rule madr/filename-format: data/pattern must be string
 ```
+
+### 未知の名前
+
+`rules` に madr-lint が知らないルール名を書いた場合や、`extends` にプリセットではない
+値を書いた場合も、終了コード `2` で失敗します。`'off'` を指定したルールも対象です。
+メッセージには最も近い既知の値が示され、設定内の問題がすべてまとめて表示されます。
+
+```text
+Invalid config (2 problems):
+  - Unknown preset "madr-lint:recomended" in extends. Did you mean "madr-lint:recommended"?
+  - Unknown rule "madr/status-enmu" in rules. Did you mean "madr/status-enum"?
+```
+
+`core/internal-error` など `core/` で始まるルール ID は madr-lint 自身の診断用に予約されて
+おり、設定できません。
 
 各ルールが受け付けるオプションについては [ルールリファレンス](/ja/rules/) を参照してください。
 
