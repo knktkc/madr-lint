@@ -5,7 +5,7 @@ description: Validate that an ADR's date field is a real ISO 8601 calendar date 
 
 Validates that an ADR's `date` field is a valid ISO 8601 calendar date in `YYYY-MM-DD` format.
 
-The rule reads `context.metadata[field]`, which is YAML frontmatter **merged** with v2 body-list metadata (frontmatter wins on conflict; explicit null/undefined frontmatter values are skipped). It therefore supports MADR v2 (bold `- **Date**:` and plain `* Date:` list items), v3 and v4.
+The rule reads `context.metadata[field]`, whose source [`madrVersion`](/guides/configuration/#madr-version) selects. Under `auto` (the default) it is YAML frontmatter **merged** with v2 body-list metadata (frontmatter wins on conflict; explicit null/undefined frontmatter values are skipped); `v2` reads the body list only, and `v3`/`v4` read frontmatter only. It therefore supports MADR v2 (bold `- **Date**:` and plain `* Date:` list items), v3 and v4.
 
 `gray-matter` parses an unquoted `date: 2026-05-01` into a JavaScript `Date`; the rule normalizes a `Date` via `toISOString().slice(0, 10)`, keeps a `string` as-is, and treats anything else (null, boolean, number) as missing. Validation uses a `Date.UTC` round-trip so leap years and month lengths are handled correctly without external libraries.
 
