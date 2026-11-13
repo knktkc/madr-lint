@@ -54,12 +54,15 @@ export function closestMatch(
   );
   if (namespaced !== undefined) return namespaced;
 
+  // Two edits turn a short word into an unrelated one (`files` → `rules`), so
+  // a short value gets fewer.
+  const maxDistance = Math.min(MAX_DISTANCE, Math.floor(needle.length / 3));
   let best: string | undefined;
-  let bestDistance = MAX_DISTANCE + 1;
+  let bestDistance = maxDistance + 1;
   for (const candidate of candidates) {
     // The distance is at least the length difference, so this skips the
     // quadratic computation for a key that cannot be close (e.g. a huge one).
-    if (Math.abs(candidate.length - needle.length) > MAX_DISTANCE) continue;
+    if (Math.abs(candidate.length - needle.length) > maxDistance) continue;
     const distance = editDistance(needle, candidate.toLowerCase());
     if (distance < bestDistance) {
       best = candidate;

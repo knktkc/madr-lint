@@ -28,6 +28,12 @@ madr-lint.config.cjs
 [`jiti`](https://github.com/unjs/jiti) を通じて読み込まれるため、TypeScript も
 両方のモジュールシステムもビルドステップなしで動作します。
 
+TypeScript / JavaScript の設定ファイルは、設定オブジェクトをデフォルトエクスポートにします
+（`export default {...}` または `module.exports = {...}`）。デフォルトエクスポートがない
+モジュールは、エクスポート全体が設定として読まれます。そのため `export const rules = {...}`
+は `rules` を設定しますが、`export const config = {...}` は未知のキーになります
+（[未知の名前](#未知の名前)を参照）。
+
 > **設定ファイルはコードです。** TypeScript/JavaScript の設定ファイルは読み込み時に
 > **実行**されます — ESLint の設定と同じ信頼モデルです。`--config` で指定するパスや
 > 設定ファイルは、信頼できるソースのものだけを使用してください。
@@ -85,6 +91,9 @@ JSON での同等の記述（`.madrlintrc.json`）:
 | `cache` | `boolean` | `true` | ファイル単位のコンテンツハッシュキャッシュを有効にします。 |
 | `cacheLocation` | `string` | `'.madr-lint/cache'` | キャッシュマニフェストのディレクトリ。 |
 
+設定はオブジェクトである必要があり、上記以外のトップレベルキーは設定エラーです
+（[未知の名前](#未知の名前)を参照）。
+
 ## ルールの設定
 
 `rules` の各エントリは、ルール名を**重大度の文字列**または `[severity, options]` の
@@ -118,16 +127,68 @@ Invalid rule options in config: Invalid options for rule madr/filename-format: d
 
 ### 未知の名前
 
-`rules` に madr-lint が知らないルール名を書いた場合や、`extends` にプリセットではない
-値を書いた場合も、終了コード `2` で失敗します。`'off'` を指定したルールも対象です。
-近い既知の名前がある場合、メッセージはその名前を提案します。ない場合は、既知のプリセットを
-列挙するか、[ルールリファレンス](/ja/rules/)へのリンクを示します。設定内の問題はすべて
-まとめて表示されます。
+[上の表](#トップレベルのオプション)にないトップレベルキー、`rules` に書いた madr-lint が
+知らないルール名、`extends` に書いたプリセットではない値も、終了コード `2` で失敗します。
+`'off'` を指定したルールや、`$schema` のようなキーも対象です。継承した列挙可能なキー
+（`Object.create({...})`）も、自身のキーと同じく扱います。ただし、依存パッケージが
+`Object.prototype` に追加した列挙可能なプロパティは数えません。近い既知の名前がある場合、
+メッセージはその名前を提案します。ない場合は、既知のキーやプリセットを列挙するか、
+[ルールリファレンス](/ja/rules/)へのリンクを示します。設定内の問題はすべてまとめて表示されます。
 
 ```text
 Invalid config (2 problems):
   - Unknown preset "madr-lint:recomended" in extends. Did you mean "madr-lint:recommended"?
   - Unknown rule "madr/status-enmu" in rules. Did you mean "madr/status-enum"?
+```
+
+トップレベルキーの綴りの誤りも同じ形式で報告されます。
+
+```text
+Invalid config (2 problems):
+  - Unknown key "adrdir" in the config. Did you mean "adrDir"?
+  - Unknown key "rule" in the config. Did you mean "rules"?
+```
+
+TypeScript / JavaScript の設定ファイルにデフォルトエクスポートがない場合、メッセージの最後に
+1 行追加されることがあります。未知のエクスポートの中に設定のように見えるもの（値が既知の
+設定キーを持つオブジェクト）があれば、その名前を示し、デフォルトエクスポートにするよう案内します。
+`export const config = { rules: {...} }` の場合は次のとおりです。
+
+```text
+Unknown key "config" in the config. Known keys: "extends", "madrVersion", "adrDir", "rules", "ignorePatterns", "cache", "cacheLocation".
+The export "config" looks like a config. Export it as the default: `export default config` (ESM) or `module.exports = config` (CommonJS).
+```
+
+設定のように見えるエクスポートがない場合、ESM 構文で書かれたモジュールには代わりに次の行が
+表示されます。
+
+```text
+The config file has no default export, so its exports were read as the config.
+```
+
+プレーンな CommonJS の `module.exports = {...}` は、そのオブジェクトがデフォルトエクスポートです。
+そのため、`module.exports = { config: { rules: {...} } }` のように設定のように見えるキーがない限り、
+追加の行は表示されません。JSON の設定ファイルと、デフォルトエクスポートがあるモジュールには、
+どちらの行も表示されません。
+
+TypeScript / JavaScript の設定ファイルでは、モジュールの相互運用で付くキーを設定キーとして扱いません。
+対象は `__esModule` と、設定自身を指す `default` キー（`module.exports = config; module.exports.default = config`）
+です。そのようなモジュールを設定にスプレッドした場合（`export default { ...base }`）のように、自分自身を
+`default` に持つオブジェクトを指す `default` キーも対象です。JSON の設定ファイルでは、どちらも未知のキーです。
+
+オブジェクトではない設定も、終了コード `2` で失敗します。関数（`export default () => ({...})`。
+静的フィールドを持つクラスのように設定のプロパティを持つ関数も含みます）、
+`undefined`（`export default undefined`）、`null`、配列、文字列や数値が対象です。
+
+```text
+The config must be an object, not a function.
+```
+
+非同期の設定（`export default (async () => ({...}))()` のように Promise を設定にしたもの）は
+サポートしていません。
+
+```text
+The config must be an object, not a Promise. Async configs are not supported: export the config object itself.
 ```
 
 `--config` を指定した場合、メッセージの先頭に `Failed to load config "<path>": ` が付きます。
