@@ -1,6 +1,6 @@
 ---
 status: accepted
-date: 2026-05-07
+date: 2026-11-13
 decision-makers:
   - knktkc (t.kaneko)
 consulted: []
@@ -246,6 +246,7 @@ Running the linter against a real corpus surfaced the following corrections to t
 
 ## Links
 
+- [ADR-0011](./0011-madr-version-selects-metadata-source.md): `madrVersion` selects the metadata source. The combined view and the conflict resolution in this ADR apply under `auto` only (added 2026-11-13)
 - [ADR-0002](./0002-ast-parsing-strategy.md): AST parsing strategy
 - [ADR-0005](./0005-project-rule-api.md): project rule API
 - MADR v2 template: `https://github.com/adr/madr/tree/v2.1.2`
