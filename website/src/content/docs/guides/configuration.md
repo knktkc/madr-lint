@@ -133,7 +133,8 @@ Invalid rule options in config: Invalid options for rule madr/filename-format: d
 A top-level key that is not in the [table above](#top-level-options), a rule
 name in `rules` that madr-lint does not know, or an `extends` entry that is not
 a preset also fails with exit code `2`. This includes a rule set to `'off'` and
-keys such as `$schema`. When a known name is close, the message suggests it.
+keys such as `$schema`. Inherited enumerable keys (`Object.create({...})`)
+count like own keys. When a known name is close, the message suggests it.
 Otherwise it lists the known keys or presets, or links to the
 [Rules reference](/rules/). Every problem in the config is listed at once:
 
@@ -151,16 +152,31 @@ Invalid config (2 problems):
   - Unknown key "rule" in the config. Did you mean "rules"?
 ```
 
-When a TypeScript or JavaScript config has no default export and an unknown
-key, the message also says to export the config as the default. A CommonJS
-config with an unknown key always gets this hint, because
-`module.exports = {...}` and `exports.config = ...` look the same at runtime.
-For `export const config = {...}`:
+When a TypeScript or JavaScript config has no default export, the message can
+end with one more line. If an unknown export looks like a config (its value is
+an object with a known config key), the line names it and says to export it as
+the default. For `export const config = { rules: {...} }`:
 
 ```text
 Unknown key "config" in the config. Known keys: "extends", "madrVersion", "adrDir", "rules", "ignorePatterns", "cache", "cacheLocation".
-The config file has no default export, so its exports were read as the config. If the config is a named export, make it the default: `export default config` (ESM) or `module.exports = config` (CommonJS).
+The export "config" looks like a config. Export it as the default: `export default config` (ESM) or `module.exports = config` (CommonJS).
 ```
+
+If no export looks like a config, a module written in ESM syntax gets this line
+instead:
+
+```text
+The config file has no default export, so its exports were read as the config.
+```
+
+A plain CommonJS `module.exports = {...}` gets no extra line, because that
+object is its default export. JSON configs and modules with a default export
+never get either line.
+
+Two keys that module interop adds are not config keys in a TypeScript or
+JavaScript config: `__esModule`, and a `default` key that points back at the
+config itself (`module.exports = config; module.exports.default = config`). In
+a JSON config, both are unknown keys.
 
 A config that is not an object also fails with exit code `2`. This covers a
 function (`export default () => ({...})`), `undefined`
@@ -168,6 +184,13 @@ function (`export default () => ({...})`), `undefined`
 
 ```text
 The config must be an object, not a function.
+```
+
+An async config (a Promise as the config, such as
+`export default (async () => ({...}))()`) is not supported:
+
+```text
+The config must be an object, not a Promise. Async configs are not supported: export the config object itself.
 ```
 
 With `--config`, the message starts with `Failed to load config "<path>": `.

@@ -129,7 +129,8 @@ Invalid rule options in config: Invalid options for rule madr/filename-format: d
 
 [上の表](#トップレベルのオプション)にないトップレベルキー、`rules` に書いた madr-lint が
 知らないルール名、`extends` に書いたプリセットではない値も、終了コード `2` で失敗します。
-`'off'` を指定したルールや、`$schema` のようなキーも対象です。近い既知の名前がある場合、
+`'off'` を指定したルールや、`$schema` のようなキーも対象です。継承した列挙可能なキー
+（`Object.create({...})`）も、自身のキーと同じく扱います。近い既知の名前がある場合、
 メッセージはその名前を提案します。ない場合は、既知のキーやプリセットを列挙するか、
 [ルールリファレンス](/ja/rules/)へのリンクを示します。設定内の問題はすべてまとめて表示されます。
 
@@ -147,21 +148,43 @@ Invalid config (2 problems):
   - Unknown key "rule" in the config. Did you mean "rules"?
 ```
 
-TypeScript / JavaScript の設定ファイルにデフォルトエクスポートがなく、未知のキーがある場合は、
-設定をデフォルトエクスポートにするよう案内する文も表示されます。CommonJS の設定ファイルでは、
-未知のキーがあれば常にこの案内が表示されます。実行時には `module.exports = {...}` と
-`exports.config = ...` を区別できないためです。`export const config = {...}` の場合は次のとおりです。
+TypeScript / JavaScript の設定ファイルにデフォルトエクスポートがない場合、メッセージの最後に
+1 行追加されることがあります。未知のエクスポートの中に設定のように見えるもの（値が既知の
+設定キーを持つオブジェクト）があれば、その名前を示し、デフォルトエクスポートにするよう案内します。
+`export const config = { rules: {...} }` の場合は次のとおりです。
 
 ```text
 Unknown key "config" in the config. Known keys: "extends", "madrVersion", "adrDir", "rules", "ignorePatterns", "cache", "cacheLocation".
-The config file has no default export, so its exports were read as the config. If the config is a named export, make it the default: `export default config` (ESM) or `module.exports = config` (CommonJS).
+The export "config" looks like a config. Export it as the default: `export default config` (ESM) or `module.exports = config` (CommonJS).
 ```
+
+設定のように見えるエクスポートがない場合、ESM 構文で書かれたモジュールには代わりに次の行が
+表示されます。
+
+```text
+The config file has no default export, so its exports were read as the config.
+```
+
+プレーンな CommonJS の `module.exports = {...}` には追加の行は表示されません。そのオブジェクトが
+デフォルトエクスポートだからです。JSON の設定ファイルと、デフォルトエクスポートがあるモジュールには、
+どちらの行も表示されません。
+
+TypeScript / JavaScript の設定ファイルでは、モジュールの相互運用で付くキーを設定キーとして扱いません。
+対象は `__esModule` と、設定自身を指す `default` キー（`module.exports = config; module.exports.default = config`）
+です。JSON の設定ファイルでは、どちらも未知のキーです。
 
 オブジェクトではない設定も、終了コード `2` で失敗します。関数（`export default () => ({...})`）、
 `undefined`（`export default undefined`）、`null`、配列、文字列や数値が対象です。
 
 ```text
 The config must be an object, not a function.
+```
+
+非同期の設定（`export default (async () => ({...}))()` のように Promise を設定にしたもの）は
+サポートしていません。
+
+```text
+The config must be an object, not a Promise. Async configs are not supported: export the config object itself.
 ```
 
 `--config` を指定した場合、メッセージの先頭に `Failed to load config "<path>": ` が付きます。
