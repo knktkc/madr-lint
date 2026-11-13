@@ -252,7 +252,9 @@ the selected source. With `v3` or `v4`, a status and date written in a body list
 are not read, so `madr/status-enum` and `madr/date-iso8601` report them as
 missing. With `v2`, frontmatter is not
 read. [`madr/metadata-format`](/rules/metadata-format/) reports a file whose
-metadata is in the format the configured version does not read.
+metadata is in the format the configured version does not read. One case is
+not reported: with `v3` or `v4`, a body list next to MADR frontmatter counts as
+body content, so its fields are not read and the rule stays silent.
 
 A rule runs only for the versions it supports. `madr/supersedes-bidirectional`
 supports v3 and v4, so it does not run with `madrVersion: 'v2'`. Under `auto`,
