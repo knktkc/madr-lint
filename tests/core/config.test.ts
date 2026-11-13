@@ -53,6 +53,23 @@ function configError(config: MadrLintConfig): string {
   throw new Error('expected resolveExtends to throw');
 }
 
+// Adds an enumerable property to Object.prototype for one callback, as a
+// careless dependency might, and always removes it again.
+function withObjectPrototypeKey<T>(key: string, value: unknown, run: () => T): T {
+  // oxlint-disable-next-line no-extend-native -- the pollution is the input under test
+  Object.defineProperty(Object.prototype, key, {
+    value,
+    enumerable: true,
+    configurable: true,
+    writable: true,
+  });
+  try {
+    return run();
+  } finally {
+    delete (Object.prototype as Record<string, unknown>)[key];
+  }
+}
+
 function loadError(load: () => unknown): string {
   try {
     load();
@@ -630,6 +647,49 @@ describe('core/config', () => {
       expect(resolveExtends(Object.create(proto) as MadrLintConfig).adrDir).toBe('docs/adr');
     });
 
+    // A dependency's enumerable addition to Object.prototype is not something
+    // the user can fix in the config, so it is not read as a config key.
+    describe('enumerable keys added to Object.prototype', () => {
+      it('ignores them in an empty and a JSON-parsed config', () => {
+        withObjectPrototypeKey('polluted', 1, () => {
+          expect(resolveExtends({})).toEqual(
+            expect.objectContaining({ adrDir: 'docs/adr', rules: {} }),
+          );
+          expect(resolveExtends(JSON.parse('{"rules":{}}') as unknown).rules).toEqual({});
+        });
+      });
+
+      it('still reports an own key of the same name', () => {
+        withObjectPrototypeKey('polluted', 1, () => {
+          expect(configError(JSON.parse('{"polluted":1}') as MadrLintConfig)).toBe(
+            `Unknown key "polluted" in the config. Known keys: ${KNOWN_KEYS}.`,
+          );
+        });
+      });
+
+      it('still reports keys inherited from another prototype', () => {
+        withObjectPrototypeKey('polluted', 1, () => {
+          expect(configError(Object.create({ rule: {} }) as MadrLintConfig)).toBe(
+            'Unknown key "rule" in the config. Did you mean "rules"?',
+          );
+        });
+      });
+
+      it('still reports own Object.prototype names in JSON', () => {
+        withObjectPrototypeKey('polluted', 1, () => {
+          const raw = JSON.parse('{"constructor":1,"toString":2,"__proto__":{}}') as unknown;
+          expect(configError(raw as MadrLintConfig)).toBe(
+            [
+              'Invalid config (3 problems):',
+              `  - Unknown key "constructor" in the config. Known keys: ${KNOWN_KEYS}.`,
+              `  - Unknown key "toString" in the config. Known keys: ${KNOWN_KEYS}.`,
+              `  - Unknown key "__proto__" in the config. Known keys: ${KNOWN_KEYS}.`,
+            ].join('\n'),
+          );
+        });
+      });
+    });
+
     it('reports a config whose prototype cannot be read as a config error', () => {
       const hostile = new Proxy(
         { adrDir: 'x' },
@@ -1039,6 +1099,14 @@ describe('core/config', () => {
 
       // An explicit, enumerable `exports.__esModule = true` declares ESM interop
       // just like jiti's own marker, so the module counts as ESM-shaped.
+      // Every object would otherwise inherit a known key and look like a config.
+      it('does not count a known key added to Object.prototype as looking like a config', () => {
+        const [message] = withObjectPrototypeKey('rules', {}, () =>
+          bothLoadErrors('madr-lint.config.cjs', 'exports.helper = { a: 1 };\n'),
+        );
+        expect(message).toBe(`Unknown key "helper" in the config. Known keys: ${KNOWN_KEYS}.`);
+      });
+
       it('adds the generic note for CommonJS with an enumerable __esModule flag', () => {
         const [message] = bothLoadErrors(
           'madr-lint.config.cjs',
