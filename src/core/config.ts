@@ -332,10 +332,24 @@ function isThenable(value: unknown): boolean {
 /**
  * Keys a module system adds, not the user: `__esModule` from transpiled
  * modules, and `default` pointing back at the object (`module.exports = c;
- * module.exports.default = c`).
+ * module.exports.default = c`). Spreading such a module (`{ ...base }`)
+ * copies a `default` that points at the module instead, so an object whose
+ * own `default` is itself counts too.
  */
 function isModuleInteropKey(config: object, key: string): boolean {
-  return key === '__esModule' || (key === 'default' && tryGet(config, 'default') === config);
+  if (key === '__esModule') return true;
+  if (key !== 'default') return false;
+  const value = tryGet(config, 'default');
+  return value === config || isSelfReferencingDefault(value);
+}
+
+function isSelfReferencingDefault(value: unknown): boolean {
+  if (typeof value !== 'object' || value === null) return false;
+  try {
+    return Object.hasOwn(value, 'default') && (value as { default: unknown }).default === value;
+  } catch {
+    return false;
+  }
 }
 
 function looksLikeConfig(value: unknown): boolean {
