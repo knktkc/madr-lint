@@ -1027,11 +1027,28 @@ describe('core/config', () => {
       });
 
       it.for([
-        ['export default Promise.resolve({ rules: {} });\n'],
-        ['export default (async () => ({ rules: {} }))();\n'],
-      ] as const)('rejects an async config: %j', ([content]) => {
+        ['madr-lint.config.mjs', 'export default Promise.resolve({ rules: {} });\n'],
+        ['madr-lint.config.mjs', 'export default (async () => ({ rules: {} }))();\n'],
+        // jiti hands a Promise from module.exports back unwrapped, so this one
+        // arrives as a module without a default export.
+        ['madr-lint.config.cjs', 'module.exports = (async () => ({ rules: {} }))();\n'],
+      ] as const)('rejects an async config in %s: %j', ([name, content]) => {
         const expected = PROMISE_ERROR;
-        expect(bothLoadErrors('madr-lint.config.mjs', content)).toEqual([expected, expected]);
+        expect(bothLoadErrors(name, content)).toEqual([expected, expected]);
+      });
+
+      // An explicit, enumerable `exports.__esModule = true` declares ESM interop
+      // just like jiti's own marker, so the module counts as ESM-shaped.
+      it('adds the generic note for CommonJS with an enumerable __esModule flag', () => {
+        const [message] = bothLoadErrors(
+          'madr-lint.config.cjs',
+          'exports.__esModule = true;\nexports.rule = {};\n',
+        );
+        expect(message).toBe(
+          ['Unknown key "rule" in the config. Did you mean "rules"?', NO_DEFAULT_EXPORT_NOTE].join(
+            '\n',
+          ),
+        );
       });
 
       it('rejects unknown keys in .madrlintrc.json without the hint', () => {
