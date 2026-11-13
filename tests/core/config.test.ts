@@ -311,7 +311,7 @@ describe('core/config', () => {
       expect(() => loadConfig(dir)).toThrow(/madr-lint:recommended[\s\S]*madr\/status-enum/);
     });
 
-    it('rejects the issue #206 reproduction from a discovered TS config', () => {
+    it('rejects the issue #206 reproduction from a discovered JS module config', () => {
       writeFileSync(
         join(dir, 'madr-lint.config.mjs'),
         `export default ${JSON.stringify(ISSUE_206_CONFIG)};`,
