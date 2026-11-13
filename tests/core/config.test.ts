@@ -234,9 +234,11 @@ describe('core/config', () => {
       });
 
       // These worked before #206, so they must keep working.
-      it('treats extends: null and rules: null as absent', () => {
-        expect(resolveExtends(asConfig({ extends: null })).rules).toEqual({});
-        expect(resolveExtends(asConfig({ rules: null })).rules).toEqual({});
+      // One rule for top-level values and extends entries alike: null,
+      // undefined, and false mean "absent" (`rules: ci && {...}`).
+      it.for([null, undefined, false])('treats %s as absent for top-level extends and rules', (value) => {
+        expect(resolveExtends(asConfig({ extends: value })).rules).toEqual({});
+        expect(resolveExtends(asConfig({ rules: value })).rules).toEqual({});
       });
 
       it('skips null, undefined, and false extends entries (the `cond && preset` idiom)', () => {
@@ -292,6 +294,10 @@ describe('core/config', () => {
         ['an array', ['madr/status-enum'], '["madr/status-enum"]'],
         ['a string', 'madr/status-enum', '"madr/status-enum"'],
         ['a number', 1, '1'],
+        ['zero', 0, '0'],
+        ['an empty string', '', '""'],
+        ['an empty array', [], '[]'],
+        ['true', true, 'true'],
       ] as const)('reports rules given as %s as one problem', ([, rules, shown]) => {
         expect(configError(asConfig({ rules }))).toBe(
           `Invalid rules ${shown}: use an object that maps rule IDs to severities.`,
@@ -310,14 +316,70 @@ describe('core/config', () => {
         );
       });
 
+      // Without the length check in closestMatch this input takes several
+      // seconds; with it, a few milliseconds. The bound leaves room for a
+      // loaded CI runner.
       it('handles a very long rule key quickly and truncates it in the message', () => {
-        const key = `madr/${'x'.repeat(200_000)}`;
+        const key = `madr/${'x'.repeat(1_000_000)}`;
         const started = performance.now();
         const message = configError({ rules: { [key]: 'error' } });
-        expect(performance.now() - started).toBeLessThan(200);
+        expect(performance.now() - started).toBeLessThan(2000);
         expect(message).not.toContain('Did you mean');
         expect(message).toContain(`"madr/${'x'.repeat(75)}…"`);
         expect(message.length).toBeLessThan(250);
+      });
+
+      it.for([
+        ['0', 0, 'Invalid extends 0: use a preset name or a list of preset names.'],
+        ['true', true, 'Invalid extends true: use a preset name or a list of preset names.'],
+        ["''", '', 'Unknown preset "" in extends. Known presets: "madr-lint:recommended".'],
+      ] as const)('still rejects extends: %s', ([, value, expected]) => {
+        expect(configError(asConfig({ extends: value }))).toBe(expected);
+      });
+
+      it('reports a revoked Proxy as an unprintable value', () => {
+        const { proxy, revoke } = Proxy.revocable({}, {});
+        revoke();
+        expect(configError(asConfig({ extends: [proxy] }))).toBe(
+          'Unknown preset an unprintable value in extends. Known presets: "madr-lint:recommended".',
+        );
+        expect(configError(asConfig({ extends: proxy }))).toBe(
+          'Invalid extends an unprintable value: use a preset name or a list of preset names.',
+        );
+        expect(configError(asConfig({ rules: proxy }))).toBe(
+          'Invalid rules an unprintable value: use an object that maps rule IDs to severities.',
+        );
+      });
+
+      it('reports a value whose toJSON and toStringTag throw as an unprintable value', () => {
+        const hostile = {
+          toJSON(): never {
+            throw new Error('j');
+          },
+          get [Symbol.toStringTag](): never {
+            throw new Error('t');
+          },
+        };
+        expect(configError(asConfig({ extends: [hostile] }))).toContain(
+          'Unknown preset an unprintable value in extends.',
+        );
+      });
+
+      // A high surrogate left without its pair prints as a broken character.
+      const LONE_SURROGATE = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/;
+
+      it('does not cut a string value inside a surrogate pair', () => {
+        const message = configError({ rules: { [`${'x'.repeat(79)}😀`]: 'error' } });
+        expect(message).toContain(`"${'x'.repeat(79)}…"`);
+        expect(message).not.toMatch(LONE_SURROGATE);
+      });
+
+      it('does not cut a symbol description inside a surrogate pair', () => {
+        const message = configError(
+          asConfig({ extends: [Symbol(`${'x'.repeat(72)}😀`)] }),
+        );
+        expect(message).toContain(`Symbol(${'x'.repeat(72)}…`);
+        expect(message).not.toMatch(LONE_SURROGATE);
       });
 
       it('does not truncate a realistic rule ID', () => {

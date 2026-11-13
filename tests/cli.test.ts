@@ -739,7 +739,7 @@ describe('cli (end-to-end)', () => {
       expect(r.stderr).not.toContain('TypeError');
     }, 30_000);
 
-    it('exits 0 for extends: null in a discovered config', () => {
+    it('exits 0 for extends: null in an explicit --config', () => {
       writeFileSync(join(dir, '.madrlintrc.json'), JSON.stringify({ extends: null }));
       writeFileSync(join(dir, '0001-a.md'), '# x\n');
       const r = runCli(dir, ['--no-cache', '--config', '.madrlintrc.json', '0001-a.md']);
