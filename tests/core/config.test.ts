@@ -14,7 +14,8 @@ import { renderConfig } from '../../src/core/init.js';
 import type { MadrLintConfig } from '../../src/index.js';
 import * as builtinRules from '../../src/rules/index.js';
 
-const SRC_INDEX = join(import.meta.dirname, '../../src/index.ts');
+// Forward slashes so the path also works as an import specifier on Windows.
+const SRC_INDEX = join(import.meta.dirname, '../../src/index.ts').replaceAll('\\', '/');
 
 // The exact reproduction from issue #206.
 const ISSUE_206_CONFIG = {
