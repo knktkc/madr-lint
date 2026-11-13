@@ -240,7 +240,7 @@ export default defineConfig({
 | `v2` | タイトルの下の本文リストのみ（`* Status:` / `- **Status**:`） | v2 |
 | `v3` / `v4` | YAML frontmatter のみ | v3 / v4 |
 
-`madr/status-enum` や `madr/date-iso8601` のようなメタデータを読むルールは、選択された読み取り元を読みます。`v3` または `v4` では本文リストに書いた status と date は読まれないため、`madr/status-enum` と `madr/date-iso8601` はそれらがないと報告します。`v2` では frontmatter は読まれません。設定した版が読み取らない形式でメタデータを書いたファイルは、[`madr/metadata-format`](/ja/rules/metadata-format/) が報告します。
+`madr/status-enum` や `madr/date-iso8601` のようなメタデータを読むルールは、選択された読み取り元を読みます。`v3` または `v4` では本文リストに書いた status と date は読まれないため、`madr/status-enum` と `madr/date-iso8601` はそれらがないと報告します。`v2` では frontmatter は読まれません。設定した版が読み取らない形式でメタデータを書いたファイルは、[`madr/metadata-format`](/ja/rules/metadata-format/) が報告します。ただし `v3` または `v4` では、MADR の項目を含む frontmatter と並んだ本文リストは本文として扱います。このリストの項目は読まれず、このルールも報告しません。
 
 ルールは、対応する版でだけ実行されます。`madr/supersedes-bidirectional` は v3 と v4 に対応するため、`madrVersion: 'v2'` では実行されません。`auto` では、ファイル単位のルールは対応外の版と判定したファイルを飛ばします。ファイル間のルールは、ファイル間の参照が欠けないよう、すべてのファイルを対象にします。メタデータがないファイルは版を判定できないため、すべてのルールを実行します。
 

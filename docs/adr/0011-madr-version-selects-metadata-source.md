@@ -1,6 +1,6 @@
 ---
 status: accepted
-date: 2026-11-11
+date: 2026-11-13
 decision-makers:
   - knktkc (t.kaneko)
 consulted: []
@@ -77,7 +77,8 @@ Three decisions follow from these.
   only and skip every project rule. Config loading rejects it and the CLI exits with
   code 2.
 - **`madr-lint init` writes `auto` for a mixed directory.** Any fixed version would leave
-  the metadata of some files unread.
+  the metadata of some files unread. The mix may be across files or within one file that
+  carries both MADR frontmatter and a body list (added 2026-11-13).
 
 ## Consequences
 

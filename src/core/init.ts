@@ -53,14 +53,24 @@ export function detectAdrDir(cwd: string): AdrDirDetection {
   return { adrDir: 'docs/adr', source: 'fallback' };
 }
 
+interface FileVersionVote {
+  version: MadrVersion;
+  /** MADR frontmatter AND a body metadata list in the same file. */
+  mixed: boolean;
+}
+
 /**
  * Per-file MADR version detection: the parser's `auto` detection (see
  * `detectVersion`), which the linter also uses for `madrVersion: 'auto'`.
- * A file with no metadata casts no vote.
+ * A file with no metadata casts no vote. `mixed` flags a v3/v4 file whose
+ * body also carries list metadata: `detectVersion` calls it v3/v4, but a
+ * fixed v3/v4 reads frontmatter only and would drop the list's fields.
  */
-function detectFileVersion(content: string): MadrVersion | null {
+function detectFileVersion(content: string): FileVersionVote | null {
   try {
-    return parseFile(content).version;
+    const { version, listMetadata } = parseFile(content);
+    if (!version) return null;
+    return { version, mixed: version !== 'v2' && listMetadata !== null };
   } catch {
     return null; // unparseable (e.g. malformed YAML) — no vote
   }
@@ -70,8 +80,8 @@ function detectFileVersion(content: string): MadrVersion | null {
  * Detect the dominant MADR version of an ADR directory by sampling up to 20
  * `NNNN-*.md` files (lexicographically first, for determinism) and letting
  * the majority win. An empty directory, no recognizable metadata, a mix of
- * body-list and frontmatter files, or an exact tie yields `'auto'` — the
- * config default, safe for mixed vintages.
+ * body-list and frontmatter metadata (across files, or within one file), or
+ * an exact tie yields `'auto'` — the config default, safe for mixed vintages.
  */
 export function detectMadrVersion(
   cwd: string,
@@ -100,8 +110,12 @@ export function detectMadrVersion(
     } catch {
       continue;
     }
-    const version = detectFileVersion(content);
-    if (version) votes[version]++;
+    const vote = detectFileVersion(content);
+    if (!vote) continue;
+    // A fixed version reads one metadata format only (#207), so a file that
+    // carries both would lose one of them whatever the majority says.
+    if (vote.mixed) return 'auto';
+    votes[vote.version]++;
   }
 
   const max = Math.max(votes.v2, votes.v3, votes.v4);
