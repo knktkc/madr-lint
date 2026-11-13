@@ -79,6 +79,12 @@ function expectIssue206Error(r: CliResult): void {
   expect(r.stdout).toBe('');
 }
 
+function expectConfigError(r: CliResult, stderr: string): void {
+  expect(r.stderr).toBe(stderr);
+  expect(r.stdout).toBe('');
+  expect(r.status).toBe(2);
+}
+
 describe('cli (end-to-end)', () => {
   let dir: string;
 
@@ -744,6 +750,105 @@ describe('cli (end-to-end)', () => {
       writeFileSync(join(dir, '0001-a.md'), '# x\n');
       const r = runCli(dir, ['--no-cache', '--config', '.madrlintrc.json', '0001-a.md']);
       expect(r.status).toBe(0);
+    }, 30_000);
+  });
+
+  // Before #222 these configs were ignored and the run linted with defaults.
+  describe('unknown top-level keys and config shape (#222)', () => {
+    const KNOWN_KEYS =
+      '"extends", "madrVersion", "adrDir", "rules", "ignorePatterns", "cache", "cacheLocation"';
+    const NO_DEFAULT_EXPORT_HINT =
+      'The config file has no default export, so its exports were read as the config. If the config is a named export, make it the default: `export default config` (ESM) or `module.exports = config` (CommonJS).';
+    // The issue reproduction: the config sits in a named export.
+    const NAMED_EXPORT_CONFIG =
+      'export const config = { rules: { "madr/filename-format": "off" } };\n';
+    const NAMED_EXPORT_ERROR = `Unknown key "config" in the config. Known keys: ${KNOWN_KEYS}.\n${NO_DEFAULT_EXPORT_HINT}\n`;
+
+    it('exits 2 for a named-export-only madr-lint.config.ts', () => {
+      writeFileSync(join(dir, 'madr-lint.config.ts'), NAMED_EXPORT_CONFIG);
+      writeFileSync(join(dir, 'wrong.md'), '# x\n');
+      expectConfigError(runCli(dir, ['--no-cache', 'wrong.md']), NAMED_EXPORT_ERROR);
+    }, 30_000);
+
+    it('exits 2 for a named-export-only config given with --config', () => {
+      writeFileSync(join(dir, 'custom.config.ts'), NAMED_EXPORT_CONFIG);
+      writeFileSync(join(dir, 'wrong.md'), '# x\n');
+      expectConfigError(
+        runCli(dir, ['--no-cache', '--config', 'custom.config.ts', 'wrong.md']),
+        `Failed to load config "custom.config.ts": ${NAMED_EXPORT_ERROR}`,
+      );
+    }, 30_000);
+
+    it.for([
+      ['madr-lint.config.mjs', NAMED_EXPORT_CONFIG],
+      ['madr-lint.config.cjs', 'exports.config = { rules: { "madr/filename-format": "off" } };\n'],
+    ] as const)('exits 2 for a named-export-only %s', { timeout: 30_000 }, ([name, content]) => {
+      writeFileSync(join(dir, name), content);
+      writeFileSync(join(dir, 'wrong.md'), '# x\n');
+      expectConfigError(runCli(dir, ['--no-cache', 'wrong.md']), NAMED_EXPORT_ERROR);
+    });
+
+    it.for([
+      ['export default () => ({ rules: {} });\n', 'a function'],
+      ['export default undefined;\n', 'undefined'],
+    ] as const)('exits 2 for %j', { timeout: 30_000 }, ([content, shown]) => {
+      writeFileSync(join(dir, 'madr-lint.config.mjs'), content);
+      writeFileSync(join(dir, 'custom.mjs'), content);
+      writeFileSync(join(dir, 'wrong.md'), '# x\n');
+      const message = `The config must be an object, not ${shown}.`;
+      expectConfigError(runCli(dir, ['--no-cache', 'wrong.md']), `${message}\n`);
+      expectConfigError(
+        runCli(dir, ['--no-cache', '--config', 'custom.mjs', 'wrong.md']),
+        `Failed to load config "custom.mjs": ${message}\n`,
+      );
+    });
+
+    it('exits 2 for unknown keys in .madrlintrc.json, discovered and with --config', () => {
+      const content = '{ "rule": { "madr/filename-format": "off" }, "adrdir": "x" }\n';
+      writeFileSync(join(dir, '.madrlintrc.json'), content);
+      writeFileSync(join(dir, 'custom.json'), content);
+      writeFileSync(join(dir, 'wrong.md'), '# x\n');
+      const message = [
+        'Invalid config (2 problems):',
+        '  - Unknown key "rule" in the config. Did you mean "rules"?',
+        '  - Unknown key "adrdir" in the config. Did you mean "adrDir"?',
+      ].join('\n');
+      expectConfigError(runCli(dir, ['--no-cache', 'wrong.md']), `${message}\n`);
+      expectConfigError(
+        runCli(dir, ['--no-cache', '--config', 'custom.json', 'wrong.md']),
+        `Failed to load config "custom.json": ${message}\n`,
+      );
+    }, 30_000);
+
+    it('exits 2 for a JSON config that is an array', () => {
+      writeFileSync(join(dir, '.madrlintrc.json'), '[]\n');
+      writeFileSync(join(dir, 'wrong.md'), '# x\n');
+      expectConfigError(
+        runCli(dir, ['--no-cache', 'wrong.md']),
+        'The config must be an object, not [].\n',
+      );
+    }, 30_000);
+
+    it('applies named exports that are all known keys', () => {
+      writeFileSync(
+        join(dir, 'madr-lint.config.mjs'),
+        'export const rules = { "madr/filename-format": "off", "madr/required-sections": "off" };\n',
+      );
+      writeFileSync(join(dir, 'wrong.md'), '# x\n');
+      const r = runCli(dir, ['--no-cache', 'wrong.md']);
+      expect(r.stderr).toBe('');
+      expect(r.status).toBe(0);
+    }, 30_000);
+
+    it('lints with the config that init writes', () => {
+      mkdirSync(join(dir, 'docs', 'adr'), { recursive: true });
+      writeFileSync(join(dir, 'docs', 'adr', '0001-a.md'), '# x\n');
+      expect(runCli(dir, ['init']).status).toBe(0);
+      expect(existsSync(join(dir, '.madrlintrc.json'))).toBe(true);
+      const r = runCli(dir, ['--no-cache']);
+      expect(r.stderr).toBe('');
+      expect(r.status).toBe(1);
+      expect(r.stdout).toContain('madr/required-sections');
     }, 30_000);
   });
 });
