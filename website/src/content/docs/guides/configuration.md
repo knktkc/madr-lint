@@ -152,8 +152,10 @@ Invalid config (2 problems):
 ```
 
 When a TypeScript or JavaScript config has no default export and an unknown
-key, the message also says to export the config as the default. For
-`export const config = {...}`:
+key, the message also says to export the config as the default. A CommonJS
+config with an unknown key always gets this hint, because
+`module.exports = {...}` and `exports.config = ...` look the same at runtime.
+For `export const config = {...}`:
 
 ```text
 Unknown key "config" in the config. Known keys: "extends", "madrVersion", "adrDir", "rules", "ignorePatterns", "cache", "cacheLocation".

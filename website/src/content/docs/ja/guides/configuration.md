@@ -148,8 +148,9 @@ Invalid config (2 problems):
 ```
 
 TypeScript / JavaScript の設定ファイルにデフォルトエクスポートがなく、未知のキーがある場合は、
-設定をデフォルトエクスポートにするよう案内する文も表示されます。`export const config = {...}`
-の場合は次のとおりです。
+設定をデフォルトエクスポートにするよう案内する文も表示されます。CommonJS の設定ファイルでは、
+未知のキーがあれば常にこの案内が表示されます。実行時には `module.exports = {...}` と
+`exports.config = ...` を区別できないためです。`export const config = {...}` の場合は次のとおりです。
 
 ```text
 Unknown key "config" in the config. Known keys: "extends", "madrVersion", "adrDir", "rules", "ignorePatterns", "cache", "cacheLocation".

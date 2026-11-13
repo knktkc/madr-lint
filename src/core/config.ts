@@ -309,7 +309,8 @@ export function resolveExtends(raw: unknown, origin: ConfigOrigin = {}): Resolve
   const problems: string[] = [];
 
   // A key madr-lint does not read used to be dropped silently, so a typo or a
-  // config in a named export had no effect while the CLI exited 0 (#222).
+  // config in a named export had no effect and the run went on without it
+  // (#222).
   let config: MadrLintConfig = {};
   let unknownKeys = 0;
   if (typeof raw !== 'object' || raw === null || tryIsArray(raw) !== false) {
