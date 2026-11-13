@@ -26,10 +26,17 @@ const ISSUE_206_CONFIG = {
 const KNOWN_KEYS =
   '"extends", "madrVersion", "adrDir", "rules", "ignorePatterns", "cache", "cacheLocation"';
 
-// Added once, after the problems, when a JS/TS config module has no default
-// export and an unknown key (#222).
-const NO_DEFAULT_EXPORT_HINT =
-  'The config file has no default export, so its exports were read as the config. If the config is a named export, make it the default: `export default config` (ESM) or `module.exports = config` (CommonJS).';
+// At most one of these follows the problems, and only for a JS/TS module
+// without a default export (#222). The first names an unknown key whose value
+// has a known config key; the second is for ESM-shaped modules otherwise.
+function looksLikeConfigHint(key: string): string {
+  return `The export "${key}" looks like a config. Export it as the default: \`export default ${key}\` (ESM) or \`module.exports = ${key}\` (CommonJS).`;
+}
+const PROMISE_ERROR =
+  'The config must be an object, not a Promise. Async configs are not supported: export the config object itself.';
+
+const NO_DEFAULT_EXPORT_NOTE =
+  'The config file has no default export, so its exports were read as the config.';
 
 // For values a JSON or JS config can hold but the TypeScript type does not allow.
 function asConfig(raw: Record<string, unknown>): MadrLintConfig {
@@ -534,6 +541,109 @@ describe('core/config', () => {
       );
     });
 
+    // These objects are thenable on purpose: that is the input under test.
+    // oxlint-disable-next-line unicorn/no-thenable
+    const THEN = 'then';
+
+    it.for([
+      ['a resolved Promise', () => Promise.resolve({ rules: {} })],
+      ['an async function result', () => (async () => ({ rules: {} }))()],
+      ['a thenable object', () => ({ [THEN]: (): void => {}, rules: {} })],
+      ['a thenable function', () => Object.assign(() => ({}), { [THEN]: (): void => {} })],
+    ] as const)('rejects %s as the whole config', ([, make]) => {
+      expect(configError(make() as unknown as MadrLintConfig)).toBe(PROMISE_ERROR);
+    });
+
+    it('does not treat a non-callable then as a Promise', () => {
+      expect(configError(asConfig({ [THEN]: 1 }))).toBe(
+        `Unknown key "then" in the config. Known keys: ${KNOWN_KEYS}.`,
+      );
+    });
+
+    it('reads a config whose then getter throws without crashing', () => {
+      const raw = Object.defineProperty({ adrDir: 'x' }, THEN, {
+        enumerable: false,
+        get(): never {
+          throw new Error('then');
+        },
+      });
+      expect(resolveExtends(raw).adrDir).toBe('x');
+    });
+
+    // Accepted before #222 and still accepted: they have no enumerable keys.
+    it.for([
+      ['a Map', () => new Map([['rules', {}]])],
+      ['a Date', () => new Date(0)],
+      ['a RegExp', () => /x/],
+    ] as const)('accepts %s as an empty config', ([, make]) => {
+      expect(resolveExtends(make() as unknown as MadrLintConfig)).toEqual(resolveExtends({}));
+    });
+
+    it('reads config fields of a class instance and ignores its prototype getter', () => {
+      class Config {
+        adrDir = 'decisions';
+        rules = { 'madr/status-enum': 'off' as const };
+        get helper(): number {
+          return 1;
+        }
+      }
+      const config = resolveExtends(new Config());
+      expect(config.adrDir).toBe('decisions');
+      expect(config.rules).toEqual({ 'madr/status-enum': 'off' });
+    });
+
+    it('reports a class instance field that is not a config key', () => {
+      class Config {
+        rule = {};
+      }
+      expect(configError(new Config() as MadrLintConfig)).toBe(
+        'Unknown key "rule" in the config. Did you mean "rules"?',
+      );
+    });
+
+    // Inherited enumerable keys are read (`config.rules` finds them), so they
+    // are checked too.
+    it('reports an inherited unknown key', () => {
+      expect(configError(Object.create({ rule: {} }) as MadrLintConfig)).toBe(
+        'Unknown key "rule" in the config. Did you mean "rules"?',
+      );
+    });
+
+    it('reads an inherited known key', () => {
+      const raw = Object.create({ rules: { 'madr/status-enum': 'off' } }) as MadrLintConfig;
+      expect(resolveExtends(raw).rules).toEqual({ 'madr/status-enum': 'off' });
+    });
+
+    it('lists own keys before inherited ones', () => {
+      const raw = Object.assign(Object.create({ inherited: 1 }), { own: 1 }) as MadrLintConfig;
+      expect(configError(raw)).toBe(
+        [
+          'Invalid config (2 problems):',
+          `  - Unknown key "own" in the config. Known keys: ${KNOWN_KEYS}.`,
+          `  - Unknown key "inherited" in the config. Known keys: ${KNOWN_KEYS}.`,
+        ].join('\n'),
+      );
+    });
+
+    it('ignores an inherited non-enumerable key', () => {
+      const proto = Object.defineProperty({}, 'rule', { value: 1, enumerable: false });
+      expect(resolveExtends(Object.create(proto) as MadrLintConfig).adrDir).toBe('docs/adr');
+    });
+
+    it('reports a config whose prototype cannot be read as a config error', () => {
+      const hostile = new Proxy(
+        { adrDir: 'x' },
+        {
+          getPrototypeOf(): never {
+            throw new Error('no prototype');
+          },
+        },
+      );
+      expect(configError(hostile as MadrLintConfig)).toBe(
+        'Cannot list the keys of the config.',
+      );
+    });
+
     it('reports a revoked Proxy as the whole config without crashing', () => {
       const { proxy, revoke } = Proxy.revocable({}, {});
       revoke();
@@ -704,7 +814,7 @@ describe('core/config', () => {
             : 'export const config = { rules: { "madr/status-enum": "off" } };\n';
           const expected = [
             `Unknown key "config" in the config. Known keys: ${KNOWN_KEYS}.`,
-            NO_DEFAULT_EXPORT_HINT,
+            looksLikeConfigHint('config'),
           ].join('\n');
           expect(bothLoadErrors(name, content)).toEqual([expected, expected]);
         },
@@ -715,11 +825,16 @@ describe('core/config', () => {
           'madr-lint.config.js',
           'exports.config = { rules: {} };\n',
         );
-        expect(message).toContain('Unknown key "config" in the config.');
-        expect(message).toContain(NO_DEFAULT_EXPORT_HINT);
+        expect(message).toBe(
+          [
+            `Unknown key "config" in the config. Known keys: ${KNOWN_KEYS}.`,
+            looksLikeConfigHint('config'),
+          ].join('\n'),
+        );
       });
 
-      it('puts the hint once, after every problem', () => {
+      // No export looks like a config, so an ESM module gets the generic note.
+      it('puts the generic note once, after every problem, for an ESM module', () => {
         const [message] = bothLoadErrors(
           'madr-lint.config.mjs',
           'export const rule = {};\nexport const adrdir = "x";\nexport const madrVersion = "V3";\n',
@@ -730,7 +845,7 @@ describe('core/config', () => {
             '  - Unknown key "adrdir" in the config. Did you mean "adrDir"?',
             '  - Unknown key "rule" in the config. Did you mean "rules"?',
             '  - Invalid madrVersion "V3": use one of "v2", "v3", "v4", "auto".',
-            NO_DEFAULT_EXPORT_HINT,
+            NO_DEFAULT_EXPORT_NOTE,
           ].join('\n'),
         );
       });
@@ -745,7 +860,7 @@ describe('core/config', () => {
         expect(message).toBe(
           [
             `Unknown key "helper" in the config. Known keys: ${KNOWN_KEYS}.`,
-            NO_DEFAULT_EXPORT_HINT,
+            NO_DEFAULT_EXPORT_NOTE,
           ].join('\n'),
         );
       });
@@ -759,20 +874,164 @@ describe('core/config', () => {
         ]);
       });
 
-      // At runtime `module.exports = {...}` and `exports.config = ...` look the
-      // same (an exports object without `default`), so a typo in a
-      // module.exports config gets the hint too; its wording is conditional.
-      it('adds the hint for a typo in a module.exports config', () => {
+      // `module.exports = {...}` is the CommonJS default export, but at runtime
+      // it looks like an exports object without `default`. A typo in it must
+      // not be told to export the config as the default.
+      it.for([
+        ['madr-lint.config.cjs', 'module.exports = { rule: {} };\n'],
+        ['madr-lint.config.js', 'module.exports = { rule: {} };\n'],
+        ['madr-lint.config.ts', 'module.exports = { rule: {} };\n'],
+      ] as const)('adds no hint for a typo in module.exports in %s', ([name, content]) => {
+        expect(bothLoadErrors(name, content)).toEqual([
+          'Unknown key "rule" in the config. Did you mean "rules"?',
+          'Unknown key "rule" in the config. Did you mean "rules"?',
+        ]);
+      });
+
+      it('adds no hint for a CommonJS module with an interop default export', () => {
         const [message] = bothLoadErrors(
           'madr-lint.config.cjs',
-          'module.exports = { rule: {} };\n',
+          'Object.defineProperty(exports, "__esModule", { value: true });\nexports.default = { rule: {} };\n',
+        );
+        expect(message).toBe('Unknown key "rule" in the config. Did you mean "rules"?');
+      });
+
+      it('names the first export that looks like a config, once', () => {
+        const [message] = bothLoadErrors(
+          'madr-lint.config.mjs',
+          'export const b = { adrDir: "x" };\nexport const a = { rules: {} };\nexport const c = 1;\n',
         );
         expect(message).toBe(
           [
-            'Unknown key "rule" in the config. Did you mean "rules"?',
-            NO_DEFAULT_EXPORT_HINT,
+            'Invalid config (3 problems):',
+            `  - Unknown key "a" in the config. Known keys: ${KNOWN_KEYS}.`,
+            `  - Unknown key "b" in the config. Known keys: ${KNOWN_KEYS}.`,
+            `  - Unknown key "c" in the config. Known keys: ${KNOWN_KEYS}.`,
+            looksLikeConfigHint('a'),
           ].join('\n'),
         );
+      });
+
+      it('names a CommonJS export that looks like a config, inherited keys included', () => {
+        const [message] = bothLoadErrors(
+          'madr-lint.config.cjs',
+          'exports.helper = 1;\nexports.config = Object.create({ extends: ["madr-lint:recommended"] });\n',
+        );
+        expect(message).toBe(
+          [
+            'Invalid config (2 problems):',
+            `  - Unknown key "helper" in the config. Known keys: ${KNOWN_KEYS}.`,
+            `  - Unknown key "config" in the config. Known keys: ${KNOWN_KEYS}.`,
+            looksLikeConfigHint('config'),
+          ].join('\n'),
+        );
+      });
+
+      it('does not put a key that is not an identifier into the code snippet', () => {
+        const [message] = bothLoadErrors(
+          'madr-lint.config.cjs',
+          'exports["my-config"] = { rules: {} };\n',
+        );
+        expect(message).toBe(
+          [
+            `Unknown key "my-config" in the config. Known keys: ${KNOWN_KEYS}.`,
+            'The export "my-config" looks like a config. Export it as the default: `export default {...}` (ESM) or `module.exports = {...}` (CommonJS).',
+          ].join('\n'),
+        );
+      });
+
+      it('does not count an array or a function export as looking like a config', () => {
+        const [message] = bothLoadErrors(
+          'madr-lint.config.cjs',
+          'exports.list = Object.assign([], { rules: {} });\nexports.make = Object.assign(() => ({}), { rules: {} });\n',
+        );
+        expect(message).toBe(
+          [
+            'Invalid config (2 problems):',
+            `  - Unknown key "list" in the config. Known keys: ${KNOWN_KEYS}.`,
+            `  - Unknown key "make" in the config. Known keys: ${KNOWN_KEYS}.`,
+          ].join('\n'),
+        );
+      });
+
+      // Reading an export's value is new; a throwing getter must not crash.
+      it('reports an export whose getter throws without crashing', () => {
+        const [message] = bothLoadErrors(
+          'madr-lint.config.cjs',
+          'Object.defineProperty(exports, "config", { enumerable: true, get() { throw new Error("x"); } });\n',
+        );
+        expect(message).toBe(`Unknown key "config" in the config. Known keys: ${KNOWN_KEYS}.`);
+      });
+
+      it.for([
+        ['.madrlintrc.json', '{ "config": { "rules": {} } }\n'],
+        ['madr-lint.config.mjs', 'export default { config: { rules: {} } };\n'],
+      ] as const)('adds no hint for a config-like key in %s', ([name, content]) => {
+        expect(bothLoadErrors(name, content)).toEqual([
+          `Unknown key "config" in the config. Known keys: ${KNOWN_KEYS}.`,
+          `Unknown key "config" in the config. Known keys: ${KNOWN_KEYS}.`,
+        ]);
+      });
+
+      describe('module interop keys', () => {
+        it('reads a CommonJS config that is also its own default export', () => {
+          const config = bothLoad(
+            'madr-lint.config.cjs',
+            'const c = { extends: ["madr-lint:recommended"], rules: { "madr/status-enum": "off" } };\nmodule.exports = c;\nmodule.exports.default = c;\nglobalThis.madrLintDualExport = c;\n',
+          );
+          expect(config.rules).toEqual({ ...recommended, 'madr/status-enum': 'off' });
+          const dual = (globalThis as { madrLintDualExport?: Record<string, unknown> })
+            .madrLintDualExport;
+          // The user's object is left as written.
+          expect(dual?.default).toBe(dual);
+          expect(Object.keys(dual ?? {})).toEqual(['extends', 'rules', 'default']);
+        });
+
+        it('reads an ESM default export that refers to itself as default', () => {
+          expect(
+            bothLoad(
+              'madr-lint.config.mjs',
+              'const c = { adrDir: "self" };\nc.default = c;\nexport default c;\n',
+            ).adrDir,
+          ).toBe('self');
+        });
+
+        it('reads a CommonJS module with an enumerable __esModule flag', () => {
+          const config = bothLoad(
+            'madr-lint.config.cjs',
+            'exports.__esModule = true;\nexports.adrDir = "decisions";\nexports.rules = { "madr/status-enum": "off" };\n',
+          );
+          expect(config.adrDir).toBe('decisions');
+          expect(config.rules).toEqual({ 'madr/status-enum': 'off' });
+        });
+
+        it('still reports a default key that holds something else', () => {
+          expect(
+            bothLoadErrors('madr-lint.config.mjs', 'export default { default: { rules: {} } };\n'),
+          ).toEqual([
+            `Unknown key "default" in the config. Known keys: ${KNOWN_KEYS}.`,
+            `Unknown key "default" in the config. Known keys: ${KNOWN_KEYS}.`,
+          ]);
+        });
+
+        it('still reports default and __esModule in a JSON config', () => {
+          const expected = [
+            'Invalid config (2 problems):',
+            `  - Unknown key "default" in the config. Known keys: ${KNOWN_KEYS}.`,
+            `  - Unknown key "__esModule" in the config. Known keys: ${KNOWN_KEYS}.`,
+          ].join('\n');
+          expect(
+            bothLoadErrors('.madrlintrc.json', '{ "default": {}, "__esModule": true }\n'),
+          ).toEqual([expected, expected]);
+        });
+      });
+
+      it.for([
+        ['export default Promise.resolve({ rules: {} });\n'],
+        ['export default (async () => ({ rules: {} }))();\n'],
+      ] as const)('rejects an async config: %j', ([content]) => {
+        const expected = PROMISE_ERROR;
+        expect(bothLoadErrors('madr-lint.config.mjs', content)).toEqual([expected, expected]);
       });
 
       it('rejects unknown keys in .madrlintrc.json without the hint', () => {

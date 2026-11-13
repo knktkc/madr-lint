@@ -757,12 +757,12 @@ describe('cli (end-to-end)', () => {
   describe('unknown top-level keys and config shape (#222)', () => {
     const KNOWN_KEYS =
       '"extends", "madrVersion", "adrDir", "rules", "ignorePatterns", "cache", "cacheLocation"';
-    const NO_DEFAULT_EXPORT_HINT =
-      'The config file has no default export, so its exports were read as the config. If the config is a named export, make it the default: `export default config` (ESM) or `module.exports = config` (CommonJS).';
+    const LOOKS_LIKE_CONFIG_HINT =
+      'The export "config" looks like a config. Export it as the default: `export default config` (ESM) or `module.exports = config` (CommonJS).';
     // The issue reproduction: the config sits in a named export.
     const NAMED_EXPORT_CONFIG =
       'export const config = { rules: { "madr/filename-format": "off" } };\n';
-    const NAMED_EXPORT_ERROR = `Unknown key "config" in the config. Known keys: ${KNOWN_KEYS}.\n${NO_DEFAULT_EXPORT_HINT}\n`;
+    const NAMED_EXPORT_ERROR = `Unknown key "config" in the config. Known keys: ${KNOWN_KEYS}.\n${LOOKS_LIKE_CONFIG_HINT}\n`;
 
     it('exits 2 for a named-export-only madr-lint.config.ts', () => {
       writeFileSync(join(dir, 'madr-lint.config.ts'), NAMED_EXPORT_CONFIG);
@@ -818,6 +818,29 @@ describe('cli (end-to-end)', () => {
         runCli(dir, ['--no-cache', '--config', 'custom.json', 'wrong.md']),
         `Failed to load config "custom.json": ${message}\n`,
       );
+    }, 30_000);
+
+    it('exits 2 with a Promise message for an async config', () => {
+      writeFileSync(
+        join(dir, 'madr-lint.config.mjs'),
+        'export default (async () => ({ rules: {} }))();\n',
+      );
+      writeFileSync(join(dir, 'wrong.md'), '# x\n');
+      expectConfigError(
+        runCli(dir, ['--no-cache', 'wrong.md']),
+        'The config must be an object, not a Promise. Async configs are not supported: export the config object itself.\n',
+      );
+    }, 30_000);
+
+    it('applies a CommonJS config that is also its own default export', () => {
+      writeFileSync(
+        join(dir, 'madr-lint.config.cjs'),
+        'const c = { rules: { "madr/filename-format": "off" } };\nmodule.exports = c;\nmodule.exports.default = c;\n',
+      );
+      writeFileSync(join(dir, 'wrong.md'), '# x\n');
+      const r = runCli(dir, ['--no-cache', 'wrong.md']);
+      expect(r.stderr).toBe('');
+      expect(r.status).toBe(0);
     }, 30_000);
 
     it('exits 2 for a JSON config that is an array', () => {
