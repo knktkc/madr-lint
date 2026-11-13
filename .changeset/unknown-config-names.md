@@ -12,10 +12,9 @@ Invalid config (2 problems):
   - Unknown rule "madr/status-enmu" in rules. Did you mean "madr/status-enum"?
 ```
 
-Rule IDs under `core/` (such as `core/internal-error`) are reserved for madr-lint's own diagnostics, and configuring one is also an error. An invalid `madrVersion` is reported in the same list.
+Rule IDs under `core/` (such as `core/internal-error`) are reserved for madr-lint's own diagnostics, and configuring one is also an error. An invalid `madrVersion` is reported in the same list. A bare string `extends: 'madr-lint:recommended'` keeps working as a one-entry list.
 
 What changes in your results:
 
 - A config with a misspelled rule ID or preset name now exits 2 instead of linting with fewer rules than you wrote. This includes a misspelled rule set to `'off'`. Fix the name the message points to, or remove the entry.
 - A config that sets a `core/` rule ID now exits 2. Remove that entry; the reserved diagnostics cannot be turned off.
-- A bare string `extends: 'madr-lint:recommended'` keeps working as a one-entry list.
