@@ -268,7 +268,7 @@ A path outside the working directory that contains no link, such as
 |---|---|
 | `0` | No errors; warning count within `--max-warnings` limit (if set) |
 | `1` | One or more `error`-severity diagnostics, or warning count exceeds `--max-warnings`. With `--fix` / `--fix-dry-run`, this reflects the problems that **remain** after fixing |
-| `2` | Usage or configuration error (invalid `--max-warnings` value, missing `--config` file, invalid rule options, an unknown rule name, `extends` entry, or `madrVersion` in the config, a configured `core/` rule ID, unknown `--format`, `--update-baseline` combined with `--fix`, existing config on `madr-lint init` without `--force`, a path that a symbolic link takes outside the working directory, `--update-baseline` with a linked `.madr-lint`) |
+| `2` | Usage or configuration error (invalid `--max-warnings` value, missing `--config` file, invalid rule options, an unknown top-level key, rule name, `extends` entry, or `madrVersion` in the config, a config that is not an object, a configured `core/` rule ID, unknown `--format`, `--update-baseline` combined with `--fix`, existing config on `madr-lint init` without `--force`, a path that a symbolic link takes outside the working directory, `--update-baseline` with a linked `.madr-lint`) |
 
 ## Caching
 

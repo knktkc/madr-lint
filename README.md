@@ -95,7 +95,7 @@ export default defineConfig({
 });
 ```
 
-Rule values are a severity (`'error' | 'warn' | 'off'`) or a `[severity, options]` tuple. Options are validated — an invalid option fails fast with exit code `2`, and so does an unknown rule name or `extends` entry (the message suggests a known name when one is close). Full reference: **[Configuration](https://knktkc.github.io/madr-lint/guides/configuration/)**.
+Rule values are a severity (`'error' | 'warn' | 'off'`) or a `[severity, options]` tuple. Options are validated — an invalid option fails fast with exit code `2`, and so does an unknown top-level key, rule name, or `extends` entry (the message suggests a known name when one is close). Full reference: **[Configuration](https://knktkc.github.io/madr-lint/guides/configuration/)**.
 
 ## Rules
 
