@@ -1065,6 +1065,32 @@ describe('core/config', () => {
           expect(config.rules).toEqual({ 'madr/status-enum': 'off' });
         });
 
+        // Spreading such a module copies its `default`, which then points at the
+        // module object rather than at the new config.
+        it('reads a config that spreads a CommonJS base that is its own default', () => {
+          writeFileSync(
+            join(dir, 'base.cjs'),
+            'module.exports = { rules: { "madr/status-enum": "off" } };\nmodule.exports.default = module.exports;\n',
+          );
+          const config = bothLoad(
+            'madr-lint.config.mjs',
+            'import base from "./base.cjs";\nexport default { ...base };\n',
+          );
+          expect(config.rules).toEqual({ 'madr/status-enum': 'off' });
+        });
+
+        it('still reports a default key holding an object whose default is something else', () => {
+          expect(
+            bothLoadErrors(
+              'madr-lint.config.mjs',
+              'export default { default: { default: { rules: {} } } };\n',
+            ),
+          ).toEqual([
+            `Unknown key "default" in the config. Known keys: ${KNOWN_KEYS}.`,
+            `Unknown key "default" in the config. Known keys: ${KNOWN_KEYS}.`,
+          ]);
+        });
+
         it('still reports a default key that holds something else', () => {
           expect(
             bothLoadErrors('madr-lint.config.mjs', 'export default { default: { rules: {} } };\n'),
@@ -1097,8 +1123,6 @@ describe('core/config', () => {
         expect(bothLoadErrors(name, content)).toEqual([expected, expected]);
       });
 
-      // An explicit, enumerable `exports.__esModule = true` declares ESM interop
-      // just like jiti's own marker, so the module counts as ESM-shaped.
       // Every object would otherwise inherit a known key and look like a config.
       it('does not count a known key added to Object.prototype as looking like a config', () => {
         const [message] = withObjectPrototypeKey('rules', {}, () =>
@@ -1107,6 +1131,8 @@ describe('core/config', () => {
         expect(message).toBe(`Unknown key "helper" in the config. Known keys: ${KNOWN_KEYS}.`);
       });
 
+      // An explicit, enumerable `exports.__esModule = true` declares ESM interop
+      // just like jiti's own marker, so the module counts as ESM-shaped.
       it('adds the generic note for CommonJS with an enumerable __esModule flag', () => {
         const [message] = bothLoadErrors(
           'madr-lint.config.cjs',
