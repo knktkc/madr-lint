@@ -123,14 +123,17 @@ Invalid rule options in config: Invalid options for rule madr/filename-format: d
 
 A rule name in `rules` that madr-lint does not know, or an `extends` entry that
 is not a preset, also fails with exit code `2`. This includes a rule set to
-`'off'`. The message names the closest known value and lists every problem in
-the config at once:
+`'off'`. When a known name is close, the message suggests it. Otherwise it
+lists the known presets, or links to the [Rules reference](/rules/). Every
+problem in the config is listed at once:
 
 ```text
 Invalid config (2 problems):
   - Unknown preset "madr-lint:recomended" in extends. Did you mean "madr-lint:recommended"?
   - Unknown rule "madr/status-enmu" in rules. Did you mean "madr/status-enum"?
 ```
+
+With `--config`, the message starts with `Failed to load config "<path>": `.
 
 Rule IDs starting with `core/`, such as `core/internal-error`, are reserved for
 madr-lint's own diagnostics and cannot be configured.

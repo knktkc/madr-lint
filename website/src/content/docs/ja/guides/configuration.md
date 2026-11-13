@@ -120,13 +120,17 @@ Invalid rule options in config: Invalid options for rule madr/filename-format: d
 
 `rules` に madr-lint が知らないルール名を書いた場合や、`extends` にプリセットではない
 値を書いた場合も、終了コード `2` で失敗します。`'off'` を指定したルールも対象です。
-メッセージには最も近い既知の値が示され、設定内の問題がすべてまとめて表示されます。
+近い既知の名前がある場合、メッセージはその名前を提案します。ない場合は、既知のプリセットを
+列挙するか、[ルールリファレンス](/ja/rules/)へのリンクを示します。設定内の問題はすべて
+まとめて表示されます。
 
 ```text
 Invalid config (2 problems):
   - Unknown preset "madr-lint:recomended" in extends. Did you mean "madr-lint:recommended"?
   - Unknown rule "madr/status-enmu" in rules. Did you mean "madr/status-enum"?
 ```
+
+`--config` を指定した場合、メッセージの先頭に `Failed to load config "<path>": ` が付きます。
 
 `core/internal-error` など `core/` で始まるルール ID は madr-lint 自身の診断用に予約されて
 おり、設定できません。
