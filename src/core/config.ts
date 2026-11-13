@@ -293,11 +293,24 @@ function tryIsArray(value: unknown): boolean | undefined {
 function tryEnumerableKeys(value: object): string[] | undefined {
   try {
     const keys: string[] = [];
-    for (const key in value) keys.push(key);
+    for (const key in value) {
+      if (!Object.hasOwn(value, key) && isObjectPrototypeAddition(key)) continue;
+      keys.push(key);
+    }
     return keys;
   } catch {
     return undefined;
   }
+}
+
+/**
+ * An enumerable property that some dependency added to `Object.prototype`.
+ * Every object inherits it, so it says nothing about the config and the user
+ * cannot remove it there. Built-in names such as `toString` are not
+ * enumerable, so a `toString` inherited from another prototype still counts.
+ */
+function isObjectPrototypeAddition(key: string): boolean {
+  return Object.prototype.propertyIsEnumerable(key);
 }
 
 /** `object[key]`, but undefined instead of a throw from a getter or Proxy. */
