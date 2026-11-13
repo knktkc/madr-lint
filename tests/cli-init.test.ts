@@ -215,6 +215,62 @@ describe('cli init (end-to-end)', () => {
     expect(payload.suggestUpdateBaseline).toBe(true);
   }, 30_000);
 
+  it('writes auto for a file mixing frontmatter and a body metadata list, and the written config lints it clean', () => {
+    // A fixed v3 reads frontmatter only and would report the list's Date as
+    // missing (madr/date-iso8601), turning a clean project into a failure.
+    const MIXED = `---
+status: accepted
+---
+
+# A
+
+* Date: 2026-01-01
+
+## Context and Problem Statement
+
+text
+
+## Considered Options
+
+* a
+
+## Decision Outcome
+
+Chosen a
+
+## Consequences
+
+text
+`;
+    writeAdr(dir, 'docs/adr/0001-a.md', MIXED);
+
+    const init = runCli(dir, ['init', '--json']);
+    expect(init.status).toBe(0);
+    const payload = JSON.parse(init.stdout) as {
+      madrVersion: string;
+      errors: number;
+      warnings: number;
+      suggestUpdateBaseline: boolean;
+    };
+    expect(payload.madrVersion).toBe('auto');
+    expect(payload.errors).toBe(0);
+    expect(payload.suggestUpdateBaseline).toBe(false);
+
+    const config = JSON.parse(
+      readFileSync(join(dir, '.madrlintrc.json'), 'utf8'),
+    ) as Record<string, unknown>;
+    expect(config.madrVersion).toBeUndefined();
+
+    const lint = runCli(dir, ['--no-cache', '--format', 'json']);
+    const report = JSON.parse(lint.stdout) as {
+      summary: { errors: number; warnings: number };
+      results: { ruleId: string; message: string }[];
+    };
+    expect(report.results).toEqual([]);
+    expect(report.summary.errors).toBe(0);
+    expect(lint.status).toBe(0);
+  }, 30_000);
+
   it('does not suggest --update-baseline when the initial lint is clean', () => {
     writeAdr(dir, 'docs/adr/0001-example.md', VALID_V3_ADR);
 
