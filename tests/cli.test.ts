@@ -710,15 +710,40 @@ describe('cli (end-to-end)', () => {
       expect(r.stderr).toMatch(/reserved/);
     }, 30_000);
 
+    // --config skips the no-rules fallback, so if the bare string were dropped
+    // no rule would run and this would exit 0.
     it('still lints with a bare-string extends of the recommended preset', () => {
       writeFileSync(
-        join(dir, '.madrlintrc.json'),
+        join(dir, 'custom.json'),
         JSON.stringify({ extends: 'madr-lint:recommended' }),
       );
       writeFileSync(join(dir, 'wrong.md'), '# x\n');
-      const r = runCli(dir, ['--no-cache', '--format', 'json', 'wrong.md']);
+      const r = runCli(dir, [
+        '--no-cache',
+        '--config',
+        'custom.json',
+        '--format',
+        'json',
+        'wrong.md',
+      ]);
       expect(r.status).toBe(1);
       expect(r.stdout).toContain('madr/filename-format');
+    }, 30_000);
+
+    it('exits 2, not 1, for a config value that JSON cannot serialize', () => {
+      writeFileSync(join(dir, 'madr-lint.config.mjs'), 'export default { extends: [10n] };\n');
+      writeFileSync(join(dir, 'wrong.md'), '# x\n');
+      const r = runCli(dir, ['--no-cache', 'wrong.md']);
+      expect(r.status).toBe(2);
+      expect(r.stderr).toContain('Unknown preset 10n in extends.');
+      expect(r.stderr).not.toContain('TypeError');
+    }, 30_000);
+
+    it('exits 0 for extends: null in a discovered config', () => {
+      writeFileSync(join(dir, '.madrlintrc.json'), JSON.stringify({ extends: null }));
+      writeFileSync(join(dir, '0001-a.md'), '# x\n');
+      const r = runCli(dir, ['--no-cache', '--config', '.madrlintrc.json', '0001-a.md']);
+      expect(r.status).toBe(0);
     }, 30_000);
   });
 });

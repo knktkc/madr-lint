@@ -18,6 +18,11 @@ const ISSUE_206_CONFIG = {
   rules: { 'madr/status-enmu': 'error' },
 };
 
+// For values a JSON or JS config can hold but the TypeScript type does not allow.
+function asConfig(raw: Record<string, unknown>): MadrLintConfig {
+  return raw as MadrLintConfig;
+}
+
 function configError(config: MadrLintConfig): string {
   try {
     resolveExtends(config);
@@ -119,8 +124,14 @@ describe('core/config', () => {
         extends: ['madr-lint:recomended'],
         rules: { 'madr/status-enmu': 'error' },
       });
-      expect(message).toContain('Did you mean "madr-lint:recommended"?');
-      expect(message).toContain('Did you mean "madr/status-enum"?');
+      // The docs and changeset quote this text, so pin it exactly.
+      expect(message).toBe(
+        [
+          'Invalid config (2 problems):',
+          '  - Unknown preset "madr-lint:recomended" in extends. Did you mean "madr-lint:recommended"?',
+          '  - Unknown rule "madr/status-enmu" in rules. Did you mean "madr/status-enum"?',
+        ].join('\n'),
+      );
     });
 
     it('reports every unknown rule, not just the first', () => {
@@ -221,6 +232,98 @@ describe('core/config', () => {
         expect(resolveExtends({}).rules).toEqual({});
         expect(resolveExtends({ extends: [], rules: {} }).rules).toEqual({});
       });
+
+      // These worked before #206, so they must keep working.
+      it('treats extends: null and rules: null as absent', () => {
+        expect(resolveExtends(asConfig({ extends: null })).rules).toEqual({});
+        expect(resolveExtends(asConfig({ rules: null })).rules).toEqual({});
+      });
+
+      it('skips null, undefined, and false extends entries (the `cond && preset` idiom)', () => {
+        const config = resolveExtends(
+          asConfig({ extends: [null, 'madr-lint:recommended', undefined, false] }),
+        );
+        expect(config.rules).toEqual(recommended);
+      });
+    });
+
+    describe('value shapes and formatting', () => {
+      it.for([
+        ['42', 42, 'Unknown preset 42 in extends.'],
+        ['{}', {}, 'Unknown preset {} in extends.'],
+        ['true', true, 'Unknown preset true in extends.'],
+        ["''", '', 'Unknown preset "" in extends.'],
+      ] as const)('still rejects the extends entry %s', ([, entry, expected]) => {
+        expect(configError(asConfig({ extends: [entry] }))).toContain(expected);
+      });
+
+      it.for([
+        ['a bigint', 10n, '10n'],
+        ['a symbol', Symbol('x'), 'Symbol(x)'],
+        ['a function', () => 'x', 'a function'],
+      ] as const)('reports %s extends entry without crashing', ([, entry, shown]) => {
+        const message = configError(asConfig({ extends: [entry] }));
+        expect(message).toBe(
+          `Unknown preset ${shown} in extends. Known presets: "madr-lint:recommended".`,
+        );
+      });
+
+      it('reports a circular extends entry without crashing', () => {
+        const circular: Record<string, unknown> = {};
+        circular.self = circular;
+        expect(configError(asConfig({ extends: [circular] }))).toMatch(
+          /^Unknown preset .+ in extends\./,
+        );
+      });
+
+      it('reports a bigint madrVersion without crashing', () => {
+        expect(configError(asConfig({ madrVersion: 10n }))).toBe(
+          'Invalid madrVersion 10n: use one of "v2", "v3", "v4", "auto".',
+        );
+      });
+
+      it('keeps the madrVersion message for a string value unchanged', () => {
+        expect(configError(asConfig({ madrVersion: 'V3' }))).toBe(
+          'Invalid madrVersion "V3": use one of "v2", "v3", "v4", "auto".',
+        );
+      });
+
+      it.for([
+        ['an array', ['madr/status-enum'], '["madr/status-enum"]'],
+        ['a string', 'madr/status-enum', '"madr/status-enum"'],
+        ['a number', 1, '1'],
+      ] as const)('reports rules given as %s as one problem', ([, rules, shown]) => {
+        expect(configError(asConfig({ rules }))).toBe(
+          `Invalid rules ${shown}: use an object that maps rule IDs to severities.`,
+        );
+      });
+
+      it('compares names case-insensitively', () => {
+        expect(configError({ rules: { 'MADR/STATUS-ENUM': 'error' } })).toContain(
+          'Did you mean "madr/status-enum"?',
+        );
+      });
+
+      it('suggests the full preset name for a preset written without its prefix', () => {
+        expect(configError({ extends: ['recommended'] })).toContain(
+          'Did you mean "madr-lint:recommended"?',
+        );
+      });
+
+      it('handles a very long rule key quickly and truncates it in the message', () => {
+        const key = `madr/${'x'.repeat(200_000)}`;
+        const started = performance.now();
+        const message = configError({ rules: { [key]: 'error' } });
+        expect(performance.now() - started).toBeLessThan(200);
+        expect(message).not.toContain('Did you mean');
+        expect(message).toContain(`"madr/${'x'.repeat(75)}…"`);
+        expect(message.length).toBeLessThan(250);
+      });
+
+      it('does not truncate a realistic rule ID', () => {
+        const key = `madr/${'a'.repeat(75)}`;
+        expect(configError({ rules: { [key]: 'error' } })).toContain(`"${key}"`);
+      });
     });
   });
 
@@ -316,6 +419,19 @@ describe('core/config', () => {
         join(dir, 'madr-lint.config.mjs'),
         `export default ${JSON.stringify(ISSUE_206_CONFIG)};`,
       );
+      expect(() => loadConfig(dir)).toThrow(InvalidConfigError);
+    });
+
+    it('accepts a JS config that uses the `cond && preset` idiom in extends', () => {
+      writeFileSync(
+        join(dir, 'madr-lint.config.mjs'),
+        'const ci = false;\nexport default { extends: ["madr-lint:recommended", ci && "x"] };\n',
+      );
+      expect(loadConfig(dir).rules).toEqual(recommended);
+    });
+
+    it('rejects a bigint extends entry as a config error, not a crash', () => {
+      writeFileSync(join(dir, 'madr-lint.config.mjs'), 'export default { extends: [10n] };\n');
       expect(() => loadConfig(dir)).toThrow(InvalidConfigError);
     });
 
