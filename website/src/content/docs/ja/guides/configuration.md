@@ -130,7 +130,8 @@ Invalid rule options in config: Invalid options for rule madr/filename-format: d
 [上の表](#トップレベルのオプション)にないトップレベルキー、`rules` に書いた madr-lint が
 知らないルール名、`extends` に書いたプリセットではない値も、終了コード `2` で失敗します。
 `'off'` を指定したルールや、`$schema` のようなキーも対象です。継承した列挙可能なキー
-（`Object.create({...})`）も、自身のキーと同じく扱います。近い既知の名前がある場合、
+（`Object.create({...})`）も、自身のキーと同じく扱います。ただし、依存パッケージが
+`Object.prototype` に追加した列挙可能なプロパティは数えません。近い既知の名前がある場合、
 メッセージはその名前を提案します。ない場合は、既知のキーやプリセットを列挙するか、
 [ルールリファレンス](/ja/rules/)へのリンクを示します。設定内の問題はすべてまとめて表示されます。
 
@@ -165,15 +166,18 @@ The export "config" looks like a config. Export it as the default: `export defau
 The config file has no default export, so its exports were read as the config.
 ```
 
-プレーンな CommonJS の `module.exports = {...}` には追加の行は表示されません。そのオブジェクトが
-デフォルトエクスポートだからです。JSON の設定ファイルと、デフォルトエクスポートがあるモジュールには、
+プレーンな CommonJS の `module.exports = {...}` は、そのオブジェクトがデフォルトエクスポートです。
+そのため、`module.exports = { config: { rules: {...} } }` のように設定のように見えるキーがない限り、
+追加の行は表示されません。JSON の設定ファイルと、デフォルトエクスポートがあるモジュールには、
 どちらの行も表示されません。
 
 TypeScript / JavaScript の設定ファイルでは、モジュールの相互運用で付くキーを設定キーとして扱いません。
 対象は `__esModule` と、設定自身を指す `default` キー（`module.exports = config; module.exports.default = config`）
-です。JSON の設定ファイルでは、どちらも未知のキーです。
+です。そのようなモジュールを設定にスプレッドした場合（`export default { ...base }`）のように、自分自身を
+`default` に持つオブジェクトを指す `default` キーも対象です。JSON の設定ファイルでは、どちらも未知のキーです。
 
-オブジェクトではない設定も、終了コード `2` で失敗します。関数（`export default () => ({...})`）、
+オブジェクトではない設定も、終了コード `2` で失敗します。関数（`export default () => ({...})`。
+静的フィールドを持つクラスのように設定のプロパティを持つ関数も含みます）、
 `undefined`（`export default undefined`）、`null`、配列、文字列や数値が対象です。
 
 ```text
