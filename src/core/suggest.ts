@@ -33,24 +33,34 @@ function editDistance(a: string, b: string): number {
 // catches real typos.
 const MAX_DISTANCE = 2;
 
+// `/` separates a rule's namespace (`madr/status-enum`), `:` a preset's
+// (`madr-lint:recommended`).
+const NAMESPACE_SEPARATORS = ['/', ':'];
+
 /**
- * The known value closest to `value`, or undefined when none is close enough
- * to be a plausible typo. A known value that is `value` plus a namespace
- * (`status-enum` → `madr/status-enum`) always counts as close.
+ * The known value closest to `value`, ignoring case, or undefined when none is
+ * close enough to be a plausible typo. A known value that is `value` plus a
+ * namespace (`status-enum` → `madr/status-enum`) always counts as close.
  */
 export function closestMatch(
   value: string,
   known: Iterable<string>,
 ): string | undefined {
+  const needle = value.toLowerCase();
   // Sorted so that ties resolve the same way regardless of registry order.
   const candidates = Array.from(known).toSorted();
-  const namespaced = candidates.find((c) => c.endsWith(`/${value}`));
+  const namespaced = candidates.find((c) =>
+    NAMESPACE_SEPARATORS.some((sep) => c.toLowerCase().endsWith(`${sep}${needle}`)),
+  );
   if (namespaced !== undefined) return namespaced;
 
   let best: string | undefined;
   let bestDistance = MAX_DISTANCE + 1;
   for (const candidate of candidates) {
-    const distance = editDistance(value, candidate);
+    // The distance is at least the length difference, so this skips the
+    // quadratic computation for a key that cannot be close (e.g. a huge one).
+    if (Math.abs(candidate.length - needle.length) > MAX_DISTANCE) continue;
+    const distance = editDistance(needle, candidate.toLowerCase());
     if (distance < bestDistance) {
       best = candidate;
       bestDistance = distance;

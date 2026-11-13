@@ -154,6 +154,42 @@ const BUILTIN_CONFIG_NAMES: KnownConfigNames = {
 const RESERVED_RULE_NAMESPACE = 'core/';
 const RULES_DOCS_URL = 'https://knktkc.github.io/madr-lint/rules/';
 
+// Long enough for any realistic rule ID, short enough to keep one problem on
+// one screen line when someone pastes a huge key.
+const MAX_SHOWN_LENGTH = 80;
+
+function truncate(text: string): string {
+  return text.length > MAX_SHOWN_LENGTH ? `${text.slice(0, MAX_SHOWN_LENGTH)}…` : text;
+}
+
+/**
+ * Renders a config value from the user for an error message. JS configs can
+ * hold anything, so this must not throw: `JSON.stringify` throws on a bigint
+ * or a cycle, and returns undefined for a symbol, a function, or undefined.
+ */
+function formatValue(value: unknown): string {
+  switch (typeof value) {
+    case 'string':
+      return JSON.stringify(truncate(value));
+    case 'bigint':
+      return `${value}n`;
+    case 'symbol':
+      return truncate(value.toString());
+    case 'function':
+      return 'a function';
+    case 'undefined':
+    case 'number':
+    case 'boolean':
+      return String(value);
+    default:
+      try {
+        return truncate(JSON.stringify(value) ?? Object.prototype.toString.call(value));
+      } catch {
+        return Object.prototype.toString.call(value);
+      }
+  }
+}
+
 function quoteList(values: Iterable<string>): string {
   return [...values].map((v) => `"${v}"`).join(', ');
 }
@@ -166,13 +202,17 @@ function didYouMean(value: string, known: Iterable<string>): string | undefined 
 /**
  * Normalizes `extends` to a list. A bare string has always worked (by way of
  * `String.prototype.includes`), so it stays accepted as a one-entry list.
+ * `null` and `null`/`undefined`/`false` entries were ignored before #206 and
+ * JS configs rely on that (`extends: [ci && 'preset']`), so they are skipped.
  */
 function extendsEntries(value: unknown, problems: string[]): unknown[] {
-  if (value === undefined) return [];
+  if (value === undefined || value === null) return [];
   if (typeof value === 'string') return [value];
-  if (Array.isArray(value)) return value;
+  if (Array.isArray(value)) {
+    return value.filter((entry) => entry !== null && entry !== undefined && entry !== false);
+  }
   problems.push(
-    `Invalid extends ${JSON.stringify(value)}: use a preset name or a list of preset names.`,
+    `Invalid extends ${formatValue(value)}: use a preset name or a list of preset names.`,
   );
   return [];
 }
@@ -196,7 +236,7 @@ export function resolveExtends(config: MadrLintConfig): ResolvedConfig {
   const madrVersion = isMadrVersion(rawMadrVersion) ? rawMadrVersion : 'auto';
   if (!isMadrVersion(rawMadrVersion)) {
     problems.push(
-      `Invalid madrVersion ${JSON.stringify(rawMadrVersion)}: use one of ${quoteList(MADR_VERSIONS)}.`,
+      `Invalid madrVersion ${formatValue(rawMadrVersion)}: use one of ${quoteList(MADR_VERSIONS)}.`,
     );
   }
 
@@ -212,20 +252,29 @@ export function resolveExtends(config: MadrLintConfig): ResolvedConfig {
     const hint =
       (typeof entry === 'string' ? didYouMean(entry, known.presets.keys()) : undefined) ??
       `Known presets: ${quoteList(known.presets.keys())}.`;
-    problems.push(`Unknown preset ${JSON.stringify(entry)} in extends. ${hint}`);
+    problems.push(`Unknown preset ${formatValue(entry)} in extends. ${hint}`);
   }
 
-  for (const name of Object.keys(config.rules ?? {})) {
-    if (known.rules.has(name)) continue;
-    if (name.startsWith(RESERVED_RULE_NAMESPACE)) {
-      problems.push(
-        `Rule "${name}" in rules cannot be configured: "${RESERVED_RULE_NAMESPACE}" rule IDs are reserved for madr-lint's own diagnostics.`,
-      );
-      continue;
+  const rules: unknown = config.rules ?? {};
+  if (typeof rules !== 'object' || rules === null || Array.isArray(rules)) {
+    // Checked as a whole: listing the keys of a string or an array would
+    // report each index ("0", "1", ...) as an unknown rule.
+    problems.push(
+      `Invalid rules ${formatValue(rules)}: use an object that maps rule IDs to severities.`,
+    );
+  } else {
+    for (const name of Object.keys(rules)) {
+      if (known.rules.has(name)) continue;
+      if (name.startsWith(RESERVED_RULE_NAMESPACE)) {
+        problems.push(
+          `Rule ${formatValue(name)} in rules cannot be configured: "${RESERVED_RULE_NAMESPACE}" rule IDs are reserved for madr-lint's own diagnostics.`,
+        );
+        continue;
+      }
+      const hint =
+        didYouMean(name, known.rules) ?? `See ${RULES_DOCS_URL} for the list of rules.`;
+      problems.push(`Unknown rule ${formatValue(name)} in rules. ${hint}`);
     }
-    const hint =
-      didYouMean(name, known.rules) ?? `See ${RULES_DOCS_URL} for the list of rules.`;
-    problems.push(`Unknown rule "${name}" in rules. ${hint}`);
   }
 
   if (problems.length === 1) throw new InvalidConfigError(problems[0]);
