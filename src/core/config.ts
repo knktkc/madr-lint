@@ -92,16 +92,10 @@ export function loadConfigFromPath(filePath: string): ResolvedConfig {
     throw err;
   }
   if (filePath.endsWith('.json')) {
-    const parsed = JSON.parse(raw) as MadrLintConfig;
-    return resolveExtends(parsed);
+    return resolveExtends(JSON.parse(raw) as unknown);
   }
-  const jiti = createJiti(import.meta.url, { interopDefault: true });
-  const loaded = jiti(filePath) as MadrLintConfig | { default: MadrLintConfig };
-  const config: MadrLintConfig =
-    typeof loaded === 'object' && loaded !== null && 'default' in loaded
-      ? (loaded.default as MadrLintConfig)
-      : (loaded as MadrLintConfig);
-  return resolveExtends(config);
+  const { config, withoutDefaultExport } = loadModule(filePath);
+  return resolveExtends(config, { withoutDefaultExport });
 }
 
 /**
@@ -118,20 +112,62 @@ export function loadConfig(cwd: string): ResolvedConfig {
     if (!existsSync(path)) continue;
 
     if (name.endsWith('.json')) {
-      const parsed = JSON.parse(readFileSync(path, 'utf8')) as MadrLintConfig;
-      return resolveExtends(parsed);
+      return resolveExtends(JSON.parse(readFileSync(path, 'utf8')) as unknown);
     }
 
-    const jiti = createJiti(import.meta.url, { interopDefault: true });
-    const loaded = jiti(path) as MadrLintConfig | { default: MadrLintConfig };
-    const config: MadrLintConfig =
-      typeof loaded === 'object' && loaded !== null && 'default' in loaded
-        ? (loaded.default as MadrLintConfig)
-        : (loaded as MadrLintConfig);
-    return resolveExtends(config);
+    const { config, withoutDefaultExport } = loadModule(path);
+    return resolveExtends(config, { withoutDefaultExport });
   }
   return resolveExtends({});
 }
+
+interface LoadedModule {
+  /** The default export, or the exports object when there is none. */
+  config: unknown;
+  withoutDefaultExport: boolean;
+}
+
+function loadModule(path: string): LoadedModule {
+  // interopDefault keeps `import base from './base.cjs'` inside a config
+  // working. Its proxy answers `.default` with the whole module when the
+  // default export is null or undefined, so read the property as written.
+  const jiti = createJiti(import.meta.url, { interopDefault: true });
+  const loaded: unknown = jiti(path);
+  if (typeof loaded !== 'function' && (typeof loaded !== 'object' || loaded === null)) {
+    return { config: loaded, withoutDefaultExport: false };
+  }
+  const own = Object.getOwnPropertyDescriptor(loaded, 'default');
+  if (own === undefined) return { config: loaded, withoutDefaultExport: true };
+  return {
+    config: own.get === undefined ? own.value : own.get.call(loaded),
+    withoutDefaultExport: false,
+  };
+}
+
+/** Where a raw config came from, for hints that depend on the file format. */
+export interface ConfigOrigin {
+  /** A JS/TS module without a default export: its exports are the config. */
+  withoutDefaultExport?: boolean;
+}
+
+/**
+ * Every top-level key madr-lint reads. Checked against `MadrLintConfig` so a
+ * key added to the interface but not here fails the typecheck.
+ */
+const CONFIG_KEYS = {
+  extends: true,
+  madrVersion: true,
+  adrDir: true,
+  rules: true,
+  ignorePatterns: true,
+  cache: true,
+  cacheLocation: true,
+} as const satisfies Record<keyof MadrLintConfig, true>;
+
+const KNOWN_CONFIG_KEYS: ReadonlySet<string> = new Set(Object.keys(CONFIG_KEYS));
+
+const NO_DEFAULT_EXPORT_HINT =
+  'The config file has no default export, so its exports were read as the config. If the config is a named export, make it the default: `export default config` (ESM) or `module.exports = config` (CommonJS).';
 
 /** The rule IDs and presets a config may name. */
 interface KnownConfigNames {
@@ -235,6 +271,15 @@ function tryIsArray(value: unknown): boolean | undefined {
   }
 }
 
+/** `Object.keys`, but undefined instead of a throw for a hostile Proxy. */
+function tryKeys(value: object): string[] | undefined {
+  try {
+    return Object.keys(value);
+  } catch {
+    return undefined;
+  }
+}
+
 /**
  * Normalizes `extends` to a list. A bare string has always worked (by way of
  * `String.prototype.includes`), so it stays accepted as a one-entry list.
@@ -252,16 +297,35 @@ function extendsEntries(value: unknown, problems: string[]): unknown[] {
 }
 
 /**
- * Pure function: turns a raw `MadrLintConfig` into a `ResolvedConfig`
- * with defaults filled in and `extends` presets merged.
+ * Pure function: turns a raw config (whatever the file yielded) into a
+ * `ResolvedConfig` with defaults filled in and `extends` presets merged.
  *
  * Only what the user wrote is checked; preset contents are trusted. Every
  * problem goes into one `InvalidConfigError` so the config can be fixed in
  * one pass.
  */
-export function resolveExtends(config: MadrLintConfig): ResolvedConfig {
+export function resolveExtends(raw: unknown, origin: ConfigOrigin = {}): ResolvedConfig {
   const known = BUILTIN_CONFIG_NAMES;
   const problems: string[] = [];
+
+  // A key madr-lint does not read used to be dropped silently, so a typo or a
+  // config in a named export had no effect while the CLI exited 0 (#222).
+  let config: MadrLintConfig = {};
+  let unknownKeys = 0;
+  if (typeof raw !== 'object' || raw === null || tryIsArray(raw) !== false) {
+    problems.push(`The config must be an object, not ${formatValue(raw)}.`);
+  } else {
+    config = raw as MadrLintConfig;
+    const keys = tryKeys(raw);
+    if (keys === undefined) problems.push('Cannot list the keys of the config.');
+    for (const key of keys ?? []) {
+      if (KNOWN_CONFIG_KEYS.has(key)) continue;
+      unknownKeys++;
+      const hint =
+        didYouMean(key, KNOWN_CONFIG_KEYS) ?? `Known keys: ${quoteList(KNOWN_CONFIG_KEYS)}.`;
+      problems.push(`Unknown key ${formatValue(key)} in the config. ${hint}`);
+    }
+  }
 
   // madrVersion selects the metadata source and which rules run (#207). An
   // unknown value would read frontmatter only and skip every project rule, so
@@ -311,11 +375,16 @@ export function resolveExtends(config: MadrLintConfig): ResolvedConfig {
     }
   }
 
-  if (problems.length === 1) throw new InvalidConfigError(problems[0]);
-  if (problems.length > 1) {
-    throw new InvalidConfigError(
-      `Invalid config (${problems.length} problems):\n${problems.map((p) => `  - ${p}`).join('\n')}`,
-    );
+  if (problems.length > 0) {
+    let message =
+      problems.length === 1
+        ? problems[0]
+        : `Invalid config (${problems.length} problems):\n${problems.map((p) => `  - ${p}`).join('\n')}`;
+    // Not a problem of its own: it explains the unknown keys above it.
+    if (origin.withoutDefaultExport === true && unknownKeys > 0) {
+      message += `\n${NO_DEFAULT_EXPORT_HINT}`;
+    }
+    throw new InvalidConfigError(message);
   }
 
   return {
