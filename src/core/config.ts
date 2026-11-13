@@ -94,8 +94,8 @@ export function loadConfigFromPath(filePath: string): ResolvedConfig {
   if (filePath.endsWith('.json')) {
     return resolveExtends(JSON.parse(raw) as unknown);
   }
-  const { config, withoutDefaultExport } = loadModule(filePath);
-  return resolveExtends(config, { withoutDefaultExport });
+  const { config, origin } = loadModule(filePath);
+  return resolveExtends(config, origin);
 }
 
 /**
@@ -115,8 +115,8 @@ export function loadConfig(cwd: string): ResolvedConfig {
       return resolveExtends(JSON.parse(readFileSync(path, 'utf8')) as unknown);
     }
 
-    const { config, withoutDefaultExport } = loadModule(path);
-    return resolveExtends(config, { withoutDefaultExport });
+    const { config, origin } = loadModule(path);
+    return resolveExtends(config, origin);
   }
   return resolveExtends({});
 }
@@ -124,30 +124,39 @@ export function loadConfig(cwd: string): ResolvedConfig {
 interface LoadedModule {
   /** The default export, or the exports object when there is none. */
   config: unknown;
-  withoutDefaultExport: boolean;
+  origin: ConfigOrigin;
 }
 
 function loadModule(path: string): LoadedModule {
   // interopDefault keeps `import base from './base.cjs'` inside a config
   // working. Its proxy answers `.default` with the whole module when the
-  // default export is null or undefined, so read the property as written.
+  // default export is null or undefined, and `.__esModule` with true for every
+  // module, so read both properties as written.
   const jiti = createJiti(import.meta.url, { interopDefault: true });
   const loaded: unknown = jiti(path);
   if (typeof loaded !== 'function' && (typeof loaded !== 'object' || loaded === null)) {
-    return { config: loaded, withoutDefaultExport: false };
+    return { config: loaded, origin: { module: { hasDefaultExport: true, esModule: false } } };
   }
+  const esModule = Boolean(Object.getOwnPropertyDescriptor(loaded, '__esModule')?.value);
   const own = Object.getOwnPropertyDescriptor(loaded, 'default');
-  if (own === undefined) return { config: loaded, withoutDefaultExport: true };
+  if (own === undefined) {
+    return { config: loaded, origin: { module: { hasDefaultExport: false, esModule } } };
+  }
   return {
     config: own.get === undefined ? own.value : own.get.call(loaded),
-    withoutDefaultExport: false,
+    origin: { module: { hasDefaultExport: true, esModule } },
   };
 }
 
-/** Where a raw config came from, for hints that depend on the file format. */
+/** Where a raw config came from, for checks that depend on the file format. */
 export interface ConfigOrigin {
-  /** A JS/TS module without a default export: its exports are the config. */
-  withoutDefaultExport?: boolean;
+  /** Set when the config came from a JS/TS module rather than JSON. */
+  module?: {
+    /** False when the module has no default export: its exports are the config. */
+    hasDefaultExport: boolean;
+    /** jiti marks a module written in ESM syntax with `__esModule`. */
+    esModule: boolean;
+  };
 }
 
 /**
@@ -166,8 +175,14 @@ const CONFIG_KEYS = {
 
 const KNOWN_CONFIG_KEYS: ReadonlySet<string> = new Set(Object.keys(CONFIG_KEYS));
 
-const NO_DEFAULT_EXPORT_HINT =
-  'The config file has no default export, so its exports were read as the config. If the config is a named export, make it the default: `export default config` (ESM) or `module.exports = config` (CommonJS).';
+const PROMISE_PROBLEM =
+  'The config must be an object, not a Promise. Async configs are not supported: export the config object itself.';
+
+const NO_DEFAULT_EXPORT_NOTE =
+  'The config file has no default export, so its exports were read as the config.';
+
+// A key that can be written after `export default` / `module.exports =`.
+const IDENTIFIER = /^[A-Za-z_$][\w$]*$/;
 
 /** The rule IDs and presets a config may name. */
 interface KnownConfigNames {
@@ -271,13 +286,74 @@ function tryIsArray(value: unknown): boolean | undefined {
   }
 }
 
-/** `Object.keys`, but undefined instead of a throw for a hostile Proxy. */
-function tryKeys(value: object): string[] | undefined {
+/**
+ * Own and inherited enumerable string keys, the ones `for...in` yields and a
+ * property read can find. Undefined instead of a throw for a hostile Proxy.
+ */
+function tryEnumerableKeys(value: object): string[] | undefined {
   try {
-    return Object.keys(value);
+    const keys: string[] = [];
+    for (const key in value) keys.push(key);
+    return keys;
   } catch {
     return undefined;
   }
+}
+
+/** `object[key]`, but undefined instead of a throw from a getter or Proxy. */
+function tryGet(object: object, key: string): unknown {
+  try {
+    return (object as Record<string, unknown>)[key];
+  } catch {
+    return undefined;
+  }
+}
+
+function isThenable(value: unknown): boolean {
+  if (typeof value !== 'function' && (typeof value !== 'object' || value === null)) {
+    return false;
+  }
+  return typeof tryGet(value, 'then') === 'function';
+}
+
+/**
+ * Keys a module system adds, not the user: `__esModule` from transpiled
+ * modules, and `default` pointing back at the object (`module.exports = c;
+ * module.exports.default = c`).
+ */
+function isModuleInteropKey(config: object, key: string): boolean {
+  return key === '__esModule' || (key === 'default' && tryGet(config, 'default') === config);
+}
+
+function looksLikeConfig(value: unknown): boolean {
+  if (typeof value !== 'object' || value === null || tryIsArray(value) !== false) {
+    return false;
+  }
+  return (tryEnumerableKeys(value) ?? []).some((key) => KNOWN_CONFIG_KEYS.has(key));
+}
+
+function looksLikeConfigHint(key: string): string {
+  const name = key.length <= MAX_SHOWN_LENGTH && IDENTIFIER.test(key) ? key : '{...}';
+  return `The export ${formatValue(key)} looks like a config. Export it as the default: \`export default ${name}\` (ESM) or \`module.exports = ${name}\` (CommonJS).`;
+}
+
+/**
+ * At most one line, for a module without a default export. `module.exports =
+ * {...}` is such a module at runtime, so plain CommonJS gets a hint only when
+ * an export looks like the config.
+ */
+function noDefaultExportHint(
+  config: object,
+  unknownKeys: readonly string[],
+  origin: ConfigOrigin,
+): string | undefined {
+  const module = origin.module;
+  if (module === undefined || module.hasDefaultExport || unknownKeys.length === 0) {
+    return undefined;
+  }
+  const configLike = unknownKeys.find((key) => looksLikeConfig(tryGet(config, key)));
+  if (configLike !== undefined) return looksLikeConfigHint(configLike);
+  return module.esModule ? NO_DEFAULT_EXPORT_NOTE : undefined;
 }
 
 /**
@@ -312,20 +388,25 @@ export function resolveExtends(raw: unknown, origin: ConfigOrigin = {}): Resolve
   // config in a named export had no effect and the run went on without it
   // (#222).
   let config: MadrLintConfig = {};
-  let unknownKeys = 0;
-  if (typeof raw !== 'object' || raw === null || tryIsArray(raw) !== false) {
+  const unknownKeys: string[] = [];
+  let exportHint: string | undefined;
+  if (isThenable(raw)) {
+    problems.push(PROMISE_PROBLEM);
+  } else if (typeof raw !== 'object' || raw === null || tryIsArray(raw) !== false) {
     problems.push(`The config must be an object, not ${formatValue(raw)}.`);
   } else {
     config = raw as MadrLintConfig;
-    const keys = tryKeys(raw);
+    const keys = tryEnumerableKeys(raw);
     if (keys === undefined) problems.push('Cannot list the keys of the config.');
     for (const key of keys ?? []) {
       if (KNOWN_CONFIG_KEYS.has(key)) continue;
-      unknownKeys++;
-      const hint =
+      if (origin.module !== undefined && isModuleInteropKey(raw, key)) continue;
+      unknownKeys.push(key);
+      const suggestion =
         didYouMean(key, KNOWN_CONFIG_KEYS) ?? `Known keys: ${quoteList(KNOWN_CONFIG_KEYS)}.`;
-      problems.push(`Unknown key ${formatValue(key)} in the config. ${hint}`);
+      problems.push(`Unknown key ${formatValue(key)} in the config. ${suggestion}`);
     }
+    exportHint = noDefaultExportHint(raw, unknownKeys, origin);
   }
 
   // madrVersion selects the metadata source and which rules run (#207). An
@@ -382,9 +463,7 @@ export function resolveExtends(raw: unknown, origin: ConfigOrigin = {}): Resolve
         ? problems[0]
         : `Invalid config (${problems.length} problems):\n${problems.map((p) => `  - ${p}`).join('\n')}`;
     // Not a problem of its own: it explains the unknown keys above it.
-    if (origin.withoutDefaultExport === true && unknownKeys > 0) {
-      message += `\n${NO_DEFAULT_EXPORT_HINT}`;
-    }
+    if (exportHint !== undefined) message += `\n${exportHint}`;
     throw new InvalidConfigError(message);
   }
 
