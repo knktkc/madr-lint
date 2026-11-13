@@ -159,15 +159,32 @@ const RULES_DOCS_URL = 'https://knktkc.github.io/madr-lint/rules/';
 const MAX_SHOWN_LENGTH = 80;
 
 function truncate(text: string): string {
-  return text.length > MAX_SHOWN_LENGTH ? `${text.slice(0, MAX_SHOWN_LENGTH)}…` : text;
+  if (text.length <= MAX_SHOWN_LENGTH) return text;
+  let cut = text.slice(0, MAX_SHOWN_LENGTH);
+  // Cutting between the halves of a surrogate pair leaves a broken character.
+  const last = cut.charCodeAt(cut.length - 1);
+  if (last >= 0xd800 && last <= 0xdbff) cut = cut.slice(0, -1);
+  return `${cut}…`;
 }
+
+const UNPRINTABLE = 'an unprintable value';
 
 /**
  * Renders a config value from the user for an error message. JS configs can
  * hold anything, so this must not throw: `JSON.stringify` throws on a bigint
  * or a cycle, and returns undefined for a symbol, a function, or undefined.
+ * A revoked Proxy or a throwing `toJSON` / `Symbol.toStringTag` defeats every
+ * way of printing it, so the last resort is a fixed description.
  */
 function formatValue(value: unknown): string {
+  try {
+    return formatValueUnguarded(value);
+  } catch {
+    return UNPRINTABLE;
+  }
+}
+
+function formatValueUnguarded(value: unknown): string {
   switch (typeof value) {
     case 'string':
       return JSON.stringify(truncate(value));
@@ -185,7 +202,7 @@ function formatValue(value: unknown): string {
       try {
         return truncate(JSON.stringify(value) ?? Object.prototype.toString.call(value));
       } catch {
-        return Object.prototype.toString.call(value);
+        return truncate(Object.prototype.toString.call(value));
       }
   }
 }
@@ -200,16 +217,33 @@ function didYouMean(value: string, known: Iterable<string>): string | undefined 
 }
 
 /**
+ * `null`, `undefined`, and `false` mean "absent" for top-level `extends` and
+ * `rules` and for entries of an `extends` array. They were ignored before
+ * #206, and JS configs rely on that (`rules: ci && {...}`,
+ * `extends: [ci && 'preset']`).
+ */
+function isAbsent(value: unknown): boolean {
+  return value === null || value === undefined || value === false;
+}
+
+/** `Array.isArray`, but undefined instead of a throw for a revoked Proxy. */
+function tryIsArray(value: unknown): boolean | undefined {
+  try {
+    return Array.isArray(value);
+  } catch {
+    return undefined;
+  }
+}
+
+/**
  * Normalizes `extends` to a list. A bare string has always worked (by way of
  * `String.prototype.includes`), so it stays accepted as a one-entry list.
- * `null` and `null`/`undefined`/`false` entries were ignored before #206 and
- * JS configs rely on that (`extends: [ci && 'preset']`), so they are skipped.
  */
 function extendsEntries(value: unknown, problems: string[]): unknown[] {
-  if (value === undefined || value === null) return [];
+  if (isAbsent(value)) return [];
   if (typeof value === 'string') return [value];
-  if (Array.isArray(value)) {
-    return value.filter((entry) => entry !== null && entry !== undefined && entry !== false);
+  if (tryIsArray(value) === true) {
+    return (value as unknown[]).filter((entry) => !isAbsent(entry));
   }
   problems.push(
     `Invalid extends ${formatValue(value)}: use a preset name or a list of preset names.`,
@@ -255,8 +289,8 @@ export function resolveExtends(config: MadrLintConfig): ResolvedConfig {
     problems.push(`Unknown preset ${formatValue(entry)} in extends. ${hint}`);
   }
 
-  const rules: unknown = config.rules ?? {};
-  if (typeof rules !== 'object' || rules === null || Array.isArray(rules)) {
+  const rules: unknown = isAbsent(config.rules) ? {} : config.rules;
+  if (typeof rules !== 'object' || rules === null || tryIsArray(rules) !== false) {
     // Checked as a whole: listing the keys of a string or an array would
     // report each index ("0", "1", ...) as an unknown rule.
     problems.push(
