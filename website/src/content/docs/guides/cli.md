@@ -88,9 +88,10 @@ npx madr-lint init
   win: YAML frontmatter with `decision-makers` counts as v4, other
   frontmatter with MADR fields as v3, a v2 metadata list as v2 (frontmatter
   with only site-generator keys such as `title` does not count). An empty directory, a tie, no
-  recognizable metadata, or a mix of frontmatter and v2-list files yields
-  `auto` (the default, so it is omitted from the written config). A fixed
-  version reads one metadata format only, so a mixed directory keeps `auto`.
+  recognizable metadata, or a mix of frontmatter and v2-list metadata yields
+  `auto` (the default, so it is omitted from the written config). The mix
+  may be across files or within one file that carries both. A fixed version
+  reads one metadata format only, so mixed metadata keeps `auto`.
 - **Config format** — `madr-lint.config.ts` when the project looks
   TypeScript-ish (a `tsconfig.json`, or `typescript` among `package.json`
   dependencies), `.madrlintrc.json` otherwise.

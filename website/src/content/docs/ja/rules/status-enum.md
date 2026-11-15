@@ -5,7 +5,7 @@ description: ADR の status フィールドが許可された値のいずれか�
 
 ADR の `status` フィールドが許可された値のいずれかであることを検証します。
 
-このルールは `context.metadata.status` を読み取ります。これは YAML frontmatter に v2 の本文リストメタデータを**マージ**したものです。これにより MADR v2（太字の `- **Status**:` 形式と、素の `* Status:` リスト形式の両方）、v3、v4 をサポートします。競合した場合は frontmatter が優先されます。明示的な null/undefined の frontmatter 値はスキップされるため、v2 の本文リストの値が保持されます。
+このルールは `context.metadata.status` を読み取ります。読み取り元は [`madrVersion`](/ja/guides/configuration/#madr-バージョン) で決まります。`auto`（デフォルト）では YAML frontmatter に v2 の本文リストメタデータを**マージ**したもの、`v2` では v2 の本文リストのみ、`v3`/`v4` では frontmatter のみを読みます。これにより MADR v2（太字の `- **Status**:` 形式と、素の `* Status:` リスト形式の両方）、v3、v4 をサポートします。`auto` で競合した場合は frontmatter が優先されます。`auto` では、明示的な null/undefined の frontmatter 値はスキップされるため、v2 の本文リストの値が保持されます。
 
 ## チェック内容
 

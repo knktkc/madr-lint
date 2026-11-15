@@ -5,7 +5,7 @@ description: ADR の date フィールドが実在する ISO 8601 のカレン�
 
 ADR の `date` フィールドが `YYYY-MM-DD` 形式の有効な ISO 8601 カレンダー日付であることを検証します。
 
-このルールは `context.metadata[field]` を読み取ります。これは YAML frontmatter に v2 の本文リストメタデータを**マージ**したものです（競合時は frontmatter が優先され、明示的な null/undefined の frontmatter 値はスキップされます）。したがって MADR v2（太字の `- **Date**:` および素の `* Date:` リスト項目）、v3、v4 をサポートします。
+このルールは `context.metadata[field]` を読み取ります。読み取り元は [`madrVersion`](/ja/guides/configuration/#madr-バージョン) で決まります。`auto`（デフォルト）では YAML frontmatter に v2 の本文リストメタデータを**マージ**したもの（競合時は frontmatter が優先され、明示的な null/undefined の frontmatter 値はスキップされます）、`v2` では v2 の本文リストのみ、`v3`/`v4` では frontmatter のみを読みます。したがって MADR v2（太字の `- **Date**:` および素の `* Date:` リスト項目）、v3、v4 をサポートします。
 
 `gray-matter` はクォートされていない `date: 2026-05-01` を JavaScript の `Date` にパースします。このルールは `Date` を `toISOString().slice(0, 10)` によって正規化し、`string` はそのまま保持し、それ以外（null, boolean, number）は欠落として扱います。検証には `Date.UTC` のラウンドトリップを使用するため、外部ライブラリなしでうるう年や月の日数が正しく扱われます。
 

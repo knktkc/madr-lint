@@ -5,7 +5,7 @@ description: Validate that an ADR's status field is one of the allowed values.
 
 Validates that an ADR's `status` field is one of the allowed values.
 
-The rule reads `context.metadata.status`, which is YAML frontmatter **merged** with v2 body-list metadata. This means it supports MADR v2 (both the bold `- **Status**:` and the plain `* Status:` list shapes), v3 and v4. On conflict, frontmatter wins; explicit null/undefined frontmatter values are skipped so a v2 body-list value is preserved.
+The rule reads `context.metadata.status`, whose source [`madrVersion`](/guides/configuration/#madr-version) selects. Under `auto` (the default) it is YAML frontmatter **merged** with v2 body-list metadata; `v2` reads the body list only, and `v3`/`v4` read frontmatter only. This means it supports MADR v2 (both the bold `- **Status**:` and the plain `* Status:` list shapes), v3 and v4. Under `auto`, frontmatter wins on conflict; explicit null/undefined frontmatter values are skipped so a v2 body-list value is preserved.
 
 ## What it checks
 

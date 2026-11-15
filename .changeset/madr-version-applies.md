@@ -16,6 +16,6 @@ What changes in your results if you set a fixed `madrVersion`:
 - With `v3`/`v4`, a file whose metadata is a body list now gets `madr/metadata-format`, and `madr/status-enum` / `madr/date-iso8601` report its status and date as missing. Move the metadata into frontmatter, or switch to `madrVersion: 'auto'`.
 - With `v2`, a file with frontmatter now gets `madr/metadata-format`, and its frontmatter fields are no longer read.
 
-`madr-lint init` now writes `auto` when the sampled ADRs mix frontmatter and body-list metadata, instead of the majority version.
+`madr-lint init` now writes `auto` when the sampled ADRs mix frontmatter and body-list metadata, instead of the majority version. The mix may be across files or within one file that carries both.
 
 For rule authors and API users: `context.madrVersion` and `context.listMetadata` are new on the per-file rule context; `parseFile` takes an optional version and returns `version`; `runRule`, `runRulesOnFile`, and `runRulesOnProject` accept `madrVersion`; `buildProjectFile` takes it as a second argument.

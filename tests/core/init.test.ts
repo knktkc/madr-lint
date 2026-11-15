@@ -200,6 +200,36 @@ describe('core/init', () => {
       expect(detectMadrVersion(dir, 'docs/adr')).toBe('auto');
     });
 
+    it('returns "auto" for a single file with MADR frontmatter plus a body metadata list', () => {
+      // A fixed v3 reads frontmatter only, so the list's Date would go unread.
+      const MIXED = '---\nstatus: accepted\n---\n\n# A\n\n* Date: 2026-01-01\n\n## Context and Problem Statement\n\nx\n';
+      writeAdr(join(dir, 'docs/adr'), '0001-a.md', MIXED);
+      expect(detectMadrVersion(dir, 'docs/adr')).toBe('auto');
+    });
+
+    it('returns "auto" for a single file with v4 frontmatter plus a body metadata list', () => {
+      const MIXED_V4 = '---\nstatus: accepted\ndecision-makers:\n  - alice\n---\n\n# A\n\n* Date: 2026-01-01\n\n## Context and Problem Statement\n\nx\n';
+      writeAdr(join(dir, 'docs/adr'), '0001-a.md', MIXED_V4);
+      expect(detectMadrVersion(dir, 'docs/adr')).toBe('auto');
+    });
+
+    it('returns "auto" when one same-file mix sits among pure frontmatter files', () => {
+      // The majority must not win: a fixed v3 would leave the mixed file's
+      // list metadata unread.
+      const MIXED = '---\nstatus: accepted\n---\n\n# A\n\n* Date: 2026-01-01\n\n## Context and Problem Statement\n\nx\n';
+      writeAdr(join(dir, 'docs/adr'), '0001-a.md', V3_FRONTMATTER);
+      writeAdr(join(dir, 'docs/adr'), '0002-b.md', V3_FRONTMATTER);
+      writeAdr(join(dir, 'docs/adr'), '0003-c.md', V3_FRONTMATTER);
+      writeAdr(join(dir, 'docs/adr'), '0004-d.md', MIXED);
+      expect(detectMadrVersion(dir, 'docs/adr')).toBe('auto');
+    });
+
+    it('keeps v3 for MADR frontmatter plus an ordinary leading list with no metadata key', () => {
+      const PROSE_LIST = '---\nstatus: accepted\ndate: 2026-01-01\n---\n\n# A\n\n* first point\n* second point\n\n## Context and Problem Statement\n\nx\n';
+      writeAdr(join(dir, 'docs/adr'), '0001-a.md', PROSE_LIST);
+      expect(detectMadrVersion(dir, 'docs/adr')).toBe('v3');
+    });
+
     it('returns "auto" on an exact tie', () => {
       writeAdr(join(dir, 'docs/adr'), '0001-a.md', V3_FRONTMATTER);
       writeAdr(join(dir, 'docs/adr'), '0002-b.md', V2_BODY_LIST);

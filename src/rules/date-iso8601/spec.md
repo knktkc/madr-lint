@@ -13,7 +13,7 @@ The check is strict: `2025-13-01`, `2026-02-30`, `2025-02-29` (non-leap), `2026-
 ## MADR version compatibility
 
 - **v3, v4**: frontmatter `date: 2026-05-01` → **supported**
-- **v2**: bold-list `- **Date**: 2026-05-01` → **supported** via the metadata bridge (ADR-0006). The rule reads `context.metadata[options.field]`, which combines frontmatter and bold-list (frontmatter wins on conflict; explicit null/undefined frontmatter values are skipped).
+- **v2**: bold-list `- **Date**: 2026-05-01` → **supported** via the metadata bridge (ADR-0006). The rule reads `context.metadata[options.field]`, whose source `madrVersion` selects (ADR-0011): `auto` combines frontmatter and bold-list (frontmatter wins on conflict; explicit null/undefined frontmatter values are skipped), `v2` reads the body list only, and `v3`/`v4` read frontmatter only.
 
 ## YAML date handling
 

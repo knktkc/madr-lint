@@ -10,7 +10,7 @@ the allowed enum.
 ## MADR version compatibility
 
 - **v3, v4**: frontmatter form `status: proposed` → **supported**
-- **v2**: bold-list form `- **Status**: Proposed` → **supported** via the metadata bridge (ADR-0006). The rule reads `context.metadata.status`, which combines frontmatter and bold-list with key normalization (frontmatter wins on conflict; explicit null/undefined frontmatter values are skipped to preserve bold-list values).
+- **v2**: bold-list form `- **Status**: Proposed` → **supported** via the metadata bridge (ADR-0006). The rule reads `context.metadata.status`, whose source `madrVersion` selects (ADR-0011): `auto` combines frontmatter and bold-list with key normalization (frontmatter wins on conflict; explicit null/undefined frontmatter values are skipped to preserve bold-list values), `v2` reads the body list only, and `v3`/`v4` read frontmatter only.
 
 ## Diagnostic
 
