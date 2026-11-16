@@ -926,6 +926,8 @@ describe('cli (end-to-end)', () => {
       ['ignorePatterns {}', { ignorePatterns: {} }, `Invalid ignorePatterns {}: ${IGNORE_PATTERNS_USE}`],
       ['ignorePatterns [42]', { ignorePatterns: [42] }, 'Invalid ignorePatterns entry 42: use a non-empty string.'],
       ['cacheLocation 42', { cacheLocation: 42 }, 'Invalid cacheLocation 42: use a non-empty string, such as ".madr-lint/cache".'],
+      ['a rule set to null', { rules: { 'madr/status-enum': null } }, 'Invalid severity null for rule "madr/status-enum": use one of "error", "warn", "off", or a list [severity, options].'],
+      ['a rule set to false', { extends: ['madr-lint:recommended'], rules: { 'madr/status-enum': false } }, 'Invalid severity false for rule "madr/status-enum": use "off" instead.'],
     ] as const)('exits 2 for %s, discovered and with --config', { timeout: 60_000 }, ([, config, line]) => {
       const content = JSON.stringify(config);
       writeFileSync(join(dir, '.madrlintrc.json'), content);
@@ -955,34 +957,35 @@ describe('cli (end-to-end)', () => {
       );
     }, 30_000);
 
-    // The issue's last row: a rule set to null crashed. Like null in extends,
-    // it now counts as not written, so the preset's severity stays.
-    it('keeps the preset severity for a rule set to null or false', { timeout: 60_000 }, () => {
-      writeFileSync(
-        join(dir, '.madrlintrc.json'),
-        JSON.stringify({ extends: ['madr-lint:recommended'], rules: { 'madr/status-enum': null } }),
-      );
-      const json = runCli(dir, ['--no-cache', '--format', 'json']);
-      expect(json.stderr).toBe('');
-      expect(json.status).toBe(1);
-      expect(ruleNames(json)).toEqual(['error madr/status-enum']);
-
-      // `ci && 'error'` outside CI used to run the rule as a warning.
+    // undefined equals leaving the key out, so the preset's severity stays.
+    // It used to turn the rule off.
+    it('keeps the preset severity for a rule set to undefined', () => {
       writeFileSync(
         join(dir, 'custom.mjs'),
-        'export default { extends: ["madr-lint:recommended"], rules: { "madr/status-enum": false } };\n',
+        'export default { extends: ["madr-lint:recommended"], rules: { "madr/status-enum": undefined } };\n',
       );
-      const js = runCli(dir, ['--no-cache', '--config', 'custom.mjs', '--format', 'json']);
-      expect(js.stderr).toBe('');
-      expect(js.status).toBe(1);
-      expect(ruleNames(js)).toEqual(['error madr/status-enum']);
-    });
+      const r = runCli(dir, ['--no-cache', '--config', 'custom.mjs', '--format', 'json']);
+      expect(r.stderr).toBe('');
+      expect(r.status).toBe(1);
+      expect(ruleNames(r)).toEqual(['error madr/status-enum']);
+    }, 30_000);
 
-    it('runs no rule for an explicit config whose only rule is set to null', () => {
-      writeFileSync(join(dir, 'custom.json'), JSON.stringify({ rules: { 'madr/status-enum': null } }));
-      const r = runCli(dir, ['--no-cache', '--config', 'custom.json']);
+    it('runs no rule for an explicit config whose only rule is set to undefined', () => {
+      writeFileSync(join(dir, 'custom.mjs'), 'export default { rules: { "madr/status-enum": undefined } };\n');
+      const r = runCli(dir, ['--no-cache', '--config', 'custom.mjs']);
       expect(r.stderr).toBe('');
       expect(r.status).toBe(0);
+    }, 30_000);
+
+    it('falls back to recommended for a discovered config whose rules are all undefined', () => {
+      writeFileSync(
+        join(dir, 'madr-lint.config.mjs'),
+        'export default { rules: { "madr/status-enum": undefined } };\n',
+      );
+      const r = runCli(dir, ['--no-cache', '--format', 'json']);
+      expect(r.stderr).toBe('');
+      expect(r.status).toBe(1);
+      expect(ruleNames(r)).toEqual(['error madr/status-enum']);
     }, 30_000);
 
     it('keeps the rule options error for an options object the rule rejects', () => {

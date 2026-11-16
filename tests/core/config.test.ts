@@ -1128,21 +1128,52 @@ describe('core/config', () => {
           ).toEqual(['error', options]);
         });
 
-        // Like null, undefined and false for top-level rules and extends
-        // entries: the entry counts as not written, so a preset's severity
-        // stays (`'madr/status-enum': ci && 'error'`).
-        it.for([null, undefined, false])('treats a rule set to %s as not written', (value) => {
+        // undefined cannot be written in JSON and equals leaving the key out
+        // in JS, so the entry counts as not written and a preset's severity
+        // stays.
+        it('treats a rule set to undefined as not written', () => {
           expect(
-            resolveExtends(asConfig({ rules: { 'madr/status-enum': value } })).rules,
+            resolveExtends(asConfig({ rules: { 'madr/status-enum': undefined } })).rules,
           ).toEqual({});
           expect(
             resolveExtends(
               asConfig({
                 extends: ['madr-lint:recommended'],
-                rules: { 'madr/status-enum': value, 'madr/date-iso8601': 'warn' },
+                rules: { 'madr/status-enum': undefined, 'madr/date-iso8601': 'warn' },
               }),
             ).rules,
           ).toEqual({ ...recommended, 'madr/date-iso8601': 'warn' });
+        });
+      });
+
+      // `"madr/no-numbering-gap": false` most likely means "off", and null in
+      // JSON is as ambiguous. Reading either as "not written" would keep a
+      // preset rule running without a message, so both are errors that say
+      // what to write.
+      describe('null and false', () => {
+        const FALSE_LINE = 'Invalid severity false for rule "madr/status-enum": use "off" instead.';
+        const NULL_LINE = `Invalid severity null for rule "madr/status-enum": ${RULE_VALUE_USE}`;
+
+        it.for([
+          ['false', false, FALSE_LINE],
+          ['null', null, NULL_LINE],
+          ['[false]', [false], FALSE_LINE],
+          ['[false, {}]', [false, {}], FALSE_LINE],
+          ['[null]', [null], NULL_LINE],
+          ['[null, {}]', [null, {}], NULL_LINE],
+        ] as const)('rejects %s', ([, value, expected]) => {
+          expect(ruleError(value)).toBe(expected);
+        });
+
+        it('rejects them over a preset rule too', () => {
+          expect(
+            configError(
+              asConfig({
+                extends: ['madr-lint:recommended'],
+                rules: { 'madr/status-enum': false },
+              }),
+            ),
+          ).toBe(FALSE_LINE);
         });
       });
     });
@@ -1320,10 +1351,21 @@ describe('core/config', () => {
       expect(explicit).toBe(expected);
     });
 
-    it('reads a JS config with a rule set to null as not written (#229)', () => {
+    it('rejects a rule set to null in a JSON config (#229)', () => {
+      const [discovered, explicit] = bothLoadErrors(
+        '.madrlintrc.json',
+        '{ "rules": { "madr/status-enum": null } }\n',
+      );
+      const expected =
+        'Invalid severity null for rule "madr/status-enum": use one of "error", "warn", "off", or a list [severity, options].';
+      expect(discovered).toBe(expected);
+      expect(explicit).toBe(expected);
+    });
+
+    it('reads a JS config with a rule set to undefined as not written (#229)', () => {
       writeFileSync(
         join(dir, 'madr-lint.config.mjs'),
-        'export default { extends: ["madr-lint:recommended"], rules: { "madr/status-enum": null } };\n',
+        'export default { extends: ["madr-lint:recommended"], rules: { "madr/status-enum": undefined } };\n',
       );
       expect(loadConfig(dir).rules).toEqual(recommended);
     });
