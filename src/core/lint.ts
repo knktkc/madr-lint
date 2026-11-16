@@ -21,6 +21,7 @@ import { nullProtoMap } from './null-proto-map.js';
 import {
   buildProjectFile,
   parseErrorDiagnostic,
+  projectRuleAppliesTo,
   runRulesOnFile,
   runRulesOnProject,
 } from './runner.js';
@@ -195,8 +196,12 @@ export function lintFiles(opts: LintOptions): LintResult {
   }
 
   // ── Project pass ─────────────────────────────────────────────────
+  // A rule the configured version excludes counts as off, so no file is
+  // parsed for the project pass when no rule would run.
   const enabledProjectRules = projectRules.filter(
-    (rule) => resolveSeverity(opts.ruleSeverity[rule.meta.name]) !== 'off',
+    (rule) =>
+      resolveSeverity(opts.ruleSeverity[rule.meta.name]) !== 'off' &&
+      projectRuleAppliesTo(rule, madrVersion),
   );
   if (enabledProjectRules.length > 0) {
     const { projectFiles, parseErrors } = buildProjectFiles(
@@ -358,9 +363,12 @@ export function lintAndFix(opts: LintAndFixOptions): LintAndFixResult {
   // edit collection (the #29 seam). The per-file fixpoint has already settled;
   // project fixes only insert whole-file frontmatter keys (supersedes /
   // superseded-by) that no per-file rule reads, so the per-file `remaining`
-  // captured above stays valid. See ADR-0008.
+  // captured above stays valid. See ADR-0008. A rule the configured version
+  // excludes counts as off, as in `lintFiles`.
   const enabledProjectRules = projectRules.filter(
-    (rule) => resolveSeverity(opts.ruleSeverity[rule.meta.name]) !== 'off',
+    (rule) =>
+      resolveSeverity(opts.ruleSeverity[rule.meta.name]) !== 'off' &&
+      projectRuleAppliesTo(rule, madrVersion),
   );
   if (enabledProjectRules.length > 0) {
     // Mutable per-path content, seeded from the per-file-fixed files.

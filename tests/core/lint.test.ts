@@ -843,4 +843,104 @@ describe('core/lint — madrVersion (#207)', () => {
     expect(run('auto')).toEqual(['invalidStatus']);
     expect(run('v4')).toEqual(['missingStatus']);
   });
+
+  // A project rule the fixed version excludes must behave like a rule that is
+  // off: the project pass does not parse the files, so a broken frontmatter is
+  // not reported by it. Only project rules are configured here, so the per-file
+  // pass cannot report the parse error itself.
+  describe('project pass when the fixed version excludes every enabled project rule', () => {
+    const BROKEN_FRONTMATTER = '---\nstatus: [\n---\n# A\n';
+
+    type Version = 'auto' | 'v2' | 'v3' | 'v4';
+
+    function writeBroken(): string {
+      const file = join(dir, '0001-a.md');
+      writeFileSync(file, BROKEN_FRONTMATTER);
+      return file;
+    }
+
+    function lintWith(
+      file: string,
+      madrVersion: Version,
+      ruleSeverity: Record<string, 'error' | 'off'>,
+      rules: Parameters<typeof lintFiles>[0]['rules'] = [supersedesBidirectional],
+    ) {
+      return lintFiles({ rules, ruleSeverity, files: [file], cwd: dir, madrVersion });
+    }
+
+    function fixWith(
+      file: string,
+      madrVersion: Version,
+      ruleSeverity: Record<string, 'error' | 'off'>,
+      rules: Parameters<typeof lintAndFix>[0]['rules'] = [supersedesBidirectional],
+    ) {
+      return lintAndFix({ rules, ruleSeverity, files: [file], cwd: dir, madrVersion });
+    }
+
+    const ON = { 'madr/supersedes-bidirectional': 'error' } as const;
+    const OFF = { 'madr/supersedes-bidirectional': 'off' } as const;
+
+    it('lintFiles: reports nothing under v2, exactly as when the rule is off', () => {
+      const file = writeBroken();
+      const excluded = lintWith(file, 'v2', ON);
+      expect(excluded.diagnostics).toEqual([]);
+      expect(excluded).toEqual(lintWith(file, 'v2', OFF));
+    });
+
+    it('lintAndFix: reports nothing and fixes nothing under v2, exactly as when the rule is off', () => {
+      const file = writeBroken();
+      const excluded = fixWith(file, 'v2', ON);
+      expect(excluded.diagnostics).toEqual([]);
+      expect(excluded.fixed).toBe(0);
+      expect(excluded.files).toHaveLength(1);
+      expect(excluded.files[0]?.changed).toBe(false);
+      expect(excluded.files[0]?.fixed).toBe(BROKEN_FRONTMATTER);
+      expect(readFileSync(file, 'utf8')).toBe(BROKEN_FRONTMATTER);
+      expect(excluded).toEqual(fixWith(file, 'v2', OFF));
+    });
+
+    // Controls: the project pass still runs whenever some enabled project rule
+    // applies to the configured version.
+    it.for(['auto', 'v3', 'v4'] as const)(
+      'still reports the parse error under %s',
+      (madrVersion) => {
+        const file = writeBroken();
+        for (const result of [
+          lintWith(file, madrVersion, ON),
+          fixWith(file, madrVersion, ON),
+        ]) {
+          expect(result.diagnostics.map((d) => d.ruleName)).toEqual([
+            'core/internal-error',
+          ]);
+        }
+      },
+    );
+
+    it('still reports the parse error under v2 when another enabled project rule supports v2', () => {
+      const file = writeBroken();
+      const severity = { ...ON, 'madr/no-duplicate-numbering': 'error' } as const;
+      const rules = [supersedesBidirectional, noDuplicateNumbering];
+      for (const result of [
+        lintWith(file, 'v2', severity, rules),
+        fixWith(file, 'v2', severity, rules),
+      ]) {
+        expect(result.diagnostics.map((d) => d.ruleName)).toEqual([
+          'core/internal-error',
+        ]);
+      }
+    });
+
+    it('still runs the rule normally under v3', () => {
+      const file = join(dir, '0001-a.md');
+      writeFileSync(file, '---\nstatus: accepted\nsupersedes: "9999"\n---\n\n# A\n');
+      for (const result of [lintWith(file, 'v3', ON), fixWith(file, 'v3', ON)]) {
+        expect(result.diagnostics.length).toBeGreaterThan(0);
+        expect(
+          result.diagnostics.every(
+            (d) => d.ruleName === 'madr/supersedes-bidirectional',
+          ),
+        ).toBe(true);
+      }
+    });
+  });
 });
