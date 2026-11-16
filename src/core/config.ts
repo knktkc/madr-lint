@@ -251,11 +251,30 @@ function formatValueUnguarded(value: unknown): string {
       return String(value);
     default:
       try {
-        return truncate(JSON.stringify(value) ?? Object.prototype.toString.call(value));
+        return truncate(
+          JSON.stringify(value, shortenLists) ?? Object.prototype.toString.call(value),
+        );
       } catch {
         return truncate(Object.prototype.toString.call(value));
       }
   }
+}
+
+// Every list entry prints as at least one character plus a comma, so the
+// first MAX_SHOWN_ITEMS entries already run past MAX_SHOWN_LENGTH and the
+// truncated text is the same as for the whole list.
+const MAX_SHOWN_ITEMS = Math.ceil(MAX_SHOWN_LENGTH / 2) + 1;
+
+/**
+ * A `JSON.stringify` replacer that keeps only the head of a long list, so a
+ * huge (or sparse, or Proxy-reported) length is not serialized only to be
+ * truncated.
+ */
+function shortenLists(_key: string, value: unknown): unknown {
+  if (!Array.isArray(value) || !(value.length > MAX_SHOWN_ITEMS)) return value;
+  const head: unknown[] = [];
+  for (let i = 0; i < MAX_SHOWN_ITEMS; i++) head.push(value[i]);
+  return head;
 }
 
 function quoteList(values: Iterable<string>): string {
@@ -452,6 +471,12 @@ function cacheSetting(config: object, problems: string[]): boolean | undefined {
   return undefined;
 }
 
+const IGNORE_PATTERNS_USE = 'use a list of glob patterns, such as ["template.md"].';
+
+// Far more than any real config needs; it keeps the walk over a list whose
+// length a Proxy reports bounded.
+const MAX_IGNORE_PATTERNS = 10_000;
+
 /**
  * A string used to be read character by character, so `"0001-*"` ignored
  * every file through its `*` (#229). Returns a copy, so the patterns are read
@@ -461,23 +486,35 @@ function ignorePatternsSetting(config: object, problems: string[]): string[] | u
   const value = tryRead(config, 'ignorePatterns');
   if (value === null || value === undefined) return undefined;
   const length = tryArrayLength(value);
-  if (typeof length !== 'number') {
+  if (length === undefined || length === UNREADABLE) {
     problems.push(
-      `Invalid ignorePatterns ${length === UNREADABLE ? UNPRINTABLE : formatRead(value)}: use a list of glob patterns, such as ["template.md"].`,
+      `Invalid ignorePatterns ${length === UNREADABLE ? UNPRINTABLE : formatRead(value)}: ${IGNORE_PATTERNS_USE}`,
     );
+    return undefined;
+  }
+  // A Proxy can report any length: NaN or -1 would read as an empty list, and
+  // Infinity would never end the walk.
+  if (typeof length !== 'number' || !Number.isSafeInteger(length) || length < 0) {
+    problems.push(`Invalid ignorePatterns with length ${formatValue(length)}: ${IGNORE_PATTERNS_USE}`);
     return undefined;
   }
   const patterns: string[] = [];
   // Index reads, because a hole is an invalid entry too. Only the first bad
   // entry is reported: a sparse list of length 1e8 would otherwise add 1e8
   // problems.
-  for (let i = 0; i < length; i++) {
+  for (let i = 0; i < Math.min(length, MAX_IGNORE_PATTERNS); i++) {
     const entry = tryRead(value as object, i);
     if (typeof entry !== 'string' || entry === '') {
       problems.push(`Invalid ignorePatterns entry ${formatRead(entry)}: use a non-empty string.`);
       return undefined;
     }
     patterns.push(entry);
+  }
+  if (length > MAX_IGNORE_PATTERNS) {
+    problems.push(
+      `Invalid ignorePatterns with length ${length}: use at most ${MAX_IGNORE_PATTERNS} patterns.`,
+    );
+    return undefined;
   }
   return patterns;
 }
@@ -496,6 +533,11 @@ function severityProblem(value: unknown, rule: string, use: string): string | un
     const hint = didYouMean(value, SEVERITIES);
     return `Invalid severity ${formatValue(value)} for rule ${rule}: ${SEVERITY_USE}${hint === undefined ? '' : ` ${hint}`}`;
   }
+  // `ci && 'error'` is undefined outside CI when `ci` is, and undefined used
+  // to turn the rule off.
+  if (value === undefined) {
+    return `Invalid severity undefined for rule ${rule}: use "off" instead, or remove the entry.`;
+  }
   // `false` most likely means "off"; ESLint spells severities as 0, 1, 2.
   const instead =
     value === false ? 'off' : typeof value === 'number' ? ESLINT_SEVERITIES[value] : undefined;
@@ -510,30 +552,39 @@ function severityProblem(value: unknown, rule: string, use: string): string | un
  * A severity, `[severity]`, or `[severity, options]`. An unknown severity used
  * to run a per-file rule as a warning and skip a project rule (#229). The
  * contents of `options` are left to the rule's schema, checked when it runs.
+ *
+ * Returns what to resolve the rule to, meaningful only when no problem was
+ * added: a list is copied from the entries that were checked, so a getter
+ * cannot pass the check and hand the linter another value on a later read.
  */
-function ruleValueProblems(name: string, value: unknown, problems: string[]): void {
+function checkedRuleValue(name: string, value: unknown, problems: string[]): unknown {
   const rule = formatValue(name);
   const length = tryArrayLength(value);
   if (length === undefined) {
     const problem = severityProblem(value, rule, RULE_VALUE_USE);
     if (problem !== undefined) problems.push(problem);
-    return;
+    return value;
   }
   if (length !== 1 && length !== 2) {
     problems.push(
       `Invalid severity ${length === UNREADABLE ? UNPRINTABLE : formatValue(value)} for rule ${rule}: ${RULE_VALUE_USE}`,
     );
-    return;
+    return undefined;
   }
-  const problem = severityProblem(tryRead(value as object, 0), rule, SEVERITY_USE);
+  const severity = tryRead(value as object, 0);
+  const problem = severityProblem(severity, rule, SEVERITY_USE);
   if (problem !== undefined) problems.push(problem);
-  if (length === 1) return;
+  if (length === 1) return [severity];
   // Absent options mean the rule's defaults, as before (`['error', ci && {...}]`).
+  // They stay in the copy so the cache key does not change.
   const options = tryRead(value as object, 1);
-  if (isAbsent(options)) return;
-  if (typeof options !== 'object' || options === null || tryIsArray(options) !== false) {
+  if (
+    !isAbsent(options) &&
+    (typeof options !== 'object' || options === null || tryIsArray(options) !== false)
+  ) {
     problems.push(`Invalid options ${formatRead(options)} for rule ${rule}: use an object.`);
   }
+  return [severity, options];
 }
 
 /**
@@ -609,7 +660,8 @@ export function resolveExtends(raw: unknown, origin: ConfigOrigin = {}): Resolve
     problems.push(`Unknown preset ${formatValue(entry)} in extends. ${hint}`);
   }
 
-  const rules: unknown = isAbsent(config.rules) ? {} : config.rules;
+  const rawRules: unknown = config.rules;
+  const rules: unknown = isAbsent(rawRules) ? {} : rawRules;
   // Only the user's values: preset severities are trusted, and a user value
   // overrides the preset's.
   const userRules: Record<string, RuleSeverity> = {};
@@ -633,13 +685,10 @@ export function resolveExtends(raw: unknown, origin: ConfigOrigin = {}): Resolve
           didYouMean(name, known.rules) ?? `See ${RULES_DOCS_URL} for the list of rules.`;
         problems.push(`Unknown rule ${formatValue(name)} in rules. ${hint}`);
       }
-      const value = tryRead(rules, name);
-      // undefined cannot be written in JSON and equals leaving the key out in
-      // JS, so the entry counts as not written and a preset's severity stays.
-      // null and false are not absent here: read as "not written", they would
-      // keep a preset rule running when the user most likely meant "off".
-      if (value === undefined) continue;
-      ruleValueProblems(name, value, problems);
+      // null, false and undefined are not absent here, unlike for rules
+      // itself: read as "not written", they would keep a preset rule running
+      // when the user most likely meant "off" (`ci && 'error'`).
+      const value = checkedRuleValue(name, tryRead(rules, name), problems);
       if (isKnownRule) userRules[name] = value as RuleSeverity;
     }
   }
