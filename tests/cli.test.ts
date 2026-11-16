@@ -884,6 +884,11 @@ describe('cli (end-to-end)', () => {
   describe('a discovered config file that fails to load (#225)', () => {
     const STACK_LINE = /^\s+at /m;
     const UNPRINTABLE = 'the thrown value cannot be converted to a string';
+    // `instanceof` on these throws, so the error handler cannot classify them
+    // with a bare `instanceof` check.
+    const PROXY_PROTO_THROWS = 'throw new Proxy({}, { getPrototypeOf() { throw null; } });\n';
+    const REVOKED_PROXY =
+      'const { proxy, revoke } = Proxy.revocable({}, {});\nrevoke();\nthrow proxy;\n';
 
     function expectLoadFailure(r: CliResult, name: string): void {
       const prefix = `Failed to load config "${name}": `;
@@ -913,6 +918,10 @@ describe('cli (end-to-end)', () => {
       ['madr-lint.config.cjs', 'string throw', 'throw "boom";\n'],
       ['madr-lint.config.cjs', 'null throw', 'throw null;\n'],
       ['madr-lint.config.cjs', 'unprintable throw', 'throw Object.create(null);\n'],
+      ['madr-lint.config.cjs', 'undefined throw', 'throw undefined;\n'],
+      ['madr-lint.config.cjs', 'zero throw', 'throw 0;\n'],
+      ['madr-lint.config.cjs', 'Proxy throw whose getPrototypeOf throws', PROXY_PROTO_THROWS],
+      ['madr-lint.config.cjs', 'revoked Proxy throw', REVOKED_PROXY],
     ] as const;
 
     it.for(CASES)(
@@ -944,6 +953,8 @@ describe('cli (end-to-end)', () => {
       ['madr-lint.config.cjs', 'throw new Error("config failed");\n', 'config failed'],
       ['madr-lint.config.cjs', 'throw "boom";\n', 'boom'],
       ['madr-lint.config.cjs', 'throw null;\n', 'null'],
+      ['madr-lint.config.cjs', 'throw undefined;\n', 'undefined'],
+      ['madr-lint.config.cjs', 'throw 0;\n', '0'],
     ] as const)(
       'keeps the --config message for %s %j',
       { timeout: 30_000 },
@@ -978,6 +989,22 @@ describe('cli (end-to-end)', () => {
         `Failed to load config "madr-lint.config.cjs": ${UNPRINTABLE}\n`,
       );
     }, 30_000);
+
+    it.for([
+      ['a Proxy whose getPrototypeOf throws', PROXY_PROTO_THROWS],
+      ['a revoked Proxy', REVOKED_PROXY],
+    ] as const)(
+      'exits 2 with --config when the config throws %s',
+      { timeout: 30_000 },
+      ([, content]) => {
+        writeFileSync(join(dir, 'madr-lint.config.cjs'), content);
+        writeFileSync(join(dir, 'wrong.md'), '# x\n');
+        expectConfigError(
+          runCli(dir, ['--no-cache', '--config', 'madr-lint.config.cjs', 'wrong.md']),
+          `Failed to load config "madr-lint.config.cjs": ${UNPRINTABLE}\n`,
+        );
+      },
+    );
 
     it('names the first config file in discovery order', () => {
       writeFileSync(join(dir, '.madrlintrc.ts'), 'throw new Error("first");\n');
