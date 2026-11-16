@@ -286,6 +286,40 @@ describe('cli init (end-to-end)', () => {
     }, 30_000);
   });
 
+  it('runs the initial lint with the fixed madrVersion it writes (#207)', () => {
+    // `superseded-by` is not a MADR metadata key, so 0001 still counts as v2
+    // and init writes v2. Under auto, madr/supersedes-bidirectional (v3/v4
+    // only) reads that frontmatter and reports 0002 for not answering; under
+    // v2 it does not run. So the initial lint is clean only when it lints
+    // with the written version.
+    writeAdr(
+      dir,
+      'docs/adr/0001-a.md',
+      `---\nsuperseded-by: 0002-b.md\n---\n\n${VALID_V2_ADR}`,
+    );
+    writeAdr(dir, 'docs/adr/0002-b.md', VALID_V2_ADR);
+
+    const before = lintJson(dir);
+    expect(before.results).toEqual([
+      expect.objectContaining({ ruleName: 'madr/supersedes-bidirectional' }),
+    ]);
+
+    const init = runCli(dir, ['init', '--json']);
+    expect(init.status).toBe(0);
+    const payload = JSON.parse(init.stdout) as {
+      madrVersion: string;
+      errors: number;
+      suggestUpdateBaseline: boolean;
+    };
+    expect(payload.madrVersion).toBe('v2');
+    expect(payload.errors).toBe(0);
+    expect(payload.suggestUpdateBaseline).toBe(false);
+
+    const after = lintJson(dir);
+    expect(after.results).toEqual([]);
+    expect(after.status).toBe(0);
+  }, 30_000);
+
   it('writes auto for a file mixing frontmatter and a body metadata list, and the written config lints it clean', () => {
     // A fixed v3 reads frontmatter only and would report the list's Date as
     // missing (madr/date-iso8601), turning a clean project into a failure.
