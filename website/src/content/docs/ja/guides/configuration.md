@@ -92,7 +92,7 @@ JSON での同等の記述（`.madrlintrc.json`）:
 | `cacheLocation` | `string` | `'.madr-lint/cache'` | キャッシュマニフェストのディレクトリ。 |
 
 設定はオブジェクトである必要があり、上記以外のトップレベルキーは設定エラーです
-（[未知の名前](#未知の名前)を参照）。型の違う値も設定エラーです（[不正な値](#不正な値)を参照）。
+（[未知の名前](#未知の名前)を参照）。[不正な値](#不正な値)に挙げた値以外も設定エラーです。
 
 ## ルールの設定
 
@@ -205,14 +205,13 @@ The config must be an object, not a Promise. Async configs are not supported: ex
 | キー | 受け付ける値 |
 |---|---|
 | `adrDir`、`cacheLocation` | 空でない文字列 |
-| `ignorePatterns` | 空でない文字列のリスト（パターンが 1 つでもリストで書きます） |
+| `ignorePatterns` | 空でない文字列のリスト（10000 個まで。パターンが 1 つでもリストで書きます） |
 | `cache` | `true` または `false` |
-| `rules` の各値 | `'error'`、`'warn'`、`'off'`、`[severity]`、または `options` をオブジェクトにした `[severity, options]` |
+| `rules` の各値 | `'error'`、`'warn'`、`'off'`、または `options` がオブジェクトの `[severity, options]`（`options` に `null`、`undefined`、`false` を書くと、ルールのデフォルトのオプションを使います） |
 
-トップレベルの設定に `null` と `undefined` を書くと、デフォルト値のままになります。
-ルールに `false` や `null` を書くと設定エラーです。ルールを無効にするには `'off'` を
-書いてください（`ci ? 'error' : 'off'` など）。JavaScript の設定でルールに `undefined` を
-書いた場合は、そのエントリを書かなかったものとして扱い、プリセットの重大度が残ります。
+トップレベルの設定に `null` または `undefined` を書くと、デフォルト値のままになります。
+ルールに `false`、`null`、`undefined` を書くと設定エラーです。ルールを無効にするには
+`'off'` を書いてください（`ci ? 'error' : 'off'` など）。
 有効な重大度に近い値には、メッセージで候補を示します。ESLint の数値 `0`、`1`、`2` と
 `false` には、代わりに使う文字列を示します。
 
@@ -224,6 +223,9 @@ Invalid config (3 problems):
 ```
 
 `--config` を使った場合も、このメッセージは `Failed to load config "<path>": ` で始まります。
+コマンドラインの指定がその実行で値を置き換える場合も、値を検証します。たとえば `adrDir` に
+対するコマンドラインのパス、`cacheLocation` に対する `--cache-dir`、`cache` に対する
+`--no-cache` です。
 `options` の中身は、[ルールの設定](#ルールの設定)で説明したとおり、ルールの実行時に検証します。
 
 各ルールが受け付けるオプションについては [ルールリファレンス](/ja/rules/) を参照してください。

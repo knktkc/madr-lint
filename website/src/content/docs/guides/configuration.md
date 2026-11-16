@@ -94,8 +94,8 @@ The JSON equivalent (`.madrlintrc.json`):
 | `cacheLocation` | `string` | `'.madr-lint/cache'` | Directory for the cache manifest. |
 
 The config must be an object, and any other top-level key is a config error
-(see [Unknown names](#unknown-names)). A value of another type is a config error
-too (see [Invalid values](#invalid-values)).
+(see [Unknown names](#unknown-names)). Any value other than the ones listed in
+[Invalid values](#invalid-values) is a config error too.
 
 ## Configuring rules
 
@@ -213,16 +213,15 @@ in the same error as unknown names.
 | Key | Accepted values |
 |---|---|
 | `adrDir`, `cacheLocation` | A non-empty string |
-| `ignorePatterns` | A list of non-empty strings, even for one pattern |
+| `ignorePatterns` | A list of at most 10000 non-empty strings, even for one pattern |
 | `cache` | `true` or `false` |
-| Each value in `rules` | `'error'`, `'warn'`, `'off'`, `[severity]`, or `[severity, options]` with an object as `options` |
+| Each value in `rules` | `'error'`, `'warn'`, `'off'`, or `[severity, options]` with an object as `options` (`null`, `undefined`, or `false` as `options` means the rule's default options) |
 
 `null` and `undefined` leave a top-level setting at its default. A rule set to
-`false` or `null` is a config error: write `'off'` to turn a rule off, as in
-`ci ? 'error' : 'off'`. A rule set to `undefined` in a JavaScript config counts
-as not written, so the preset's severity stays. When a severity is close to a
-valid one, the message suggests it. ESLint's numbers `0`, `1`, and `2`, and
-`false`, get the string to use instead:
+`false`, `null`, or `undefined` is a config error: write `'off'` to turn a rule
+off, as in `ci ? 'error' : 'off'`. When a severity is close to a valid one, the
+message suggests it. ESLint's numbers `0`, `1`, and `2`, and `false`, get the
+string to use instead:
 
 ```text
 Invalid config (3 problems):
@@ -232,6 +231,9 @@ Invalid config (3 problems):
 ```
 
 With `--config`, this message also starts with `Failed to load config "<path>": `.
+The values are checked even when a command-line flag replaces them for the run,
+such as paths given on the command line for `adrDir`, `--cache-dir` for
+`cacheLocation`, or `--no-cache` for `cache`.
 The contents of `options` are checked when the rule runs, as described in
 [Configuring rules](#configuring-rules).
 
