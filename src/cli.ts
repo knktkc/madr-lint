@@ -46,6 +46,16 @@ function describeError(err: unknown): string {
   }
 }
 
+// `instanceof` throws on a Proxy whose getPrototypeOf trap throws or that has
+// been revoked. Such a value is not one of our error classes.
+function isInstance(err: unknown, cls: new (...args: never[]) => Error): boolean {
+  try {
+    return err instanceof cls;
+  } catch {
+    return false;
+  }
+}
+
 const pkg = JSON.parse(
   readFileSync(new URL('../package.json', import.meta.url), 'utf8'),
 ) as { version: string };
@@ -149,8 +159,8 @@ const main = defineCommand({
         config = loadConfigFromPath(absConfigPath);
         configExplicit = true;
       } catch (err) {
-        if (err instanceof ConfigFileNotFoundError) {
-          console.error(err.message);
+        if (isInstance(err, ConfigFileNotFoundError)) {
+          console.error(describeError(err));
         } else {
           console.error(`Failed to load config "${configArg}": ${describeError(err)}`);
         }
@@ -160,8 +170,8 @@ const main = defineCommand({
       try {
         config = loadConfig(cwd);
       } catch (err) {
-        if (err instanceof InvalidConfigError) {
-          console.error(err.message);
+        if (isInstance(err, InvalidConfigError)) {
+          console.error(describeError(err));
         } else {
           // Same existsSync walk as loadConfig, so this names the file it loaded.
           const name = CONFIG_FILES.find((n) => existsSync(resolve(cwd, n)));
