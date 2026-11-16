@@ -255,7 +255,7 @@ describe('core/init', () => {
       expect(detectMadrVersion(dir, 'docs/adr')).toBe('auto');
     });
 
-    it('returns "auto" when no sampled file carries recognizable metadata', () => {
+    it('returns "auto" when no file carries recognizable metadata', () => {
       writeAdr(join(dir, 'docs/adr'), '0001-a.md', NO_METADATA);
       writeAdr(join(dir, 'docs/adr'), '0002-b.md', NO_METADATA);
       expect(detectMadrVersion(dir, 'docs/adr')).toBe('auto');
