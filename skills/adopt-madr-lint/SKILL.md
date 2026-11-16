@@ -9,7 +9,7 @@ allowed-tools: Bash(npm:*), Bash(pnpm:*), Bash(yarn:*), Bash(npx:*), Bash(node:*
 Grounded against **madr-lint@0.4.0** (the latest published npm release as of
 this writing). `madr-lint init`
 ([#30](https://github.com/knktkc/madr-lint/issues/30)) has shipped — it
-auto-detects the ADR directory and dominant MADR version, writes the config,
+auto-detects the ADR directory and the MADR version, writes the config,
 and runs an initial lint pass in one command, so this skill invokes it
 directly instead of hand-writing a config file.
 
@@ -80,8 +80,9 @@ npx madr-lint init
 ```
 
 This detects the ADR directory (checking `docs/adr`, `docs/decisions`, and
-`adr` first, then falling back to a repo-wide scan), infers the dominant
-MADR version from whatever ADRs it finds, writes `.madrlintrc.json` (or a TS
+`adr` first, then falling back to a repo-wide scan), infers the MADR version
+from whatever ADRs it finds (a fixed version only when they all use the same
+metadata format, `auto` otherwise), writes `.madrlintrc.json` (or a TS
 config if the repo looks TS-first), and runs an initial lint pass:
 
 ```text
