@@ -23,7 +23,8 @@ import * as builtinRules from '../rules/index.js';
  *
  * Non-interactive by design: every decision is a filesystem heuristic or a
  * flag, so it works in CI and behind pipes. Detects the ADR directory, the
- * dominant MADR version, and whether to write TS or JSON; refuses to clobber
+ * MADR version (from every file the linter checks), and whether to write TS
+ * or JSON; refuses to clobber
  * an existing config unless `--force`.
  */
 export const initCommand = defineCommand({
