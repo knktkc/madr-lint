@@ -1,5 +1,115 @@
 # Changelog
 
+## 0.6.0
+
+### Minor Changes
+
+- [#230](https://github.com/knktkc/madr-lint/pull/230) [`51f76e5`](https://github.com/knktkc/madr-lint/commit/51f76e5ca06e36dcf0f89fe19d0a7ac43ee46984) Thanks [@knktkc](https://github.com/knktkc)! - Report invalid values of `adrDir`, `ignorePatterns`, `cache`, `cacheLocation`, and rule severities in the config ([#229](https://github.com/knktkc/madr-lint/issues/229)). madr-lint checked the names in a config but not these values. A wrong value either changed what was linted without a message or crashed with a stack trace and exit code 1. Each is now a config error (exit 2), on discovered config files and on `--config` alike, listed in the same error as unknown names and an invalid `madrVersion`:
+  
+  ```text
+  Invalid config (3 problems):
+    - Invalid ignorePatterns "0001-*": use a list of glob patterns, such as ["template.md"].
+    - Invalid severity "eror" for rule "madr/status-enum": use one of "error", "warn", "off". Did you mean "error"?
+    - Invalid severity 2 for rule "madr/no-broken-links": use "error" instead.
+  ```
+  
+  With `--config`, the message starts with `Failed to load config "<path>": `.
+  
+  The accepted values:
+  
+  - `adrDir` and `cacheLocation`: a non-empty string.
+  - `ignorePatterns`: a list of at most 10000 non-empty strings, even for one pattern. The first invalid entry is reported (`Invalid ignorePatterns entry 42: use a non-empty string.`).
+  - `cache`: `true` or `false`.
+  - Each value in `rules`: `'error'`, `'warn'`, `'off'`, or `[severity, options]` with an object as `options`. A severity close to a valid one gets a suggestion (`'eror'` and `'Error'` suggest `"error"`). ESLint's numbers `0`, `1`, and `2` get the string to use instead, and so does `false` (`"off"`). `null` and `undefined` are rejected too. The contents of `options` are still checked by the rule's schema when the rule runs, with the same `Invalid rule options in config: …` message.
+  
+  `null` and `undefined` still leave `adrDir`, `ignorePatterns`, `cache`, and `cacheLocation` at their defaults. These rule values keep working: `['off', {...}]`, a one-entry `['error']`, and `[severity, options]` whose options are `null`, `undefined`, or `false` (the rule's defaults apply). Any other non-object options are rejected. Severities from the `madr-lint:recommended` preset are not checked; a value you set over the preset is.
+  
+  The values are checked even when a command-line flag replaces them for the run. If you use the GitHub Action, note that it passes the `path` input as paths on the command line and always passes `--no-cache`. A config that linted fine there can now exit 2 for this reason. The cases are listed below.
+  
+  What changes in your results:
+  
+  - A misspelled or differently cased severity (`'eror'`, `'Error'`), an ESLint number (`2`), `true`, or a list such as `['eror', {}]` or `[]` now exits 2. Before, such a value ran a per-file rule as a warning, so an error never failed CI, and skipped a cross-file rule such as `madr/no-duplicate-numbering` entirely. Use `'error'`, `'warn'`, or `'off'`.
+  - A string `ignorePatterns` (`"0001-*"`) now exits 2. Before, the string was read character by character, and a `*` in it ignored every file, so the run printed `No .md files to lint` and exited 0. Wrap the pattern in a list: `["0001-*"]`.
+  - A `cache` value that is not a boolean, such as `"false"`, `"true"`, `0`, or `1`, now exits 2. Before, only `true` turned the cache on, so every such value turned it off without a message, `"true"` and `1` included. With `--cache` or `--no-cache`, the flag decided and the value had no effect, so the run linted normally; it now exits 2 too, and that includes every run of the GitHub Action. Use `true` or `false`.
+  - `adrDir: ""` now exits 2. Before, it linted nothing and exited 0. `cacheLocation: ""` now exits 2. Before, it wrote the cache manifest into the working directory. Remove the key to use the default, or set a directory.
+  - `adrDir` set to a number or a list used to crash with a `TypeError` (exit 1) when no path was given on the command line. With paths on the command line, as the GitHub Action passes its `path` input, `adrDir` was not read and the run linted normally. Both now exit 2.
+  - `cacheLocation` set to a number or a list used to crash with a `TypeError` (exit 1), `--no-cache` included. With `--cache-dir`, it was not read and the run linted normally. Both now exit 2.
+  - `ignorePatterns` set to an object or holding a non-string or empty entry used to crash with a `TypeError` (exit 1). It now exits 2. A list longer than 10000 patterns now exits 2 as well.
+  - A rule value with more than two entries (`['error', {...}, extra]`) and options that are neither an object nor `null`, `undefined`, or `false` now exit 2. Before, the extra entries were ignored. `['error', []]`, `['error', '']`, and `['error', 0]` ran the rule with its default options. `['off', 'x']` and `['off', []]` did nothing, like `'off'`. `['error', 'x']` failed with an `Invalid rule options` message. Use `[severity, { ... }]`, or a bare severity.
+  - A rule set to `false`, `null`, or `undefined` now exits 2, also as the first entry of a list (`[false]`, `[null, {}]`, `[undefined]`). Before, `null` crashed with a `TypeError` (exit 1), `false` ran a per-file rule as a warning and skipped a cross-file rule, and `undefined` turned the rule off. The messages are `Invalid severity false for rule "<id>": use "off" instead.` and `Invalid severity undefined for rule "<id>": use "off" instead, or remove the entry.` Write `'off'` to turn a rule off. In a JS config, `'madr/status-enum': ci && 'error'` outside CI is `false` or `undefined`, depending on what `ci` holds, and both now exit 2. Write `ci ? 'error' : 'off'` instead.
+
+- [#216](https://github.com/knktkc/madr-lint/pull/216) [`e96897c`](https://github.com/knktkc/madr-lint/commit/e96897cdd42b1ab49d4551e7576250c270924fe4) Thanks [@knktkc](https://github.com/knktkc)! - Make `madrVersion` take effect ([#207](https://github.com/knktkc/madr-lint/issues/207)). The setting was accepted and documented as selecting the MADR spec to validate against, but no rule read it: `'v2'`, `'v3'`, `'v4'`, and `'auto'` gave the same results. It now decides two things.
+  
+  - **Where metadata is read from.** `v2` reads the list under the title (`* Status: ...`) only, and `v3`/`v4` read YAML frontmatter only. `auto` (the default) still merges both, so a repository on the default sees no change.
+  - **Which rules run.** A rule runs only for the MADR versions it supports. `madr/supersedes-bidirectional` supports v3/v4, so it no longer runs with `madrVersion: 'v2'`.
+  
+  An unknown `madrVersion` value (for example `"V3"`) is now a config error (exit 2) instead of being accepted.
+  
+  New rule `madr/metadata-format` (enabled as `error` in `recommended`) reports a file whose metadata is in the format the configured version does not read, for example a body list with `madrVersion: 'v4'`. Without it, that file's status and date would go unchecked.
+  
+  What changes in your results if you set a fixed `madrVersion`:
+  
+  - With `v3`/`v4`, a file whose metadata is a body list now gets `madr/metadata-format`, and `madr/status-enum` / `madr/date-iso8601` report its status and date as missing. Move the metadata into frontmatter, or switch to `madrVersion: 'auto'`.
+  - With `v2`, a file with frontmatter now gets `madr/metadata-format`, and its frontmatter fields are no longer read.
+  
+  `madr-lint init` now decides the version from every Markdown file under the ADR directory (the files the linter checks), instead of a sample of 20 `NNNN-*.md` files at its top level. It writes `auto` whenever frontmatter and body-list metadata are mixed, instead of the majority version. The mix may be across files or within one file that carries both. The written config therefore reports nothing that the default `auto` would not.
+  
+  For rule authors and API users: `context.madrVersion` and `context.listMetadata` are new on the per-file rule context; `parseFile` takes an optional version and returns `version`; `runRule`, `runRulesOnFile`, and `runRulesOnProject` accept `madrVersion`; `buildProjectFile` takes it as a second argument.
+
+- [#215](https://github.com/knktkc/madr-lint/pull/215) [`5d04308`](https://github.com/knktkc/madr-lint/commit/5d04308f319bc295cf764efd0819d8bbace24199) Thanks [@knktkc](https://github.com/knktkc)! - Fix the default `sections` of `madr/required-sections` to match the MADR templates ([#214](https://github.com/knktkc/madr-lint/issues/214)). The defaults are now `Context and Problem Statement`, `Considered Options`, and `Decision Outcome`, the headings that the v2 (2.1.2), v3 (3.0.0), and v4 (4.0.0) templates do not mark as optional. The old defaults required `Consequences` instead of `Considered Options`.
+  
+  What changes in your results:
+  
+  - A v2 ADR written from the template no longer fails with `Missing required section: "Consequences"`. The v2 template has `Positive Consequences` and `Negative Consequences` (both optional) and no `Consequences` heading, so these ADRs failed even with `madrVersion: 'v2'`.
+  - A v3/v4 ADR without the optional `Consequences` heading no longer fails.
+  - An ADR without a `Considered Options` heading now fails. Add the heading, or set `sections` to keep the old list: `['Context and Problem Statement', 'Decision Outcome', 'Consequences']`.
+
+- [#223](https://github.com/knktkc/madr-lint/pull/223) [`2c8e4fe`](https://github.com/knktkc/madr-lint/commit/2c8e4fe671437fc3b4ab7263fea9d8472bc6d3d0) Thanks [@knktkc](https://github.com/knktkc)! - Report unknown top-level keys in the config, and configs that are not an object ([#222](https://github.com/knktkc/madr-lint/issues/222)). madr-lint read the keys it knows from whatever the config file yielded and ignored the rest. A misspelled key (`rule`, `adrdir`) had no effect. Neither did a config in a named export: with `export const config = {...}` and no default export, the module's exports were read as the config, and `config` is not a key madr-lint reads. A discovered config like that linted with the recommended rules instead of its own; with `--config`, no rule ran and the CLI exited 0. Both are now a config error (exit 2), on discovered config files and on `--config` alike, for every config file format.
+  
+  The error names the key and suggests a known key when one is close (ignoring case). Otherwise it lists the known keys. When a TypeScript or JavaScript config has no default export and an unknown export looks like a config (its value is an object with a known config key), the error names that export and says to export it as the default. For the named-export config above:
+  
+  ```text
+  Unknown key "config" in the config. Known keys: "extends", "madrVersion", "adrDir", "rules", "ignorePatterns", "cache", "cacheLocation".
+  The export "config" looks like a config. Export it as the default: `export default config` (ESM) or `module.exports = config` (CommonJS).
+  ```
+  
+  If no export looks like a config, a module written in ESM syntax gets the line `The config file has no default export, so its exports were read as the config.` instead. A plain CommonJS `module.exports = {...}` is its default export, so it gets no extra line unless one of its keys looks like a config (`module.exports = { config: { rules: {...} } }`). JSON configs and modules with a default export never get either line.
+  
+  With `--config`, the message starts with `Failed to load config "<path>": `. Unknown keys are listed first, in the same error as the unknown rule IDs and `extends` entries from [#206](https://github.com/knktkc/madr-lint/issues/206). Keys such as `$schema` are unknown keys too, and inherited enumerable keys (`Object.create({...})`) are checked like own keys, except enumerable properties that a dependency added to `Object.prototype`. Two keys that module interop adds are not config keys in a JS/TS config: `__esModule`, and a `default` key that points back at the config (`module.exports = c; module.exports.default = c`) or at an object that is its own default (such a module spread into the config with `{ ...base }`); in JSON both are unknown keys. A config that is not an object is reported as, for example, `The config must be an object, not a function.` An async config gets `The config must be an object, not a Promise. Async configs are not supported: export the config object itself.`
+  
+  These keep working: `export default {...}`, `export default defineConfig({...})`, `module.exports = {...}`, named exports that are all known keys (`export const rules = {...}`), a class instance with config fields, the config `madr-lint init` writes, and running without a config file.
+  
+  What changes in your results:
+  
+  - A config with a top-level key madr-lint does not read, own or inherited, now exits 2 instead of ignoring the key. Fix the name the message points to, or remove the key.
+  - A JS/TS config that holds the config object in a named export (`export const config = {...}` or `exports.config = {...}`) now exits 2. Export the object as the default: `export default config` or `module.exports = config`.
+  - A config that is not an object now exits 2. This includes a Promise (`export default (async () => ({...}))()`, which used to be read as an empty config), a function, even one that carries config properties (`export default () => ({...})`, `export default Object.assign(function () {}, { rules: {...} })`, or a class with static config fields, which used to be read), `export default undefined` (also when named exports sit next to it, which used to be read instead), `export default null`, and a JSON file that holds `[]` or a string. `module.exports = null`, `module.exports = undefined`, and a JSON file that holds `null` used to crash with a `TypeError` (exit 1; with `--config`, exit 2 with the `TypeError` text) and now get this message.
+  - A config module without a default export that mixes known named exports with other exports (`export const rules = {...}` next to `export const helper = ...`) now exits 2, because the other exports are read as unknown keys. Move the config into a default export.
+
+- [#221](https://github.com/knktkc/madr-lint/pull/221) [`3f8e101`](https://github.com/knktkc/madr-lint/commit/3f8e101b7ecbc0069fd80badefa65de8db5f5668) Thanks [@knktkc](https://github.com/knktkc)! - Report unknown rule IDs and `extends` entries in the config ([#206](https://github.com/knktkc/madr-lint/issues/206)). A typo in a rule ID (`madr/status-enmu`) or a preset name (`madr-lint:recomended`) used to be ignored silently. With both typos, no rule ran and the CLI exited 0. Both are now a config error (exit 2), on discovered config files and on `--config` alike.
+  
+  The error suggests a known name when one is close (ignoring case, and adding a missing `madr/` or `madr-lint:` prefix). Otherwise it lists the known presets or links to the rule list. Every problem in the config is listed at once:
+  
+  ```text
+  Invalid config (2 problems):
+    - Unknown preset "madr-lint:recomended" in extends. Did you mean "madr-lint:recommended"?
+    - Unknown rule "madr/status-enmu" in rules. Did you mean "madr/status-enum"?
+  ```
+  
+  With `--config`, the message starts with `Failed to load config "<path>": `.
+  
+  Rule IDs under `core/` (such as `core/internal-error`) are reserved for madr-lint's own diagnostics, and configuring one is also an error. An invalid `madrVersion` is reported in the same list. A bare string `extends: 'madr-lint:recommended'` keeps working as a one-entry list. `null`, `undefined`, and `false` still mean "absent" for `extends`, for `rules`, and for each entry of an `extends` list, as in `rules: ci && {...}` or `extends: [ci && 'preset']`.
+  
+  What changes in your results:
+  
+  - A config with a misspelled rule ID or preset name now exits 2 instead of linting with fewer rules than you wrote. This includes a misspelled rule set to `'off'`. Fix the name the message points to, or remove the entry.
+  - A config that sets a `core/` rule ID now exits 2. Remove that entry; the reserved diagnostics cannot be turned off.
+  - Other values that used to be ignored now exit 2: an `extends` entry that is not a preset name (including `''`, `42`, and `true`), and a `rules` value that is not an object (such as `[]`, `0`, or `''`).
+
+### Patch Changes
+
+- [#227](https://github.com/knktkc/madr-lint/pull/227) [`3f699e3`](https://github.com/knktkc/madr-lint/commit/3f699e3bc909bbd1ba9312894e851f4b5e6cace7) Thanks [@knktkc](https://github.com/knktkc)! - Exit 2 with one message when a discovered config file cannot be loaded ([#225](https://github.com/knktkc/madr-lint/issues/225)). A `.madrlintrc.json` that was empty, truncated, or held only a comment, and a config module that had a syntax error or threw while it was loaded or read, used to print a stack trace and exit 1, the code for lint errors, so CI could not tell a broken config from failing ADRs. A module that threw a falsy value (such as `null`, `undefined`, or `0`) exited 0 with no output. The CLI now prints `Failed to load config "<file>": <reason>`, naming the file it found, and exits 2. `--config` already behaved this way. A config that throws a value that cannot be converted to a string, or a Proxy that `instanceof` cannot inspect, no longer crashes the CLI or exits 0 on either path.
+
 ## 0.5.2
 
 ### Patch Changes
