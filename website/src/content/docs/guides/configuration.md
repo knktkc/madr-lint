@@ -218,10 +218,11 @@ in the same error as unknown names.
 | Each value in `rules` | `'error'`, `'warn'`, `'off'`, `[severity]`, or `[severity, options]` with an object as `options` |
 
 `null` and `undefined` leave a top-level setting at its default. A rule set to
-`null`, `undefined`, or `false` counts as not written, so the preset's severity
-stays, as in `'madr/status-enum': ci && 'error'`. When a severity is close to a
-valid one, the message suggests it. ESLint's numbers `0`, `1`, and `2` get the
-string to use instead:
+`false` or `null` is a config error: write `'off'` to turn a rule off, as in
+`ci ? 'error' : 'off'`. A rule set to `undefined` in a JavaScript config counts
+as not written, so the preset's severity stays. When a severity is close to a
+valid one, the message suggests it. ESLint's numbers `0`, `1`, and `2`, and
+`false`, get the string to use instead:
 
 ```text
 Invalid config (3 problems):

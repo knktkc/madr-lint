@@ -210,10 +210,11 @@ The config must be an object, not a Promise. Async configs are not supported: ex
 | `rules` の各値 | `'error'`、`'warn'`、`'off'`、`[severity]`、または `options` をオブジェクトにした `[severity, options]` |
 
 トップレベルの設定に `null` と `undefined` を書くと、デフォルト値のままになります。
-ルールに `null`、`undefined`、`false` を書いた場合は、そのエントリを書かなかったものとして
-扱い、プリセットの重大度が残ります（`'madr/status-enum': ci && 'error'` など）。
-有効な重大度に近い値には、メッセージで候補を示します。ESLint の数値 `0`、`1`、`2` には、
-代わりに使う文字列を示します。
+ルールに `false` や `null` を書くと設定エラーです。ルールを無効にするには `'off'` を
+書いてください（`ci ? 'error' : 'off'` など）。JavaScript の設定でルールに `undefined` を
+書いた場合は、そのエントリを書かなかったものとして扱い、プリセットの重大度が残ります。
+有効な重大度に近い値には、メッセージで候補を示します。ESLint の数値 `0`、`1`、`2` と
+`false` には、代わりに使う文字列を示します。
 
 ```text
 Invalid config (3 problems):
