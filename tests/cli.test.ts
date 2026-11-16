@@ -874,4 +874,136 @@ describe('cli (end-to-end)', () => {
       expect(r.stdout).toContain('madr/required-sections');
     }, 30_000);
   });
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // A discovered config file that cannot be loaded (#225) gets the message
+  // --config already prints: `Failed to load config "<file>": <reason>`, no
+  // stack trace, exit 2. Some reasons (a JSON parse error that quotes the
+  // file, a jiti ParseError) span two lines on both paths.
+  // ──────────────────────────────────────────────────────────────────────────
+  describe('a discovered config file that fails to load (#225)', () => {
+    const STACK_LINE = /^\s+at /m;
+    const UNPRINTABLE = 'the thrown value cannot be converted to a string';
+
+    function expectLoadFailure(r: CliResult, name: string): void {
+      const prefix = `Failed to load config "${name}": `;
+      expect(r.stderr.slice(0, prefix.length)).toBe(prefix);
+      expect(r.stderr).not.toMatch(STACK_LINE);
+      expect(r.stdout).toBe('');
+      expect(r.status).toBe(2);
+    }
+
+    const CASES = [
+      ['.madrlintrc.json', 'empty', ''],
+      ['.madrlintrc.json', 'truncated', '{ "rules": '],
+      ['.madrlintrc.json', 'comment-only', '// madr-lint config\n'],
+      [
+        'madr-lint.config.cjs',
+        'getter that throws',
+        'module.exports = { rule: {}, get madrVersion() { throw new Error("getter failed"); } };\n',
+      ],
+      [
+        'madr-lint.config.cjs',
+        'Proxy whose ownKeys throws',
+        'module.exports = { rules: new Proxy({}, { ownKeys() { throw new Error("cannot enumerate rules"); } }) };\n',
+      ],
+      ['madr-lint.config.cjs', 'top-level throw', 'throw new Error("config failed");\n'],
+      ['madr-lint.config.cjs', 'syntax error', 'module.exports = { rules: { ;\n'],
+      ['madr-lint.config.ts', 'syntax error', 'export default { rules: { ;\n'],
+      ['madr-lint.config.cjs', 'string throw', 'throw "boom";\n'],
+      ['madr-lint.config.cjs', 'null throw', 'throw null;\n'],
+      ['madr-lint.config.cjs', 'unprintable throw', 'throw Object.create(null);\n'],
+    ] as const;
+
+    it.for(CASES)(
+      'exits 2 for a discovered %s (%s), with the --config message',
+      { timeout: 30_000 },
+      ([name, , content]) => {
+        writeFileSync(join(dir, name), content);
+        writeFileSync(join(dir, 'wrong.md'), '# x\n');
+        const discovered = runCli(dir, ['--no-cache', 'wrong.md']);
+        expectLoadFailure(discovered, name);
+        const explicit = runCli(dir, ['--no-cache', '--config', name, 'wrong.md']);
+        expect(discovered.stderr).toBe(explicit.stderr);
+      },
+    );
+
+    // Controls: what --config prints for these files stays as it was.
+    it.for([
+      ['.madrlintrc.json', '', 'Unexpected end of JSON input'],
+      [
+        'madr-lint.config.cjs',
+        'module.exports = { rule: {}, get madrVersion() { throw new Error("getter failed"); } };\n',
+        'getter failed',
+      ],
+      [
+        'madr-lint.config.cjs',
+        'module.exports = { rules: new Proxy({}, { ownKeys() { throw new Error("cannot enumerate rules"); } }) };\n',
+        'cannot enumerate rules',
+      ],
+      ['madr-lint.config.cjs', 'throw new Error("config failed");\n', 'config failed'],
+      ['madr-lint.config.cjs', 'throw "boom";\n', 'boom'],
+      ['madr-lint.config.cjs', 'throw null;\n', 'null'],
+    ] as const)(
+      'keeps the --config message for %s %j',
+      { timeout: 30_000 },
+      ([name, content, reason]) => {
+        writeFileSync(join(dir, name), content);
+        writeFileSync(join(dir, 'wrong.md'), '# x\n');
+        expectConfigError(
+          runCli(dir, ['--no-cache', '--config', name, 'wrong.md']),
+          `Failed to load config "${name}": ${reason}\n`,
+        );
+      },
+    );
+
+    it('keeps the --config message for a syntax error in a module', () => {
+      writeFileSync(join(dir, 'madr-lint.config.cjs'), 'module.exports = { rules: { ;\n');
+      writeFileSync(join(dir, 'wrong.md'), '# x\n');
+      expectLoadFailure(
+        runCli(dir, ['--no-cache', '--config', 'madr-lint.config.cjs', 'wrong.md']),
+        'madr-lint.config.cjs',
+      );
+    }, 30_000);
+
+    it('exits 2 without crashing for a thrown value that cannot be printed', () => {
+      writeFileSync(join(dir, 'madr-lint.config.cjs'), 'throw Object.create(null);\n');
+      writeFileSync(join(dir, 'wrong.md'), '# x\n');
+      expectConfigError(
+        runCli(dir, ['--no-cache', 'wrong.md']),
+        `Failed to load config "madr-lint.config.cjs": ${UNPRINTABLE}\n`,
+      );
+      expectConfigError(
+        runCli(dir, ['--no-cache', '--config', 'madr-lint.config.cjs', 'wrong.md']),
+        `Failed to load config "madr-lint.config.cjs": ${UNPRINTABLE}\n`,
+      );
+    }, 30_000);
+
+    it('names the first config file in discovery order', () => {
+      writeFileSync(join(dir, '.madrlintrc.ts'), 'throw new Error("first");\n');
+      writeFileSync(
+        join(dir, 'madr-lint.config.cjs'),
+        'module.exports = { rules: { "madr/filename-format": "off" } };\n',
+      );
+      writeFileSync(join(dir, 'wrong.md'), '# x\n');
+      expectConfigError(
+        runCli(dir, ['--no-cache', 'wrong.md']),
+        'Failed to load config ".madrlintrc.ts": first\n',
+      );
+    }, 30_000);
+
+    // Controls: a valid discovered config of each type still lints.
+    it.for([
+      ['.madrlintrc.json', '{ "rules": { "madr/filename-format": "error" } }\n'],
+      ['madr-lint.config.cjs', 'module.exports = { rules: { "madr/filename-format": "error" } };\n'],
+      ['madr-lint.config.ts', 'export default { rules: { "madr/filename-format": "error" } };\n'],
+    ] as const)('lints with a valid discovered %s', { timeout: 30_000 }, ([name, content]) => {
+      writeFileSync(join(dir, name), content);
+      writeFileSync(join(dir, 'wrong.md'), '# x\n');
+      const r = runCli(dir, ['--no-cache', 'wrong.md']);
+      expect(r.stderr).toBe('');
+      expect(r.stdout).toContain('madr/filename-format');
+      expect(r.status).toBe(1);
+    });
+  });
 });
