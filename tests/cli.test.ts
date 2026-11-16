@@ -932,9 +932,10 @@ describe('cli (end-to-end)', () => {
       const content = JSON.stringify(config);
       writeFileSync(join(dir, '.madrlintrc.json'), content);
       writeFileSync(join(dir, 'custom.json'), content);
-      expectConfigError(runCli(dir, ['--no-cache']), `${line}\n`);
+      // Without --no-cache, so a run that linted would leave a cache behind.
+      expectConfigError(runCli(dir, []), `${line}\n`);
       expectConfigError(
-        runCli(dir, ['--no-cache', '--config', 'custom.json']),
+        runCli(dir, ['--config', 'custom.json']),
         `Failed to load config "custom.json": ${line}\n`,
       );
       expect(existsSync(join(dir, '.madr-lint'))).toBe(false);
@@ -957,30 +958,35 @@ describe('cli (end-to-end)', () => {
       );
     }, 30_000);
 
-    // undefined equals leaving the key out, so the preset's severity stays.
-    // It used to turn the rule off.
-    it('keeps the preset severity for a rule set to undefined', () => {
-      writeFileSync(
-        join(dir, 'custom.mjs'),
-        'export default { extends: ["madr-lint:recommended"], rules: { "madr/status-enum": undefined } };\n',
+    // `ci && 'error'` outside CI: undefined used to turn the rule off; read as
+    // "not written" it would run at the preset severity without a message.
+    it('exits 2 for a rule set to undefined, discovered and with --config', () => {
+      const content =
+        'const ci = process.env.MADR_LINT_TEST_UNSET;\nexport default { extends: ["madr-lint:recommended"], rules: { "madr/no-duplicate-numbering": ci && "error" } };\n';
+      writeFileSync(join(dir, 'madr-lint.config.mjs'), content);
+      writeFileSync(join(dir, 'custom.mjs'), content);
+      const line =
+        'Invalid severity undefined for rule "madr/no-duplicate-numbering": use "off" instead, or remove the entry.';
+      expectConfigError(runCli(dir, ['--no-cache']), `${line}\n`);
+      expectConfigError(
+        runCli(dir, ['--no-cache', '--config', 'custom.mjs']),
+        `Failed to load config "custom.mjs": ${line}\n`,
       );
-      const r = runCli(dir, ['--no-cache', '--config', 'custom.mjs', '--format', 'json']);
-      expect(r.stderr).toBe('');
-      expect(r.status).toBe(1);
-      expect(ruleNames(r)).toEqual(['error madr/status-enum']);
-    }, 30_000);
+    }, 60_000);
 
-    it('runs no rule for an explicit config whose only rule is set to undefined', () => {
-      writeFileSync(join(dir, 'custom.mjs'), 'export default { rules: { "madr/status-enum": undefined } };\n');
-      const r = runCli(dir, ['--no-cache', '--config', 'custom.mjs']);
-      expect(r.stderr).toBe('');
-      expect(r.status).toBe(0);
-    }, 30_000);
-
-    it('falls back to recommended for a discovered config whose rules are all undefined', () => {
+    // The linter reads the resolved value later; it must be the value that was
+    // checked, not a second read of the user's getter.
+    it('lints with the severity it checked when a getter would change it', () => {
       writeFileSync(
         join(dir, 'madr-lint.config.mjs'),
-        'export default { rules: { "madr/status-enum": undefined } };\n',
+        [
+          'let reads = 0;',
+          'const tuple = Object.defineProperty(["x"], 0, {',
+          '  get() { reads += 1; if (reads > 1) throw new Error("second read"); return "error"; },',
+          '});',
+          'export default { rules: { "madr/status-enum": tuple } };',
+          '',
+        ].join('\n'),
       );
       const r = runCli(dir, ['--no-cache', '--format', 'json']);
       expect(r.stderr).toBe('');
@@ -1000,18 +1006,19 @@ describe('cli (end-to-end)', () => {
     }, 30_000);
 
     it.for([
-      ['["error"]', ['error'], 1],
-      ['["warn", {}]', ['warn', {}], 0],
-      ['["off", options the rule rejects]', ['off', { bogus: 1 }], 0],
-      ['["error", null]', ['error', null], 1],
-    ] as const)('still lints with %s', { timeout: 30_000 }, ([, value, status]) => {
+      ['["error"]', ['error'], 1, ['error madr/status-enum']],
+      ['["warn", {}]', ['warn', {}], 0, ['warn madr/status-enum']],
+      ['["off", options the rule rejects]', ['off', { bogus: 1 }], 0, []],
+      ['["error", null]', ['error', null], 1, ['error madr/status-enum']],
+    ] as const)('still lints with %s', { timeout: 30_000 }, ([, value, status, reported]) => {
       writeFileSync(
         join(dir, '.madrlintrc.json'),
         JSON.stringify({ rules: { 'madr/status-enum': value } }),
       );
-      const r = runCli(dir, ['--no-cache']);
+      const r = runCli(dir, ['--no-cache', '--format', 'json']);
       expect(r.stderr).toBe('');
       expect(r.status).toBe(status);
+      expect(ruleNames(r)).toEqual(reported);
     });
   });
 

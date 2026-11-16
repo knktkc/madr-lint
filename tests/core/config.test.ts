@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { recommended } from '../../src/configs/recommended.js';
+import { computeConfigHash } from '../../src/core/cache.js';
 import {
   CONFIG_FILES,
   InvalidConfigError,
@@ -41,6 +42,24 @@ const NO_DEFAULT_EXPORT_NOTE =
 // For values a JSON or JS config can hold but the TypeScript type does not allow.
 function asConfig(raw: Record<string, unknown>): MadrLintConfig {
   return raw as MadrLintConfig;
+}
+
+// A list with nothing in it but a length, as a careless loop might build.
+function sparseArray(length: number): unknown[] {
+  const array: unknown[] = [];
+  array.length = length;
+  return array;
+}
+
+// An array Proxy that reports `length` and returns `entry` at every index.
+function lyingArray(length: unknown, entry: unknown): unknown[] {
+  return new Proxy([], {
+    get(target, key, receiver): unknown {
+      if (key === 'length') return length;
+      if (typeof key === 'string' && /^\d+$/.test(key)) return entry;
+      return Reflect.get(target, key, receiver) as unknown;
+    },
+  });
 }
 
 function configError(config: MadrLintConfig): string {
@@ -837,6 +856,64 @@ describe('core/config', () => {
         expect(performance.now() - started).toBeLessThan(2000);
       });
 
+      // A Proxy can report any length. NaN and -1 used to pass as an empty
+      // list; Infinity with a string at every index never ended.
+      it.for([
+        ['NaN', Number.NaN, 'NaN'],
+        ['-1', -1, '-1'],
+        ['1.5', 1.5, '1.5'],
+        ['Infinity', Number.POSITIVE_INFINITY, 'Infinity'],
+        ['a string', '2', '"2"'],
+      ] as const)('rejects a list whose length is %s, quickly', ([, length, shown]) => {
+        const started = performance.now();
+        expect(configError(asConfig({ ignorePatterns: lyingArray(length, 'template.md') }))).toBe(
+          `Invalid ignorePatterns with length ${shown}: ${IGNORE_PATTERNS_USE}`,
+        );
+        expect(performance.now() - started).toBeLessThan(2000);
+      });
+
+      it('rejects a list longer than 10000 patterns, quickly', () => {
+        const started = performance.now();
+        expect(
+          configError(
+            asConfig({ ignorePatterns: lyingArray(Number.MAX_SAFE_INTEGER, 'template.md') }),
+          ),
+        ).toBe(
+          `Invalid ignorePatterns with length ${Number.MAX_SAFE_INTEGER}: use at most 10000 patterns.`,
+        );
+        expect(performance.now() - started).toBeLessThan(2000);
+        const tooMany = Array.from({ length: 10_001 }, (_, i) => `p${i}.md`);
+        expect(configError(asConfig({ ignorePatterns: tooMany }))).toBe(
+          'Invalid ignorePatterns with length 10001: use at most 10000 patterns.',
+        );
+        const most = tooMany.slice(0, 10_000);
+        expect(resolveExtends({ ignorePatterns: most }).ignorePatterns).toEqual(most);
+      });
+
+      it('reports a bad entry among the first 10000 of a longer list instead of its length', () => {
+        expect(configError(asConfig({ ignorePatterns: lyingArray(1e9, 42) }))).toBe(
+          'Invalid ignorePatterns entry 42: use a non-empty string.',
+        );
+      });
+
+      // The checked strings are returned, not the list, so a getter cannot
+      // hand later readers something else.
+      it('returns a plain copy of the patterns it checked', () => {
+        let reads = 0;
+        const patterns = Object.defineProperty(['template.md'], 0, {
+          get(): string {
+            reads += 1;
+            if (reads > 1) throw new Error('second read');
+            return 'template.md';
+          },
+        });
+        const resolved = resolveExtends(asConfig({ ignorePatterns: patterns })).ignorePatterns;
+        expect(Object.getOwnPropertyDescriptor(resolved, 0)).toEqual(
+          expect.objectContaining({ value: 'template.md' }),
+        );
+        expect(reads).toBe(1);
+      });
+
       it('rejects entries that cannot be read without crashing', () => {
         const entryThrows = Object.defineProperty(['template.md', 'x'], 1, {
           get(): never {
@@ -995,13 +1072,17 @@ describe('core/config', () => {
         ['true', [true], `Invalid severity true for rule "madr/status-enum": ${SEVERITY_USE}`],
         ['a nested list', [['error']], `Invalid severity ["error"] for rule "madr/status-enum": ${SEVERITY_USE}`],
         // oxlint-disable-next-line no-sparse-arrays -- the hole is the input under test
-        ['a hole', [, {}], `Invalid severity undefined for rule "madr/status-enum": ${SEVERITY_USE}`],
+        ['a hole', [, {}], 'Invalid severity undefined for rule "madr/status-enum": use "off" instead, or remove the entry.'],
       ] as const)('rejects %s as the first entry of a list', ([, value, expected]) => {
         expect(ruleError(value)).toBe(expected);
       });
 
       it.for([
         ['a string', ['error', 'x'], '"x"'],
+        ['an empty string', ['error', ''], '""'],
+        ['0', ['error', 0], '0'],
+        ['a string for an off rule', ['off', 'x'], '"x"'],
+        ['a list for an off rule', ['off', []], '[]'],
         ['a list', ['error', []], '[]'],
         ['a number', ['warn', 42], '42'],
         ['true', ['off', true], 'true'],
@@ -1128,53 +1209,141 @@ describe('core/config', () => {
           ).toEqual(['error', options]);
         });
 
-        // undefined cannot be written in JSON and equals leaving the key out
-        // in JS, so the entry counts as not written and a preset's severity
-        // stays.
-        it('treats a rule set to undefined as not written', () => {
-          expect(
-            resolveExtends(asConfig({ rules: { 'madr/status-enum': undefined } })).rules,
-          ).toEqual({});
-          expect(
-            resolveExtends(
-              asConfig({
-                extends: ['madr-lint:recommended'],
-                rules: { 'madr/status-enum': undefined, 'madr/date-iso8601': 'warn' },
-              }),
-            ).rules,
-          ).toEqual({ ...recommended, 'madr/date-iso8601': 'warn' });
-        });
       });
 
       // `"madr/no-numbering-gap": false` most likely means "off", and null in
-      // JSON is as ambiguous. Reading either as "not written" would keep a
-      // preset rule running without a message, so both are errors that say
-      // what to write.
-      describe('null and false', () => {
+      // JSON is as ambiguous. `ci && 'error'` is false or undefined outside
+      // CI, and undefined used to turn the rule off. Reading any of them as
+      // "not written" would keep a preset rule running without a message, so
+      // all three are errors that say what to write.
+      describe('null, false and undefined', () => {
         const FALSE_LINE = 'Invalid severity false for rule "madr/status-enum": use "off" instead.';
         const NULL_LINE = `Invalid severity null for rule "madr/status-enum": ${RULE_VALUE_USE}`;
+        const UNDEFINED_LINE =
+          'Invalid severity undefined for rule "madr/status-enum": use "off" instead, or remove the entry.';
 
         it.for([
           ['false', false, FALSE_LINE],
           ['null', null, NULL_LINE],
+          ['undefined', undefined, UNDEFINED_LINE],
           ['[false]', [false], FALSE_LINE],
           ['[false, {}]', [false, {}], FALSE_LINE],
           ['[null]', [null], NULL_LINE],
           ['[null, {}]', [null, {}], NULL_LINE],
+          ['[undefined]', [undefined], UNDEFINED_LINE],
+          ['[undefined, {}]', [undefined, {}], UNDEFINED_LINE],
         ] as const)('rejects %s', ([, value, expected]) => {
           expect(ruleError(value)).toBe(expected);
         });
 
-        it('rejects them over a preset rule too', () => {
+        it.for([
+          [false, FALSE_LINE],
+          [undefined, UNDEFINED_LINE],
+        ] as const)('rejects %s over a preset rule too', ([value, expected]) => {
           expect(
             configError(
               asConfig({
                 extends: ['madr-lint:recommended'],
-                rules: { 'madr/status-enum': false },
+                rules: { 'madr/status-enum': value },
               }),
             ),
-          ).toBe(FALSE_LINE);
+          ).toBe(expected);
         });
+      });
+
+      // A rule value is read once, and what was checked is what is returned:
+      // a getter cannot pass the check and hand the linter something else.
+      describe('values are read once', () => {
+        function changingTuple(first: unknown, later: () => unknown, options?: object): unknown[] {
+          let reads = 0;
+          const tuple: unknown[] = options === undefined ? ['x'] : ['x', options];
+          return Object.defineProperty(tuple, 0, {
+            enumerable: true,
+            get(): unknown {
+              reads += 1;
+              return reads === 1 ? first : later();
+            },
+          });
+        }
+
+        it('returns a plain tuple of the severity it checked', () => {
+          const tuple = changingTuple('error', () => {
+            throw new Error('second read');
+          });
+          const resolved = resolveExtends(asConfig({ rules: { 'madr/status-enum': tuple } }))
+            .rules['madr/status-enum'];
+          expect(Object.getOwnPropertyDescriptor(resolved, 0)).toEqual(
+            expect.objectContaining({ value: 'error' }),
+          );
+          expect(resolved).toEqual(['error']);
+        });
+
+        it('keeps a severity that changes after the check out of the result', () => {
+          const options = { caseSensitive: true };
+          const tuple = changingTuple('error', () => 'bogus', options);
+          const resolved = resolveExtends(asConfig({ rules: { 'madr/status-enum': tuple } }))
+            .rules['madr/status-enum'];
+          expect(resolved).toEqual(['error', options]);
+          expect(Object.getOwnPropertyDescriptor(resolved, 0)).toEqual(
+            expect.objectContaining({ value: 'error' }),
+          );
+        });
+
+        // The cache key hashes the resolved rules, so the copy must hash like
+        // the value the user wrote (holes and undefined options included).
+        it('gives valid configs the same cache key as the values they hold', () => {
+          const rules = {
+            'madr/filename-format': ['error', { pattern: '^ADR-[0-9]+\\.md$' }],
+            'madr/status-enum': ['warn', {}],
+            'madr/date-iso8601': ['error'],
+            'madr/no-numbering-gap': ['off', { bogus: 1 }],
+            'madr/metadata-format': ['error', null],
+            'madr/no-broken-links': ['error', undefined],
+            'madr/required-sections': ['error', false],
+            // oxlint-disable-next-line no-sparse-arrays -- the hole is the input under test
+            'madr/no-duplicate-numbering': ['warn', ,],
+            'madr/supersedes-bidirectional': 'off',
+          };
+          const resolved = resolveExtends(
+            asConfig({ extends: ['madr-lint:recommended'], rules, ignorePatterns: ['t.md'] }),
+          );
+          expect(
+            computeConfigHash({
+              rules: resolved.rules,
+              ignorePatterns: resolved.ignorePatterns,
+              madrVersion: resolved.madrVersion,
+            }),
+          ).toBe(
+            computeConfigHash({
+              rules: { ...recommended, ...rules },
+              ignorePatterns: ['t.md'],
+              madrVersion: 'auto',
+            }),
+          );
+        });
+      });
+
+      // Printing a huge list used to serialize all of it before truncating.
+      const NULLS = `[${'null,'.repeat(20)}`.slice(0, 80);
+      const NESTED_NULLS = `[[${'null,'.repeat(20)}`.slice(0, 80);
+
+      it.for([
+        ['a rule value', (v: unknown) => ({ rules: { 'madr/status-enum': v } }), `Invalid severity ${NULLS}… for rule "madr/status-enum": ${RULE_VALUE_USE}`],
+        ['adrDir', (v: unknown) => ({ adrDir: v }), `Invalid adrDir ${NULLS}…: ${ADR_DIR_USE}`],
+        ['nested in options', (v: unknown) => ({ rules: { 'madr/status-enum': ['error', [v]] } }), `Invalid options ${NESTED_NULLS}… for rule "madr/status-enum": use an object.`],
+      ] as const)('prints a huge sparse list as %s quickly', ([, wrap, expected]) => {
+        const started = performance.now();
+        const message = configError(asConfig(wrap(sparseArray(1e8))));
+        expect(performance.now() - started).toBeLessThan(500);
+        expect(message).toBe(expected);
+      });
+
+      it('prints a list whose length a Proxy reports as Infinity quickly', () => {
+        const started = performance.now();
+        expect(ruleError(lyingArray(Number.POSITIVE_INFINITY, 'error'))).toBe(
+          `Invalid severity ${`["error",${'"error",'.repeat(10)}`.slice(0, 80)}… for rule "madr/status-enum": ${RULE_VALUE_USE}`,
+        );
+        expect(performance.now() - started).toBeLessThan(500);
       });
     });
 
@@ -1362,12 +1531,15 @@ describe('core/config', () => {
       expect(explicit).toBe(expected);
     });
 
-    it('reads a JS config with a rule set to undefined as not written (#229)', () => {
-      writeFileSync(
-        join(dir, 'madr-lint.config.mjs'),
-        'export default { extends: ["madr-lint:recommended"], rules: { "madr/status-enum": undefined } };\n',
+    it('rejects a JS config with a rule set to undefined (#229)', () => {
+      const [discovered, explicit] = bothLoadErrors(
+        'madr-lint.config.mjs',
+        'const ci = undefined;\nexport default { extends: ["madr-lint:recommended"], rules: { "madr/status-enum": ci && "error" } };\n',
       );
-      expect(loadConfig(dir).rules).toEqual(recommended);
+      const expected =
+        'Invalid severity undefined for rule "madr/status-enum": use "off" instead, or remove the entry.';
+      expect(discovered).toBe(expected);
+      expect(explicit).toBe(expected);
     });
 
     it('rejects the issue #206 reproduction from an explicit path', () => {
