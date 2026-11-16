@@ -496,11 +496,14 @@ function severityProblem(value: unknown, rule: string, use: string): string | un
     const hint = didYouMean(value, SEVERITIES);
     return `Invalid severity ${formatValue(value)} for rule ${rule}: ${SEVERITY_USE}${hint === undefined ? '' : ` ${hint}`}`;
   }
-  const eslint = typeof value === 'number' ? ESLINT_SEVERITIES[value] : undefined;
-  if (eslint !== undefined) {
-    return `Invalid severity ${formatValue(value)} for rule ${rule}: use "${eslint}" instead.`;
+  // `false` most likely means "off"; ESLint spells severities as 0, 1, 2.
+  const instead =
+    value === false ? 'off' : typeof value === 'number' ? ESLINT_SEVERITIES[value] : undefined;
+  if (instead !== undefined) {
+    return `Invalid severity ${formatValue(value)} for rule ${rule}: use "${instead}" instead.`;
   }
-  return `Invalid severity ${formatRead(value)} for rule ${rule}: ${use}`;
+  // null is as ambiguous as a bare value wherever it stands.
+  return `Invalid severity ${formatRead(value)} for rule ${rule}: ${value === null ? RULE_VALUE_USE : use}`;
 }
 
 /**
@@ -631,9 +634,11 @@ export function resolveExtends(raw: unknown, origin: ConfigOrigin = {}): Resolve
         problems.push(`Unknown rule ${formatValue(name)} in rules. ${hint}`);
       }
       const value = tryRead(rules, name);
-      // Absent, as for top-level rules and extends entries: the entry counts
-      // as not written, so a preset's severity stays. null used to crash.
-      if (isAbsent(value)) continue;
+      // undefined cannot be written in JSON and equals leaving the key out in
+      // JS, so the entry counts as not written and a preset's severity stays.
+      // null and false are not absent here: read as "not written", they would
+      // keep a preset rule running when the user most likely meant "off".
+      if (value === undefined) continue;
       ruleValueProblems(name, value, problems);
       if (isKnownRule) userRules[name] = value as RuleSeverity;
     }
