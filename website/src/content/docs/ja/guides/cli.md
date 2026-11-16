@@ -78,8 +78,9 @@ npx madr-lint init
   `docs/architecture/decisions` のうち、直下に `NNNN-*.md` ファイルを 1 つ
   以上含む最初のディレクトリ。どれも該当しない場合は `docs/adr`（リンターの
   デフォルト）にフォールバックし、その旨を出力します。
-- **MADR バージョン** — 既存 ADR を最大 20 ファイルサンプリングし、多数決で
-  決定します。`decision-makers` を含む YAML frontmatter は v4、それ以外の
+- **MADR バージョン** — ADR ディレクトリ配下の Markdown ファイルを、
+  サブディレクトリも含めてすべて読み（リンターが検査するのと同じファイルです）、
+  多数決で決定します。`decision-makers` を含む YAML frontmatter は v4、それ以外の
   MADR の項目を含む frontmatter は v3、v2 のメタデータリストは v2 として
   カウントします（`title` などのサイト生成用のキーだけの frontmatter は
   数えません）。空の

@@ -84,8 +84,9 @@ npx madr-lint init
   `adr`, `docs/architecture/decisions` whose top level contains at least one
   `NNNN-*.md` file. When none qualifies it falls back to `docs/adr` (the
   linter's default) and says so.
-- **MADR version** — samples up to 20 existing ADRs and lets the majority
-  win: YAML frontmatter with `decision-makers` counts as v4, other
+- **MADR version** — reads every Markdown file under the ADR directory,
+  including subdirectories (the same files the linter checks), and lets the
+  majority win: YAML frontmatter with `decision-makers` counts as v4, other
   frontmatter with MADR fields as v3, a v2 metadata list as v2 (frontmatter
   with only site-generator keys such as `title` does not count). An empty directory, a tie, no
   recognizable metadata, or a mix of frontmatter and v2-list metadata yields
