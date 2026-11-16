@@ -322,6 +322,32 @@ function tryGet(object: object, key: string): unknown {
   }
 }
 
+/** What `tryRead` returns when a getter or Proxy trap throws. */
+const UNREADABLE: unique symbol = Symbol('unreadable');
+
+/** Like `tryGet`, but a throw is told apart from a value that is undefined. */
+function tryRead(object: object, key: string | number): unknown {
+  try {
+    return (object as Record<string | number, unknown>)[key];
+  } catch {
+    return UNREADABLE;
+  }
+}
+
+function formatRead(value: unknown): string {
+  return value === UNREADABLE ? UNPRINTABLE : formatValue(value);
+}
+
+/**
+ * The length of an array, or undefined for anything else. A Proxy can make
+ * `Array.isArray` or the length read throw; then it is UNREADABLE.
+ */
+function tryArrayLength(value: unknown): unknown {
+  const isArray = tryIsArray(value);
+  if (isArray === undefined) return UNREADABLE;
+  return isArray ? tryRead(value as object, 'length') : undefined;
+}
+
 function isThenable(value: unknown): boolean {
   if (typeof value !== 'function' && (typeof value !== 'object' || value === null)) {
     return false;
@@ -400,12 +426,122 @@ function extendsEntries(value: unknown, problems: string[]): unknown[] {
 }
 
 /**
+ * A path setting (`adrDir`, `cacheLocation`). null and undefined mean "not
+ * set", as they always did through `??`.
+ */
+function pathSetting(
+  config: object,
+  key: 'adrDir' | 'cacheLocation',
+  example: string,
+  problems: string[],
+): string | undefined {
+  const value = tryRead(config, key);
+  if (value === null || value === undefined) return undefined;
+  if (typeof value === 'string' && value !== '') return value;
+  problems.push(
+    `Invalid ${key} ${formatRead(value)}: use a non-empty string, such as "${example}".`,
+  );
+  return undefined;
+}
+
+function cacheSetting(config: object, problems: string[]): boolean | undefined {
+  const value = tryRead(config, 'cache');
+  if (value === null || value === undefined) return undefined;
+  if (typeof value === 'boolean') return value;
+  problems.push(`Invalid cache ${formatRead(value)}: use true or false.`);
+  return undefined;
+}
+
+/**
+ * A string used to be read character by character, so `"0001-*"` ignored
+ * every file through its `*` (#229). Returns a copy, so the patterns are read
+ * once.
+ */
+function ignorePatternsSetting(config: object, problems: string[]): string[] | undefined {
+  const value = tryRead(config, 'ignorePatterns');
+  if (value === null || value === undefined) return undefined;
+  const length = tryArrayLength(value);
+  if (typeof length !== 'number') {
+    problems.push(
+      `Invalid ignorePatterns ${length === UNREADABLE ? UNPRINTABLE : formatRead(value)}: use a list of glob patterns, such as ["template.md"].`,
+    );
+    return undefined;
+  }
+  const patterns: string[] = [];
+  // Index reads, because a hole is an invalid entry too. Only the first bad
+  // entry is reported: a sparse list of length 1e8 would otherwise add 1e8
+  // problems.
+  for (let i = 0; i < length; i++) {
+    const entry = tryRead(value as object, i);
+    if (typeof entry !== 'string' || entry === '') {
+      problems.push(`Invalid ignorePatterns entry ${formatRead(entry)}: use a non-empty string.`);
+      return undefined;
+    }
+    patterns.push(entry);
+  }
+  return patterns;
+}
+
+const SEVERITIES = ['error', 'warn', 'off'] as const;
+
+// ESLint's numeric severities, indexed by number.
+const ESLINT_SEVERITIES: readonly string[] = ['off', 'warn', 'error'];
+
+const SEVERITY_USE = `use one of ${quoteList(SEVERITIES)}.`;
+const RULE_VALUE_USE = `use one of ${quoteList(SEVERITIES)}, or a list [severity, options].`;
+
+function severityProblem(value: unknown, rule: string, use: string): string | undefined {
+  if (typeof value === 'string') {
+    if (SEVERITIES.some((s) => s === value)) return undefined;
+    const hint = didYouMean(value, SEVERITIES);
+    return `Invalid severity ${formatValue(value)} for rule ${rule}: ${SEVERITY_USE}${hint === undefined ? '' : ` ${hint}`}`;
+  }
+  const eslint = typeof value === 'number' ? ESLINT_SEVERITIES[value] : undefined;
+  if (eslint !== undefined) {
+    return `Invalid severity ${formatValue(value)} for rule ${rule}: use "${eslint}" instead.`;
+  }
+  return `Invalid severity ${formatRead(value)} for rule ${rule}: ${use}`;
+}
+
+/**
+ * A severity, `[severity]`, or `[severity, options]`. An unknown severity used
+ * to run a per-file rule as a warning and skip a project rule (#229). The
+ * contents of `options` are left to the rule's schema, checked when it runs.
+ */
+function ruleValueProblems(name: string, value: unknown, problems: string[]): void {
+  const rule = formatValue(name);
+  const length = tryArrayLength(value);
+  if (length === undefined) {
+    const problem = severityProblem(value, rule, RULE_VALUE_USE);
+    if (problem !== undefined) problems.push(problem);
+    return;
+  }
+  if (length !== 1 && length !== 2) {
+    problems.push(
+      `Invalid severity ${length === UNREADABLE ? UNPRINTABLE : formatValue(value)} for rule ${rule}: ${RULE_VALUE_USE}`,
+    );
+    return;
+  }
+  const problem = severityProblem(tryRead(value as object, 0), rule, SEVERITY_USE);
+  if (problem !== undefined) problems.push(problem);
+  if (length === 1) return;
+  // Absent options mean the rule's defaults, as before (`['error', ci && {...}]`).
+  const options = tryRead(value as object, 1);
+  if (isAbsent(options)) return;
+  if (typeof options !== 'object' || options === null || tryIsArray(options) !== false) {
+    problems.push(`Invalid options ${formatRead(options)} for rule ${rule}: use an object.`);
+  }
+}
+
+/**
  * Pure function: turns a raw config (whatever the file yielded) into a
  * `ResolvedConfig` with defaults filled in and `extends` presets merged.
  *
  * Only what the user wrote is checked; preset contents are trusted. Every
  * problem goes into one `InvalidConfigError` so the config can be fixed in
- * one pass.
+ * one pass, in this order: the config's shape and unknown keys, madrVersion,
+ * adrDir, ignorePatterns, cache, cacheLocation, extends, then each rule (its
+ * name, then its severity).
  */
 export function resolveExtends(raw: unknown, origin: ConfigOrigin = {}): ResolvedConfig {
   const known = BUILTIN_CONFIG_NAMES;
@@ -447,6 +583,14 @@ export function resolveExtends(raw: unknown, origin: ConfigOrigin = {}): Resolve
     );
   }
 
+  // A value of the wrong type used to crash with a stack trace (exit 1) or
+  // quietly change what was linted (#229). Each value is read once, and the
+  // value checked is the value returned.
+  const adrDir = pathSetting(config, 'adrDir', 'docs/adr', problems);
+  const ignorePatterns = ignorePatternsSetting(config, problems);
+  const cache = cacheSetting(config, problems);
+  const cacheLocation = pathSetting(config, 'cacheLocation', '.madr-lint/cache', problems);
+
   // An unknown preset or rule ID used to be dropped silently, so a typo could
   // leave no rule running while the CLI exited 0 (#206).
   const baseRules: Record<string, RuleSeverity> = {};
@@ -463,6 +607,9 @@ export function resolveExtends(raw: unknown, origin: ConfigOrigin = {}): Resolve
   }
 
   const rules: unknown = isAbsent(config.rules) ? {} : config.rules;
+  // Only the user's values: preset severities are trusted, and a user value
+  // overrides the preset's.
+  const userRules: Record<string, RuleSeverity> = {};
   if (typeof rules !== 'object' || rules === null || tryIsArray(rules) !== false) {
     // Checked as a whole: listing the keys of a string or an array would
     // report each index ("0", "1", ...) as an unknown rule.
@@ -471,16 +618,24 @@ export function resolveExtends(raw: unknown, origin: ConfigOrigin = {}): Resolve
     );
   } else {
     for (const name of Object.keys(rules)) {
-      if (known.rules.has(name)) continue;
-      if (name.startsWith(RESERVED_RULE_NAMESPACE)) {
-        problems.push(
-          `Rule ${formatValue(name)} in rules cannot be configured: "${RESERVED_RULE_NAMESPACE}" rule IDs are reserved for madr-lint's own diagnostics.`,
-        );
-        continue;
+      const isKnownRule = known.rules.has(name);
+      if (!isKnownRule) {
+        if (name.startsWith(RESERVED_RULE_NAMESPACE)) {
+          problems.push(
+            `Rule ${formatValue(name)} in rules cannot be configured: "${RESERVED_RULE_NAMESPACE}" rule IDs are reserved for madr-lint's own diagnostics.`,
+          );
+          continue;
+        }
+        const hint =
+          didYouMean(name, known.rules) ?? `See ${RULES_DOCS_URL} for the list of rules.`;
+        problems.push(`Unknown rule ${formatValue(name)} in rules. ${hint}`);
       }
-      const hint =
-        didYouMean(name, known.rules) ?? `See ${RULES_DOCS_URL} for the list of rules.`;
-      problems.push(`Unknown rule ${formatValue(name)} in rules. ${hint}`);
+      const value = tryRead(rules, name);
+      // Absent, as for top-level rules and extends entries: the entry counts
+      // as not written, so a preset's severity stays. null used to crash.
+      if (isAbsent(value)) continue;
+      ruleValueProblems(name, value, problems);
+      if (isKnownRule) userRules[name] = value as RuleSeverity;
     }
   }
 
@@ -495,11 +650,11 @@ export function resolveExtends(raw: unknown, origin: ConfigOrigin = {}): Resolve
   }
 
   return {
-    adrDir: config.adrDir ?? 'docs/adr',
-    rules: { ...baseRules, ...config.rules },
-    ignorePatterns: config.ignorePatterns ?? [],
+    adrDir: adrDir ?? 'docs/adr',
+    rules: { ...baseRules, ...userRules },
+    ignorePatterns: ignorePatterns ?? [],
     madrVersion,
-    cache: config.cache ?? true,
-    cacheLocation: config.cacheLocation ?? '.madr-lint/cache',
+    cache: cache ?? true,
+    cacheLocation: cacheLocation ?? '.madr-lint/cache',
   };
 }
