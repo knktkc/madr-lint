@@ -94,7 +94,8 @@ The JSON equivalent (`.madrlintrc.json`):
 | `cacheLocation` | `string` | `'.madr-lint/cache'` | Directory for the cache manifest. |
 
 The config must be an object, and any other top-level key is a config error
-(see [Unknown names](#unknown-names)).
+(see [Unknown names](#unknown-names)). A value of another type is a config error
+too (see [Invalid values](#invalid-values)).
 
 ## Configuring rules
 
@@ -119,6 +120,8 @@ Severities are `'error'`, `'warn'`, or `'off'`:
 - **`error`** — reported and makes the CLI exit with code `1`.
 - **`warn`** — reported but does not fail the run.
 - **`off`** — the rule does not run.
+
+Any other severity is a config error (see [Invalid values](#invalid-values)).
 
 Options in the tuple are merged over the rule's `defaultOptions` and validated
 against the rule's JSON Schema. **Invalid options fail fast** with a clear
@@ -201,6 +204,35 @@ With `--config`, the message starts with `Failed to load config "<path>": `.
 
 Rule IDs starting with `core/`, such as `core/internal-error`, are reserved for
 madr-lint's own diagnostics and cannot be configured.
+
+### Invalid values
+
+A value that a key does not accept also fails with exit code `2`. It is listed
+in the same error as unknown names.
+
+| Key | Accepted values |
+|---|---|
+| `adrDir`, `cacheLocation` | A non-empty string |
+| `ignorePatterns` | A list of non-empty strings, even for one pattern |
+| `cache` | `true` or `false` |
+| Each value in `rules` | `'error'`, `'warn'`, `'off'`, `[severity]`, or `[severity, options]` with an object as `options` |
+
+`null` and `undefined` leave a top-level setting at its default. A rule set to
+`null`, `undefined`, or `false` counts as not written, so the preset's severity
+stays, as in `'madr/status-enum': ci && 'error'`. When a severity is close to a
+valid one, the message suggests it. ESLint's numbers `0`, `1`, and `2` get the
+string to use instead:
+
+```text
+Invalid config (3 problems):
+  - Invalid ignorePatterns "0001-*": use a list of glob patterns, such as ["template.md"].
+  - Invalid severity "eror" for rule "madr/status-enum": use one of "error", "warn", "off". Did you mean "error"?
+  - Invalid severity 2 for rule "madr/no-broken-links": use "error" instead.
+```
+
+With `--config`, this message also starts with `Failed to load config "<path>": `.
+The contents of `options` are checked when the rule runs, as described in
+[Configuring rules](#configuring-rules).
 
 See the [Rules reference](/rules/) for the options each rule accepts.
 
@@ -300,6 +332,9 @@ export default defineConfig({
   ignorePatterns: ['README.md', 'template.md', '9999-*', 'docs/**/draft-*.md'],
 });
 ```
+
+Write a list even for a single pattern. A bare string such as `'0001-*'` is a
+config error.
 
 ## Cache
 
