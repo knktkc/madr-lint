@@ -1,4 +1,5 @@
 import {
+  chmodSync,
   mkdirSync,
   mkdtempSync,
   rmSync,
@@ -67,6 +68,24 @@ const NO_METADATA = `# 0001-example
 
 x
 `;
+
+/** MADR frontmatter plus a body metadata list in the same file. */
+const MIXED_V3_LIST = `---
+status: accepted
+---
+
+# A
+
+* Date: 2026-01-01
+
+## Context and Problem Statement
+
+x
+`;
+
+function pad(n: number): string {
+  return String(n).padStart(4, '0');
+}
 
 describe('core/init', () => {
   let dir: string;
@@ -236,26 +255,83 @@ describe('core/init', () => {
       expect(detectMadrVersion(dir, 'docs/adr')).toBe('auto');
     });
 
-    it('returns "auto" when no sampled file carries recognizable metadata', () => {
+    it('returns "auto" when no file carries recognizable metadata', () => {
       writeAdr(join(dir, 'docs/adr'), '0001-a.md', NO_METADATA);
       writeAdr(join(dir, 'docs/adr'), '0002-b.md', NO_METADATA);
       expect(detectMadrVersion(dir, 'docs/adr')).toBe('auto');
     });
 
-    it('samples at most 20 files (lexicographically first)', () => {
-      // 20 v2 files (0001-0020) + 5 v4 files (0021-0025). Only the first 20
-      // (lexicographic order) are sampled, so v2 must win even though v4
-      // files exist further down the directory listing.
+    it('reads every file, so frontmatter ADRs after the first 20 body-list ADRs still yield "auto"', () => {
+      // 20 v2 files (0001-0020) + 5 v4 files (0021-0025): a repository that
+      // migrated formats, oldest first. The initial lint reads all 25, and a
+      // fixed v2 would leave the five v4 files' metadata unread.
       for (let i = 1; i <= 20; i++) {
-        const name = `${String(i).padStart(4, '0')}-v2.md`;
-        writeAdr(join(dir, 'docs/adr'), name, V2_BODY_LIST);
+        writeAdr(join(dir, 'docs/adr'), `${pad(i)}-v2.md`, V2_BODY_LIST);
       }
       for (let i = 21; i <= 25; i++) {
-        const name = `${String(i).padStart(4, '0')}-v4.md`;
-        writeAdr(join(dir, 'docs/adr'), name, V4_FRONTMATTER);
+        writeAdr(join(dir, 'docs/adr'), `${pad(i)}-v4.md`, V4_FRONTMATTER);
       }
-      expect(detectMadrVersion(dir, 'docs/adr')).toBe('v2');
+      expect(detectMadrVersion(dir, 'docs/adr')).toBe('auto');
     });
+
+    it('returns "auto" when a same-file mix is the 21st file', () => {
+      for (let i = 1; i <= 20; i++) {
+        writeAdr(join(dir, 'docs/adr'), `${pad(i)}-v3.md`, V3_FRONTMATTER);
+      }
+      writeAdr(join(dir, 'docs/adr'), '0021-mixed.md', MIXED_V3_LIST);
+      expect(detectMadrVersion(dir, 'docs/adr')).toBe('auto');
+    });
+
+    it('returns "auto" for a same-file mix in a subdirectory', () => {
+      writeAdr(join(dir, 'docs/adr'), '0001-a.md', V3_FRONTMATTER);
+      writeAdr(join(dir, 'docs/adr/archive'), '0002-b.md', MIXED_V3_LIST);
+      expect(detectMadrVersion(dir, 'docs/adr')).toBe('auto');
+    });
+
+    it('returns "auto" for a body-list file in a subdirectory next to frontmatter files', () => {
+      writeAdr(join(dir, 'docs/adr'), '0001-a.md', V3_FRONTMATTER);
+      writeAdr(join(dir, 'docs/adr/archive'), '0002-b.md', V2_BODY_LIST);
+      expect(detectMadrVersion(dir, 'docs/adr')).toBe('auto');
+    });
+
+    it('returns "auto" for a body-list file whose name is outside NNNN-*.md', () => {
+      writeAdr(join(dir, 'docs/adr'), '0001-a.md', V3_FRONTMATTER);
+      writeAdr(join(dir, 'docs/adr'), 'notes.md', V2_BODY_LIST);
+      expect(detectMadrVersion(dir, 'docs/adr')).toBe('auto');
+    });
+
+    it('keeps a single format for a large set (25 v3 files)', () => {
+      for (let i = 1; i <= 25; i++) {
+        writeAdr(join(dir, 'docs/adr'), `${pad(i)}-v3.md`, V3_FRONTMATTER);
+      }
+      expect(detectMadrVersion(dir, 'docs/adr')).toBe('v3');
+    });
+
+    it('decides the v3/v4 majority from all files, not the first 20', () => {
+      // 12 v4 (0001-0012) then 18 v3 (0013-0030): v4 leads the first 20
+      // (12 to 8), v3 leads overall (18 to 12).
+      for (let i = 1; i <= 12; i++) {
+        writeAdr(join(dir, 'docs/adr'), `${pad(i)}-v4.md`, V4_FRONTMATTER);
+      }
+      for (let i = 13; i <= 30; i++) {
+        writeAdr(join(dir, 'docs/adr'), `${pad(i)}-v3.md`, V3_FRONTMATTER);
+      }
+      expect(detectMadrVersion(dir, 'docs/adr')).toBe('v3');
+    });
+
+    it.skipIf(process.platform === 'win32' || process.getuid?.() === 0)(
+      'returns "auto" when a subdirectory cannot be read',
+      () => {
+        writeAdr(join(dir, 'docs/adr'), '0001-a.md', V3_FRONTMATTER);
+        writeAdr(join(dir, 'docs/adr/locked'), '0002-b.md', V3_FRONTMATTER);
+        chmodSync(join(dir, 'docs/adr/locked'), 0o000);
+        try {
+          expect(detectMadrVersion(dir, 'docs/adr')).toBe('auto');
+        } finally {
+          chmodSync(join(dir, 'docs/adr/locked'), 0o755);
+        }
+      },
+    );
   });
 
   describe('detectConfigFormat', () => {

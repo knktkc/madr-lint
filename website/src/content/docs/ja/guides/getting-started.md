@@ -34,7 +34,8 @@ npx madr-lint --help
 
 最も手早く始める方法は `init` です。ADR ディレクトリ（`docs/adr`、
 `docs/decisions`、`doc/adr`、`adr`、`docs/architecture/decisions`）、既存
-ADR の主要な MADR バージョン、プロジェクトが TypeScript を使っているかどうかを
+ADR の MADR バージョン（すべての ADR が同じメタデータ形式のときだけ固定の版、
+それ以外は `auto`）、プロジェクトが TypeScript を使っているかどうかを
 検出し、`madr-lint:recommended` を継承する設定ファイルを書き出します。
 
 ```bash

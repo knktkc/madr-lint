@@ -1,6 +1,6 @@
 ---
 status: accepted
-date: 2026-11-13
+date: 2026-11-16
 decision-makers:
   - knktkc (t.kaneko)
 consulted: []
@@ -78,7 +78,9 @@ Three decisions follow from these.
   code 2.
 - **`madr-lint init` writes `auto` for a mixed directory.** Any fixed version would leave
   the metadata of some files unread. The mix may be across files or within one file that
-  carries both MADR frontmatter and a body list (added 2026-11-13).
+  carries both MADR frontmatter and a body list (added 2026-11-13). `init` decides from
+  every Markdown file the linter checks, not from a sample, so the config it writes
+  reports nothing that `auto` does not (added 2026-11-16).
 
 ## Consequences
 

@@ -219,7 +219,7 @@ describe.skipIf(!canSymlink())('symlink handling', () => {
   describe('init detection', () => {
     const adr = '* Status: accepted\n\n# X\n';
 
-    it('does not detect or sample a linked ADR directory', () => {
+    it('does not detect or read a linked ADR directory', () => {
       rmSync(join(root, 'docs/adr'), { recursive: true });
       writeFileSync(join(outside, '0001-x.md'), adr);
       symlinkSync(outside, join(root, 'docs/adr'));
@@ -227,7 +227,7 @@ describe.skipIf(!canSymlink())('symlink handling', () => {
       expect(detectMadrVersion(root, 'docs/adr')).toBe('auto');
     });
 
-    it('does not sample through a linked parent', () => {
+    it('does not read ADRs through a linked parent', () => {
       rmSync(join(root, 'docs'), { recursive: true });
       mkdirSync(join(outside, 'adr'));
       writeFileSync(join(outside, 'adr/0001-x.md'), adr);

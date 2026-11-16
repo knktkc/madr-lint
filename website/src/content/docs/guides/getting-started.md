@@ -34,8 +34,9 @@ npx madr-lint --help
 
 The fastest way to get started is `init` — it detects your ADR directory
 (`docs/adr`, `docs/decisions`, `doc/adr`, `adr`, or
-`docs/architecture/decisions`), the dominant MADR version of your existing
-ADRs, and whether your project uses TypeScript, then writes a config
+`docs/architecture/decisions`), the MADR version of your existing ADRs (a
+fixed version only when they all use the same metadata format, `auto`
+otherwise), and whether your project uses TypeScript, then writes a config
 extending `madr-lint:recommended`:
 
 ```bash
