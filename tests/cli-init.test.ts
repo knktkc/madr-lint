@@ -76,7 +76,77 @@ x
 y
 `;
 
+const VALID_V2_ADR = VALID_V3_ADR.replace(
+  /^---[\s\S]*?---\n\n(# .*\n)/,
+  '$1\n* Status: accepted\n* Date: 2026-01-01\n',
+);
+
+const VALID_V4_ADR = VALID_V3_ADR.replace(
+  'deciders: alice\n',
+  'decision-makers:\n  - alice\n',
+);
+
+/** MADR frontmatter plus a body metadata list in the same file. */
+const MIXED_ADR = VALID_V3_ADR.replace('date: 2026-01-01\n', '').replace(
+  /(# .*\n)/,
+  '$1\n* Date: 2026-01-01\n',
+);
+
+function pad(n: number): string {
+  return String(n).padStart(4, '0');
+}
+
+interface LintJson {
+  status: number;
+  summary: { errors: number; warnings: number };
+  results: unknown[];
+}
+
+function lintJson(cwd: string): LintJson {
+  const r = runCli(cwd, ['--no-cache', '--format', 'json']);
+  const report = JSON.parse(r.stdout) as Omit<LintJson, 'status'>;
+  return { status: r.status, ...report };
+}
+
+/**
+ * Lint `cwd` with no config, run `init --json`, then lint with the written
+ * config. The project starts clean, so both lints and init's own count must
+ * stay at zero, and init must leave madrVersion at its `auto` default.
+ */
+function expectInitToMatchNoConfigLint(cwd: string): void {
+  const before = lintJson(cwd);
+  expect(before.results).toEqual([]);
+
+  const init = runCli(cwd, ['init', '--json']);
+  expect(init.status).toBe(0);
+  const payload = JSON.parse(init.stdout) as {
+    errors: number;
+    warnings: number;
+    suggestUpdateBaseline: boolean;
+  };
+  expect(payload.errors).toBe(0);
+  expect(payload.warnings).toBe(0);
+  expect(payload.suggestUpdateBaseline).toBe(false);
+  const config = JSON.parse(
+    readFileSync(join(cwd, '.madrlintrc.json'), 'utf8'),
+  ) as Record<string, unknown>;
+  expect(config.madrVersion).toBeUndefined();
+
+  const after = lintJson(cwd);
+  expect(after.results).toEqual(before.results);
+  expect(after.summary.errors).toBe(0);
+  expect(after.status).toBe(0);
+}
+
 describe('cli init (end-to-end)', () => {
+  it('builds the v2, v4, and mixed fixtures it relies on', () => {
+    expect(VALID_V2_ADR).not.toMatch(/^---/);
+    expect(VALID_V2_ADR).toContain('* Status: accepted');
+    expect(VALID_V4_ADR).toContain('decision-makers:');
+    expect(MIXED_ADR).toMatch(/^---\nstatus: accepted\ndeciders: alice\n---/);
+    expect(MIXED_ADR).toContain('* Date: 2026-01-01');
+  });
+
   let dir: string;
 
   beforeEach(() => {
@@ -193,27 +263,28 @@ describe('cli init (end-to-end)', () => {
     expect(r.stdout).toMatch(/--update-baseline/);
   }, 30_000);
 
-  it('runs the initial lint with the madrVersion it writes (#207)', () => {
-    // Detection samples the first 20 files, so it writes v3 here; the body-list
-    // ADR beyond the sample must then be linted as v3 and reported.
-    for (let i = 1; i <= 20; i++) {
-      writeAdr(dir, `docs/adr/${String(i).padStart(4, '0')}-example.md`, VALID_V3_ADR);
-    }
-    const v2 = VALID_V3_ADR.replace(/^---[\s\S]*?---\n\n(# .*\n)/, '$1\n* Status: accepted\n* Date: 2026-01-01\n');
-    expect(v2).toContain('* Status: accepted');
-    writeAdr(dir, 'docs/adr/0021-example.md', v2);
+  describe('the written config reports nothing that a run with no config does not (#207)', () => {
+    // A fixed madrVersion reads one metadata format only, so detection must
+    // see every file the linter checks; otherwise init can turn a clean
+    // project into a failing one.
+    it('20 body-list ADRs followed by 5 frontmatter ADRs', () => {
+      for (let i = 1; i <= 20; i++) writeAdr(dir, `docs/adr/${pad(i)}-old.md`, VALID_V2_ADR);
+      for (let i = 21; i <= 25; i++) writeAdr(dir, `docs/adr/${pad(i)}-new.md`, VALID_V4_ADR);
+      expectInitToMatchNoConfigLint(dir);
+    }, 30_000);
 
-    const r = runCli(dir, ['init', '--json']);
-    expect(r.status).toBe(0);
-    const payload = JSON.parse(r.stdout) as {
-      madrVersion: string;
-      errors: number;
-      suggestUpdateBaseline: boolean;
-    };
-    expect(payload.madrVersion).toBe('v3');
-    expect(payload.errors).toBeGreaterThan(0);
-    expect(payload.suggestUpdateBaseline).toBe(true);
-  }, 30_000);
+    it('20 frontmatter ADRs followed by a body-list ADR', () => {
+      for (let i = 1; i <= 20; i++) writeAdr(dir, `docs/adr/${pad(i)}-example.md`, VALID_V3_ADR);
+      writeAdr(dir, 'docs/adr/0021-example.md', VALID_V2_ADR);
+      expectInitToMatchNoConfigLint(dir);
+    }, 30_000);
+
+    it('a same-file mix in a subdirectory', () => {
+      writeAdr(dir, 'docs/adr/0001-a.md', VALID_V3_ADR);
+      writeAdr(dir, 'docs/adr/archive/0002-b.md', MIXED_ADR);
+      expectInitToMatchNoConfigLint(dir);
+    }, 30_000);
+  });
 
   it('writes auto for a file mixing frontmatter and a body metadata list, and the written config lints it clean', () => {
     // A fixed v3 reads frontmatter only and would report the list's Date as
