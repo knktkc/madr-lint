@@ -92,7 +92,7 @@ JSON での同等の記述（`.madrlintrc.json`）:
 | `cacheLocation` | `string` | `'.madr-lint/cache'` | キャッシュマニフェストのディレクトリ。 |
 
 設定はオブジェクトである必要があり、上記以外のトップレベルキーは設定エラーです
-（[未知の名前](#未知の名前)を参照）。
+（[未知の名前](#未知の名前)を参照）。[不正な値](#不正な値)に挙げた値以外も設定エラーです。
 
 ## ルールの設定
 
@@ -117,6 +117,8 @@ rules: {
 - **`error`** — 報告され、CLI が終了コード `1` で終了する原因になります。
 - **`warn`** — 報告されますが、実行を失敗させません。
 - **`off`** — ルールは実行されません。
+
+これ以外の重大度は設定エラーです（[不正な値](#不正な値)を参照）。
 
 タプル内のオプションはルールの `defaultOptions` にマージされ、ルールの JSON Schema に対して
 検証されます。**無効なオプションは即座に失敗**し、明確なメッセージと終了コード `2` を返します。
@@ -195,6 +197,36 @@ The config must be an object, not a Promise. Async configs are not supported: ex
 
 `core/internal-error` など `core/` で始まるルール ID は madr-lint 自身の診断用に予約されて
 おり、設定できません。
+
+### 不正な値
+
+キーが受け付けない値も、終了コード `2` で失敗します。未知の名前と同じエラーにまとめて表示します。
+
+| キー | 受け付ける値 |
+|---|---|
+| `adrDir`、`cacheLocation` | 空でない文字列 |
+| `ignorePatterns` | 空でない文字列のリスト（10000 個まで。パターンが 1 つでもリストで書きます） |
+| `cache` | `true` または `false` |
+| `rules` の各値 | `'error'`、`'warn'`、`'off'`、または `options` がオブジェクトの `[severity, options]`（`options` に `null`、`undefined`、`false` を書くと、ルールのデフォルトのオプションを使います） |
+
+トップレベルの設定に `null` または `undefined` を書くと、デフォルト値のままになります。
+ルールに `false`、`null`、`undefined` を書くと設定エラーです。ルールを無効にするには
+`'off'` を書いてください（`ci ? 'error' : 'off'` など）。
+有効な重大度に近い値には、メッセージで候補を示します。ESLint の数値 `0`、`1`、`2` と
+`false` には、代わりに使う文字列を示します。
+
+```text
+Invalid config (3 problems):
+  - Invalid ignorePatterns "0001-*": use a list of glob patterns, such as ["template.md"].
+  - Invalid severity "eror" for rule "madr/status-enum": use one of "error", "warn", "off". Did you mean "error"?
+  - Invalid severity 2 for rule "madr/no-broken-links": use "error" instead.
+```
+
+`--config` を使った場合も、このメッセージは `Failed to load config "<path>": ` で始まります。
+コマンドラインの指定がその実行で値を置き換える場合も、値を検証します。たとえば `adrDir` に
+対するコマンドラインのパス、`cacheLocation` に対する `--cache-dir`、`cache` に対する
+`--no-cache` です。
+`options` の中身は、[ルールの設定](#ルールの設定)で説明したとおり、ルールの実行時に検証します。
 
 各ルールが受け付けるオプションについては [ルールリファレンス](/ja/rules/) を参照してください。
 
@@ -282,6 +314,8 @@ export default defineConfig({
   ignorePatterns: ['README.md', 'template.md', '9999-*', 'docs/**/draft-*.md'],
 });
 ```
+
+パターンが 1 つでもリストで書いてください。`'0001-*'` のような文字列だけを書くと設定エラーです。
 
 ## キャッシュ
 

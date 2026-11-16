@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { recommended } from '../../src/configs/recommended.js';
+import { computeConfigHash } from '../../src/core/cache.js';
 import {
   CONFIG_FILES,
   InvalidConfigError,
@@ -41,6 +42,24 @@ const NO_DEFAULT_EXPORT_NOTE =
 // For values a JSON or JS config can hold but the TypeScript type does not allow.
 function asConfig(raw: Record<string, unknown>): MadrLintConfig {
   return raw as MadrLintConfig;
+}
+
+// A list with nothing in it but a length, as a careless loop might build.
+function sparseArray(length: number): unknown[] {
+  const array: unknown[] = [];
+  array.length = length;
+  return array;
+}
+
+// An array Proxy that reports `length` and returns `entry` at every index.
+function lyingArray(length: unknown, entry: unknown): unknown[] {
+  return new Proxy([], {
+    get(target, key, receiver): unknown {
+      if (key === 'length') return length;
+      if (typeof key === 'string' && /^\d+$/.test(key)) return entry;
+      return Reflect.get(target, key, receiver) as unknown;
+    },
+  });
 }
 
 function configError(config: MadrLintConfig): string {
@@ -729,6 +748,639 @@ describe('core/config', () => {
     });
   });
 
+  // The values of adrDir, ignorePatterns, cache, cacheLocation and each rule
+  // severity were not checked: a wrong value weakened the lint without a
+  // message (a string ignorePatterns read character by character, a typo in a
+  // severity ran the rule as a warning) or crashed with exit 1 (#229).
+  describe('config values (#229)', () => {
+    const ADR_DIR_USE = 'use a non-empty string, such as "docs/adr".';
+    const CACHE_LOCATION_USE = 'use a non-empty string, such as ".madr-lint/cache".';
+    const IGNORE_PATTERNS_USE = 'use a list of glob patterns, such as ["template.md"].';
+    const SEVERITY_USE = 'use one of "error", "warn", "off".';
+    const RULE_VALUE_USE = 'use one of "error", "warn", "off", or a list [severity, options].';
+
+    function throwingGetter(key: string): Record<string, unknown> {
+      return Object.defineProperty({}, key, {
+        enumerable: true,
+        get(): never {
+          throw new Error(key);
+        },
+      });
+    }
+
+    function revokedProxy(): object {
+      const { proxy, revoke } = Proxy.revocable({}, {});
+      revoke();
+      return proxy;
+    }
+
+    describe('adrDir', () => {
+      it.for([
+        ['a number', 42, '42'],
+        ['an array', ['docs/adr'], '["docs/adr"]'],
+        ['an empty string', '', '""'],
+        ['false', false, 'false'],
+        ['true', true, 'true'],
+        ['an object', { path: 'docs/adr' }, '{"path":"docs/adr"}'],
+        ['a function', () => 'docs/adr', 'a function'],
+        ['a bigint', 10n, '10n'],
+      ] as const)('rejects %s', ([, value, shown]) => {
+        expect(configError(asConfig({ adrDir: value }))).toBe(
+          `Invalid adrDir ${shown}: ${ADR_DIR_USE}`,
+        );
+      });
+
+      it('rejects a revoked Proxy and a throwing getter without crashing', () => {
+        expect(configError(asConfig({ adrDir: revokedProxy() }))).toBe(
+          `Invalid adrDir an unprintable value: ${ADR_DIR_USE}`,
+        );
+        expect(configError(throwingGetter('adrDir') as MadrLintConfig)).toBe(
+          `Invalid adrDir an unprintable value: ${ADR_DIR_USE}`,
+        );
+      });
+
+      it('accepts a path', () => {
+        expect(resolveExtends({ adrDir: 'decisions' }).adrDir).toBe('decisions');
+        expect(resolveExtends({ adrDir: '/abs/adr' }).adrDir).toBe('/abs/adr');
+      });
+
+      it.for([null, undefined])('treats %s as not set', (value) => {
+        expect(resolveExtends(asConfig({ adrDir: value })).adrDir).toBe('docs/adr');
+      });
+    });
+
+    describe('ignorePatterns', () => {
+      it.for([
+        ['a string', '0001-*', '"0001-*"'],
+        ['an empty string', '', '""'],
+        ['an object', {}, '{}'],
+        ['an object with a length', { 0: 'x', length: 1 }, '{"0":"x","length":1}'],
+        ['a number', 42, '42'],
+        ['false', false, 'false'],
+        ['true', true, 'true'],
+        ['a function', () => ['x'], 'a function'],
+      ] as const)('rejects %s', ([, value, shown]) => {
+        expect(configError(asConfig({ ignorePatterns: value }))).toBe(
+          `Invalid ignorePatterns ${shown}: ${IGNORE_PATTERNS_USE}`,
+        );
+      });
+
+      it.for([
+        ['a number', [42], '42'],
+        ['an empty string', [''], '""'],
+        ['null', [null], 'null'],
+        ['false', [false], 'false'],
+        ['a nested list', [['x']], '["x"]'],
+        ['a bigint', [10n], '10n'],
+        ['a number after a valid pattern', ['template.md', 42], '42'],
+        // oxlint-disable-next-line no-sparse-arrays -- the hole is the input under test
+        ['a hole', ['template.md', , '9999-*'], 'undefined'],
+      ] as const)('rejects an entry that is %s', ([, value, shown]) => {
+        expect(configError(asConfig({ ignorePatterns: value }))).toBe(
+          `Invalid ignorePatterns entry ${shown}: use a non-empty string.`,
+        );
+      });
+
+      // One line per ignorePatterns, not per entry: a sparse array of length
+      // 1e8 would otherwise produce 1e8 problems.
+      it('reports only the first invalid entry, quickly for a huge sparse array', () => {
+        expect(configError(asConfig({ ignorePatterns: [42, null] }))).toBe(
+          'Invalid ignorePatterns entry 42: use a non-empty string.',
+        );
+        const sparse: unknown[] = [];
+        sparse.length = 1e8;
+        const started = performance.now();
+        expect(configError(asConfig({ ignorePatterns: sparse }))).toBe(
+          'Invalid ignorePatterns entry undefined: use a non-empty string.',
+        );
+        expect(performance.now() - started).toBeLessThan(2000);
+      });
+
+      // A Proxy can report any length. NaN and -1 used to pass as an empty
+      // list; Infinity with a string at every index never ended.
+      it.for([
+        ['NaN', Number.NaN, 'NaN'],
+        ['-1', -1, '-1'],
+        ['1.5', 1.5, '1.5'],
+        ['Infinity', Number.POSITIVE_INFINITY, 'Infinity'],
+        ['a string', '2', '"2"'],
+      ] as const)('rejects a list whose length is %s, quickly', ([, length, shown]) => {
+        const started = performance.now();
+        expect(configError(asConfig({ ignorePatterns: lyingArray(length, 'template.md') }))).toBe(
+          `Invalid ignorePatterns with length ${shown}: ${IGNORE_PATTERNS_USE}`,
+        );
+        expect(performance.now() - started).toBeLessThan(2000);
+      });
+
+      it('rejects a list longer than 10000 patterns, quickly', () => {
+        const started = performance.now();
+        expect(
+          configError(
+            asConfig({ ignorePatterns: lyingArray(Number.MAX_SAFE_INTEGER, 'template.md') }),
+          ),
+        ).toBe(
+          `Invalid ignorePatterns with length ${Number.MAX_SAFE_INTEGER}: use at most 10000 patterns.`,
+        );
+        expect(performance.now() - started).toBeLessThan(2000);
+        const tooMany = Array.from({ length: 10_001 }, (_, i) => `p${i}.md`);
+        expect(configError(asConfig({ ignorePatterns: tooMany }))).toBe(
+          'Invalid ignorePatterns with length 10001: use at most 10000 patterns.',
+        );
+        const most = tooMany.slice(0, 10_000);
+        expect(resolveExtends({ ignorePatterns: most }).ignorePatterns).toEqual(most);
+      });
+
+      it('reports a bad entry among the first 10000 of a longer list instead of its length', () => {
+        expect(configError(asConfig({ ignorePatterns: lyingArray(1e9, 42) }))).toBe(
+          'Invalid ignorePatterns entry 42: use a non-empty string.',
+        );
+      });
+
+      // The checked strings are returned, not the list, so a getter cannot
+      // hand later readers something else.
+      it('returns a plain copy of the patterns it checked', () => {
+        let reads = 0;
+        const patterns = Object.defineProperty(['template.md'], 0, {
+          get(): string {
+            reads += 1;
+            if (reads > 1) throw new Error('second read');
+            return 'template.md';
+          },
+        });
+        const resolved = resolveExtends(asConfig({ ignorePatterns: patterns })).ignorePatterns;
+        expect(Object.getOwnPropertyDescriptor(resolved, 0)).toEqual(
+          expect.objectContaining({ value: 'template.md' }),
+        );
+        expect(reads).toBe(1);
+      });
+
+      it('rejects entries that cannot be read without crashing', () => {
+        const entryThrows = Object.defineProperty(['template.md', 'x'], 1, {
+          get(): never {
+            throw new Error('entry');
+          },
+        });
+        expect(configError(asConfig({ ignorePatterns: entryThrows }))).toBe(
+          'Invalid ignorePatterns entry an unprintable value: use a non-empty string.',
+        );
+        const lengthThrows = new Proxy(['template.md'], {
+          get(target, key, receiver): unknown {
+            if (key === 'length') throw new Error('length');
+            return Reflect.get(target, key, receiver) as unknown;
+          },
+        });
+        expect(configError(asConfig({ ignorePatterns: lengthThrows }))).toBe(
+          `Invalid ignorePatterns an unprintable value: ${IGNORE_PATTERNS_USE}`,
+        );
+        expect(configError(asConfig({ ignorePatterns: revokedProxy() }))).toBe(
+          `Invalid ignorePatterns an unprintable value: ${IGNORE_PATTERNS_USE}`,
+        );
+        expect(configError(throwingGetter('ignorePatterns') as MadrLintConfig)).toBe(
+          `Invalid ignorePatterns an unprintable value: ${IGNORE_PATTERNS_USE}`,
+        );
+      });
+
+      it('accepts a list of patterns', () => {
+        expect(
+          resolveExtends({ ignorePatterns: ['template.md', '9999-*'] }).ignorePatterns,
+        ).toEqual(['template.md', '9999-*']);
+        expect(resolveExtends({ ignorePatterns: [] }).ignorePatterns).toEqual([]);
+      });
+
+      it.for([null, undefined])('treats %s as not set', (value) => {
+        expect(resolveExtends(asConfig({ ignorePatterns: value })).ignorePatterns).toEqual([]);
+      });
+    });
+
+    describe('cache', () => {
+      it.for([
+        ['the string "false"', 'false', '"false"'],
+        ['the string "true"', 'true', '"true"'],
+        ['0', 0, '0'],
+        ['1', 1, '1'],
+        ['an object', {}, '{}'],
+        ['an array', [], '[]'],
+      ] as const)('rejects %s', ([, value, shown]) => {
+        expect(configError(asConfig({ cache: value }))).toBe(
+          `Invalid cache ${shown}: use true or false.`,
+        );
+      });
+
+      it('rejects a throwing getter without crashing', () => {
+        expect(configError(throwingGetter('cache') as MadrLintConfig)).toBe(
+          'Invalid cache an unprintable value: use true or false.',
+        );
+      });
+
+      it.for([true, false])('accepts %s', (value) => {
+        expect(resolveExtends({ cache: value }).cache).toBe(value);
+      });
+
+      it.for([null, undefined])('treats %s as not set', (value) => {
+        expect(resolveExtends(asConfig({ cache: value })).cache).toBe(true);
+      });
+    });
+
+    describe('cacheLocation', () => {
+      it.for([
+        ['a number', 42, '42'],
+        ['an empty string', '', '""'],
+        ['an array', ['.cache'], '[".cache"]'],
+        ['false', false, 'false'],
+      ] as const)('rejects %s', ([, value, shown]) => {
+        expect(configError(asConfig({ cacheLocation: value }))).toBe(
+          `Invalid cacheLocation ${shown}: ${CACHE_LOCATION_USE}`,
+        );
+      });
+
+      it('rejects a throwing getter without crashing', () => {
+        expect(configError(throwingGetter('cacheLocation') as MadrLintConfig)).toBe(
+          `Invalid cacheLocation an unprintable value: ${CACHE_LOCATION_USE}`,
+        );
+      });
+
+      it('accepts a path', () => {
+        expect(resolveExtends({ cacheLocation: '.cache/madr' }).cacheLocation).toBe(
+          '.cache/madr',
+        );
+      });
+
+      it.for([null, undefined])('treats %s as not set', (value) => {
+        expect(resolveExtends(asConfig({ cacheLocation: value })).cacheLocation).toBe(
+          '.madr-lint/cache',
+        );
+      });
+    });
+
+    describe('rule severities', () => {
+      function ruleError(value: unknown): string {
+        return configError(asConfig({ rules: { 'madr/status-enum': value } }));
+      }
+
+      it.for([
+        ['eror', 'error'],
+        ['Error', 'error'],
+        ['ERROR', 'error'],
+        ['erorr', 'error'],
+        ['Warn', 'warn'],
+        ['wran', 'warn'],
+        ['Off', 'off'],
+      ] as const)('rejects %j and suggests %j', ([value, match]) => {
+        expect(ruleError(value)).toBe(
+          `Invalid severity "${value}" for rule "madr/status-enum": ${SEVERITY_USE} Did you mean "${match}"?`,
+        );
+      });
+
+      it.for(['warning', 'of', 'none', ''])('rejects %j without a suggestion', (value) => {
+        expect(ruleError(value)).toBe(
+          `Invalid severity ${JSON.stringify(value)} for rule "madr/status-enum": ${SEVERITY_USE}`,
+        );
+      });
+
+      // ESLint spells severities as 0, 1, 2.
+      it.for([
+        [0, 'off'],
+        [1, 'warn'],
+        [2, 'error'],
+      ] as const)('rejects the number %s and names %j', ([value, name]) => {
+        expect(ruleError(value)).toBe(
+          `Invalid severity ${value} for rule "madr/status-enum": use "${name}" instead.`,
+        );
+        expect(ruleError([value, {}])).toBe(
+          `Invalid severity ${value} for rule "madr/status-enum": use "${name}" instead.`,
+        );
+      });
+
+      it.for([
+        ['true', true, 'true'],
+        ['3', 3, '3'],
+        ['an object', { severity: 'error' }, '{"severity":"error"}'],
+        ['an object with a length', { 0: 'error', length: 1 }, '{"0":"error","length":1}'],
+        ['a function', () => 'error', 'a function'],
+        ['a bigint', 2n, '2n'],
+        ['a symbol', Symbol('error'), 'Symbol(error)'],
+        ['an empty list', [], '[]'],
+        ['a list of three', ['error', {}, {}], '["error",{},{}]'],
+      ] as const)('rejects %s as the value', ([, value, shown]) => {
+        expect(ruleError(value)).toBe(
+          `Invalid severity ${shown} for rule "madr/status-enum": ${RULE_VALUE_USE}`,
+        );
+      });
+
+      it.for([
+        ['"eror"', ['eror', {}], `Invalid severity "eror" for rule "madr/status-enum": ${SEVERITY_USE} Did you mean "error"?`],
+        ['true', [true], `Invalid severity true for rule "madr/status-enum": ${SEVERITY_USE}`],
+        ['a nested list', [['error']], `Invalid severity ["error"] for rule "madr/status-enum": ${SEVERITY_USE}`],
+        // oxlint-disable-next-line no-sparse-arrays -- the hole is the input under test
+        ['a hole', [, {}], 'Invalid severity undefined for rule "madr/status-enum": use "off" instead, or remove the entry.'],
+      ] as const)('rejects %s as the first entry of a list', ([, value, expected]) => {
+        expect(ruleError(value)).toBe(expected);
+      });
+
+      it.for([
+        ['a string', ['error', 'x'], '"x"'],
+        ['an empty string', ['error', ''], '""'],
+        ['0', ['error', 0], '0'],
+        ['a string for an off rule', ['off', 'x'], '"x"'],
+        ['a list for an off rule', ['off', []], '[]'],
+        ['a list', ['error', []], '[]'],
+        ['a number', ['warn', 42], '42'],
+        ['true', ['off', true], 'true'],
+        ['a function', ['error', () => ({})], 'a function'],
+      ] as const)('rejects options that are %s', ([, value, shown]) => {
+        expect(ruleError(value)).toBe(
+          `Invalid options ${shown} for rule "madr/status-enum": use an object.`,
+        );
+      });
+
+      it('reports a bad severity and bad options of one rule together', () => {
+        expect(ruleError(['eror', 'x'])).toBe(
+          [
+            'Invalid config (2 problems):',
+            `  - Invalid severity "eror" for rule "madr/status-enum": ${SEVERITY_USE} Did you mean "error"?`,
+            '  - Invalid options "x" for rule "madr/status-enum": use an object.',
+          ].join('\n'),
+        );
+      });
+
+      it('reads hostile values without crashing', () => {
+        const getter = Object.defineProperty({}, 'madr/status-enum', {
+          enumerable: true,
+          get(): never {
+            throw new Error('value');
+          },
+        });
+        expect(configError(asConfig({ rules: getter }))).toBe(
+          `Invalid severity an unprintable value for rule "madr/status-enum": ${RULE_VALUE_USE}`,
+        );
+        expect(ruleError(revokedProxy())).toBe(
+          `Invalid severity an unprintable value for rule "madr/status-enum": ${RULE_VALUE_USE}`,
+        );
+        const lengthThrows = new Proxy(['error'], {
+          get(target, key, receiver): unknown {
+            if (key === 'length') throw new Error('length');
+            return Reflect.get(target, key, receiver) as unknown;
+          },
+        });
+        expect(ruleError(lengthThrows)).toBe(
+          `Invalid severity an unprintable value for rule "madr/status-enum": ${RULE_VALUE_USE}`,
+        );
+        const severityThrows = Object.defineProperty(['error', {}], 0, {
+          get(): never {
+            throw new Error('severity');
+          },
+        });
+        expect(ruleError(severityThrows)).toBe(
+          `Invalid severity an unprintable value for rule "madr/status-enum": ${SEVERITY_USE}`,
+        );
+        const optionsThrow = Object.defineProperty(['error', {}], 1, {
+          get(): never {
+            throw new Error('options');
+          },
+        });
+        expect(ruleError(optionsThrow)).toBe(
+          'Invalid options an unprintable value for rule "madr/status-enum": use an object.',
+        );
+      });
+
+      it('handles a very long severity quickly and truncates it', () => {
+        const value = 'e'.repeat(1_000_000);
+        const started = performance.now();
+        const message = ruleError(value);
+        expect(performance.now() - started).toBeLessThan(2000);
+        expect(message).toBe(
+          `Invalid severity "${'e'.repeat(80)}…" for rule "madr/status-enum": ${SEVERITY_USE}`,
+        );
+      });
+
+      it('validates a user override of a preset rule', () => {
+        expect(
+          configError(
+            asConfig({ extends: ['madr-lint:recommended'], rules: { 'madr/status-enum': 'eror' } }),
+          ),
+        ).toBe(
+          `Invalid severity "eror" for rule "madr/status-enum": ${SEVERITY_USE} Did you mean "error"?`,
+        );
+      });
+
+      it('reports the severity of an unknown rule after its name', () => {
+        expect(configError(asConfig({ rules: { 'madr/status-enmu': 'eror' } }))).toBe(
+          [
+            'Invalid config (2 problems):',
+            '  - Unknown rule "madr/status-enmu" in rules. Did you mean "madr/status-enum"?',
+            `  - Invalid severity "eror" for rule "madr/status-enmu": ${SEVERITY_USE} Did you mean "error"?`,
+          ].join('\n'),
+        );
+      });
+
+      it('does not check the value of a reserved rule ID', () => {
+        expect(configError(asConfig({ rules: { 'core/internal-error': 'eror' } }))).toBe(
+          'Rule "core/internal-error" in rules cannot be configured: "core/" rule IDs are reserved for madr-lint\'s own diagnostics.',
+        );
+      });
+
+      describe('values that stay valid', () => {
+        it.for([
+          ['"error"', 'error'],
+          ['"warn"', 'warn'],
+          ['"off"', 'off'],
+          ['["error"]', ['error']],
+          ['["warn", {}]', ['warn', {}]],
+          ['["off", options]', ['off', { caseSensitive: true }]],
+          // Options are checked by the rule's schema when the rule runs.
+          ['["error", unknown options]', ['error', { bogus: 1 }]],
+          ['["error", null]', ['error', null]],
+          ['["error", undefined]', ['error', undefined]],
+          ['["error", false]', ['error', false]],
+          // oxlint-disable-next-line no-sparse-arrays -- the hole is the input under test
+          ['["error", <hole>]', ['error', ,]],
+        ] as const)('accepts %s', ([, value]) => {
+          expect(
+            resolveExtends(asConfig({ rules: { 'madr/status-enum': value } })).rules,
+          ).toEqual({ 'madr/status-enum': value });
+        });
+
+        it('accepts options with a cycle', () => {
+          const options: Record<string, unknown> = {};
+          options.self = options;
+          expect(
+            resolveExtends(asConfig({ rules: { 'madr/status-enum': ['error', options] } }))
+              .rules['madr/status-enum'],
+          ).toEqual(['error', options]);
+        });
+
+      });
+
+      // `"madr/no-numbering-gap": false` most likely means "off", and null in
+      // JSON is as ambiguous. `ci && 'error'` is false or undefined outside
+      // CI, and undefined used to turn the rule off. Reading any of them as
+      // "not written" would keep a preset rule running without a message, so
+      // all three are errors that say what to write.
+      describe('null, false and undefined', () => {
+        const FALSE_LINE = 'Invalid severity false for rule "madr/status-enum": use "off" instead.';
+        const NULL_LINE = `Invalid severity null for rule "madr/status-enum": ${RULE_VALUE_USE}`;
+        const UNDEFINED_LINE =
+          'Invalid severity undefined for rule "madr/status-enum": use "off" instead, or remove the entry.';
+
+        it.for([
+          ['false', false, FALSE_LINE],
+          ['null', null, NULL_LINE],
+          ['undefined', undefined, UNDEFINED_LINE],
+          ['[false]', [false], FALSE_LINE],
+          ['[false, {}]', [false, {}], FALSE_LINE],
+          ['[null]', [null], NULL_LINE],
+          ['[null, {}]', [null, {}], NULL_LINE],
+          ['[undefined]', [undefined], UNDEFINED_LINE],
+          ['[undefined, {}]', [undefined, {}], UNDEFINED_LINE],
+        ] as const)('rejects %s', ([, value, expected]) => {
+          expect(ruleError(value)).toBe(expected);
+        });
+
+        it.for([
+          [false, FALSE_LINE],
+          [undefined, UNDEFINED_LINE],
+        ] as const)('rejects %s over a preset rule too', ([value, expected]) => {
+          expect(
+            configError(
+              asConfig({
+                extends: ['madr-lint:recommended'],
+                rules: { 'madr/status-enum': value },
+              }),
+            ),
+          ).toBe(expected);
+        });
+      });
+
+      // A rule value is read once, and what was checked is what is returned:
+      // a getter cannot pass the check and hand the linter something else.
+      describe('values are read once', () => {
+        function changingTuple(first: unknown, later: () => unknown, options?: object): unknown[] {
+          let reads = 0;
+          const tuple: unknown[] = options === undefined ? ['x'] : ['x', options];
+          return Object.defineProperty(tuple, 0, {
+            enumerable: true,
+            get(): unknown {
+              reads += 1;
+              return reads === 1 ? first : later();
+            },
+          });
+        }
+
+        it('returns a plain tuple of the severity it checked', () => {
+          const tuple = changingTuple('error', () => {
+            throw new Error('second read');
+          });
+          const resolved = resolveExtends(asConfig({ rules: { 'madr/status-enum': tuple } }))
+            .rules['madr/status-enum'];
+          expect(Object.getOwnPropertyDescriptor(resolved, 0)).toEqual(
+            expect.objectContaining({ value: 'error' }),
+          );
+          expect(resolved).toEqual(['error']);
+        });
+
+        it('keeps a severity that changes after the check out of the result', () => {
+          const options = { caseSensitive: true };
+          const tuple = changingTuple('error', () => 'bogus', options);
+          const resolved = resolveExtends(asConfig({ rules: { 'madr/status-enum': tuple } }))
+            .rules['madr/status-enum'];
+          expect(resolved).toEqual(['error', options]);
+          expect(Object.getOwnPropertyDescriptor(resolved, 0)).toEqual(
+            expect.objectContaining({ value: 'error' }),
+          );
+        });
+
+        // The cache key hashes the resolved rules, so the copy must hash like
+        // the value the user wrote (holes and undefined options included).
+        it('gives valid configs the same cache key as the values they hold', () => {
+          const rules = {
+            'madr/filename-format': ['error', { pattern: '^ADR-[0-9]+\\.md$' }],
+            'madr/status-enum': ['warn', {}],
+            'madr/date-iso8601': ['error'],
+            'madr/no-numbering-gap': ['off', { bogus: 1 }],
+            'madr/metadata-format': ['error', null],
+            'madr/no-broken-links': ['error', undefined],
+            'madr/required-sections': ['error', false],
+            // oxlint-disable-next-line no-sparse-arrays -- the hole is the input under test
+            'madr/no-duplicate-numbering': ['warn', ,],
+            'madr/supersedes-bidirectional': 'off',
+          };
+          const resolved = resolveExtends(
+            asConfig({ extends: ['madr-lint:recommended'], rules, ignorePatterns: ['t.md'] }),
+          );
+          expect(
+            computeConfigHash({
+              rules: resolved.rules,
+              ignorePatterns: resolved.ignorePatterns,
+              madrVersion: resolved.madrVersion,
+            }),
+          ).toBe(
+            computeConfigHash({
+              rules: { ...recommended, ...rules },
+              ignorePatterns: ['t.md'],
+              madrVersion: 'auto',
+            }),
+          );
+        });
+      });
+
+      // Printing a huge list used to serialize all of it before truncating.
+      const NULLS = `[${'null,'.repeat(20)}`.slice(0, 80);
+      const NESTED_NULLS = `[[${'null,'.repeat(20)}`.slice(0, 80);
+
+      it.for([
+        ['a rule value', (v: unknown) => ({ rules: { 'madr/status-enum': v } }), `Invalid severity ${NULLS}… for rule "madr/status-enum": ${RULE_VALUE_USE}`],
+        ['adrDir', (v: unknown) => ({ adrDir: v }), `Invalid adrDir ${NULLS}…: ${ADR_DIR_USE}`],
+        ['nested in options', (v: unknown) => ({ rules: { 'madr/status-enum': ['error', [v]] } }), `Invalid options ${NESTED_NULLS}… for rule "madr/status-enum": use an object.`],
+      ] as const)('prints a huge sparse list as %s quickly', ([, wrap, expected]) => {
+        const started = performance.now();
+        const message = configError(asConfig(wrap(sparseArray(1e8))));
+        expect(performance.now() - started).toBeLessThan(500);
+        expect(message).toBe(expected);
+      });
+
+      it('prints a list whose length a Proxy reports as Infinity quickly', () => {
+        const started = performance.now();
+        expect(ruleError(lyingArray(Number.POSITIVE_INFINITY, 'error'))).toBe(
+          `Invalid severity ${`["error",${'"error",'.repeat(10)}`.slice(0, 80)}… for rule "madr/status-enum": ${RULE_VALUE_USE}`,
+        );
+        expect(performance.now() - started).toBeLessThan(500);
+      });
+    });
+
+    it('reports problems of every kind in one error, in the documented order', () => {
+      const message = configError(
+        asConfig({
+          rules: { 'madr/status-enmu': 'error', 'madr/status-enum': 'eror' },
+          cacheLocation: 42,
+          cache: 'false',
+          ignorePatterns: '0001-*',
+          adrDir: 42,
+          extends: ['madr-lint:recomended'],
+          madrVersion: 'V3',
+          rule: {},
+        }),
+      );
+      expect(message).toBe(
+        [
+          'Invalid config (9 problems):',
+          '  - Unknown key "rule" in the config. Did you mean "rules"?',
+          '  - Invalid madrVersion "V3": use one of "v2", "v3", "v4", "auto".',
+          `  - Invalid adrDir 42: ${ADR_DIR_USE}`,
+          `  - Invalid ignorePatterns "0001-*": ${IGNORE_PATTERNS_USE}`,
+          '  - Invalid cache "false": use true or false.',
+          `  - Invalid cacheLocation 42: ${CACHE_LOCATION_USE}`,
+          '  - Unknown preset "madr-lint:recomended" in extends. Did you mean "madr-lint:recommended"?',
+          '  - Unknown rule "madr/status-enmu" in rules. Did you mean "madr/status-enum"?',
+          `  - Invalid severity "eror" for rule "madr/status-enum": ${SEVERITY_USE} Did you mean "error"?`,
+        ].join('\n'),
+      );
+    });
+
+    it('leaves the built-in preset severities untouched', () => {
+      expect(resolveExtends({ extends: ['madr-lint:recommended'] }).rules).toEqual(recommended);
+    });
+  });
+
   describe('loadConfig (file I/O)', () => {
     let dir: string;
 
@@ -852,6 +1504,42 @@ describe('core/config', () => {
     it('rejects a bigint extends entry as a config error, not a crash', () => {
       writeFileSync(join(dir, 'madr-lint.config.mjs'), 'export default { extends: [10n] };\n');
       expect(() => loadConfig(dir)).toThrow(InvalidConfigError);
+    });
+
+    it('rejects invalid config values (#229) from a discovered file and an explicit path', () => {
+      const [discovered, explicit] = bothLoadErrors(
+        '.madrlintrc.json',
+        '{ "ignorePatterns": "0001-*", "rules": { "madr/status-enum": "eror" } }\n',
+      );
+      const expected = [
+        'Invalid config (2 problems):',
+        '  - Invalid ignorePatterns "0001-*": use a list of glob patterns, such as ["template.md"].',
+        '  - Invalid severity "eror" for rule "madr/status-enum": use one of "error", "warn", "off". Did you mean "error"?',
+      ].join('\n');
+      expect(discovered).toBe(expected);
+      expect(explicit).toBe(expected);
+    });
+
+    it('rejects a rule set to null in a JSON config (#229)', () => {
+      const [discovered, explicit] = bothLoadErrors(
+        '.madrlintrc.json',
+        '{ "rules": { "madr/status-enum": null } }\n',
+      );
+      const expected =
+        'Invalid severity null for rule "madr/status-enum": use one of "error", "warn", "off", or a list [severity, options].';
+      expect(discovered).toBe(expected);
+      expect(explicit).toBe(expected);
+    });
+
+    it('rejects a JS config with a rule set to undefined (#229)', () => {
+      const [discovered, explicit] = bothLoadErrors(
+        'madr-lint.config.mjs',
+        'const ci = undefined;\nexport default { extends: ["madr-lint:recommended"], rules: { "madr/status-enum": ci && "error" } };\n',
+      );
+      const expected =
+        'Invalid severity undefined for rule "madr/status-enum": use "off" instead, or remove the entry.';
+      expect(discovered).toBe(expected);
+      expect(explicit).toBe(expected);
     });
 
     it('rejects the issue #206 reproduction from an explicit path', () => {

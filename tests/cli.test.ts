@@ -875,6 +875,153 @@ describe('cli (end-to-end)', () => {
     }, 30_000);
   });
 
+  // Before #229 these values weakened the lint without a message or crashed
+  // with a stack trace and exit 1.
+  describe('config values (#229)', () => {
+    // Valid apart from the status, so status-enum is the only rule it trips.
+    const ADR = [
+      '---',
+      'status: bogus',
+      'date: 2024-01-01',
+      '---',
+      '# Use X',
+      '',
+      '## Context and Problem Statement',
+      '',
+      'x',
+      '',
+      '## Considered Options',
+      '',
+      '* a',
+      '',
+      '## Decision Outcome',
+      '',
+      'Chosen option: "a"',
+      '',
+    ].join('\n');
+    const SEVERITY_USE = 'use one of "error", "warn", "off".';
+    const IGNORE_PATTERNS_USE = 'use a list of glob patterns, such as ["template.md"].';
+
+    beforeEach(() => {
+      mkdirSync(join(dir, 'docs', 'adr'), { recursive: true });
+      writeFileSync(join(dir, 'docs', 'adr', '0001-use-x.md'), ADR);
+    });
+
+    function ruleNames(r: CliResult): string[] {
+      const out = JSON.parse(r.stdout) as { results: Array<{ ruleName: string; severity: string }> };
+      return out.results.map((d) => `${d.severity} ${d.ruleName}`);
+    }
+
+    // The rows of the issue's reproduction table.
+    it.for([
+      ['ignorePatterns "0001-*"', { ignorePatterns: '0001-*' }, `Invalid ignorePatterns "0001-*": ${IGNORE_PATTERNS_USE}`],
+      ['severity "eror"', { rules: { 'madr/status-enum': 'eror' } }, `Invalid severity "eror" for rule "madr/status-enum": ${SEVERITY_USE} Did you mean "error"?`],
+      ['severity "Error"', { rules: { 'madr/status-enum': 'Error' } }, `Invalid severity "Error" for rule "madr/status-enum": ${SEVERITY_USE} Did you mean "error"?`],
+      ['severity 2', { rules: { 'madr/status-enum': 2 } }, 'Invalid severity 2 for rule "madr/status-enum": use "error" instead.'],
+      ['severity true', { rules: { 'madr/status-enum': true } }, 'Invalid severity true for rule "madr/status-enum": use one of "error", "warn", "off", or a list [severity, options].'],
+      ['severity ["eror", {}]', { rules: { 'madr/status-enum': ['eror', {}] } }, `Invalid severity "eror" for rule "madr/status-enum": ${SEVERITY_USE} Did you mean "error"?`],
+      ['cache "false"', { cache: 'false' }, 'Invalid cache "false": use true or false.'],
+      ['adrDir 42', { adrDir: 42 }, 'Invalid adrDir 42: use a non-empty string, such as "docs/adr".'],
+      ['adrDir ["docs/adr"]', { adrDir: ['docs/adr'] }, 'Invalid adrDir ["docs/adr"]: use a non-empty string, such as "docs/adr".'],
+      ['ignorePatterns {}', { ignorePatterns: {} }, `Invalid ignorePatterns {}: ${IGNORE_PATTERNS_USE}`],
+      ['ignorePatterns [42]', { ignorePatterns: [42] }, 'Invalid ignorePatterns entry 42: use a non-empty string.'],
+      ['cacheLocation 42', { cacheLocation: 42 }, 'Invalid cacheLocation 42: use a non-empty string, such as ".madr-lint/cache".'],
+      ['a rule set to null', { rules: { 'madr/status-enum': null } }, 'Invalid severity null for rule "madr/status-enum": use one of "error", "warn", "off", or a list [severity, options].'],
+      ['a rule set to false', { extends: ['madr-lint:recommended'], rules: { 'madr/status-enum': false } }, 'Invalid severity false for rule "madr/status-enum": use "off" instead.'],
+    ] as const)('exits 2 for %s, discovered and with --config', { timeout: 60_000 }, ([, config, line]) => {
+      const content = JSON.stringify(config);
+      writeFileSync(join(dir, '.madrlintrc.json'), content);
+      writeFileSync(join(dir, 'custom.json'), content);
+      // Without --no-cache, so a run that linted would leave a cache behind.
+      expectConfigError(runCli(dir, []), `${line}\n`);
+      expectConfigError(
+        runCli(dir, ['--config', 'custom.json']),
+        `Failed to load config "custom.json": ${line}\n`,
+      );
+      expect(existsSync(join(dir, '.madr-lint'))).toBe(false);
+    });
+
+    it('lists every invalid value in one error', () => {
+      writeFileSync(
+        join(dir, '.madrlintrc.json'),
+        JSON.stringify({ adrDir: 42, cache: 'false', rules: { 'madr/status-enum': 'eror' } }),
+      );
+      expectConfigError(
+        runCli(dir, ['--no-cache']),
+        [
+          'Invalid config (3 problems):',
+          '  - Invalid adrDir 42: use a non-empty string, such as "docs/adr".',
+          '  - Invalid cache "false": use true or false.',
+          `  - Invalid severity "eror" for rule "madr/status-enum": ${SEVERITY_USE} Did you mean "error"?`,
+          '',
+        ].join('\n'),
+      );
+    }, 30_000);
+
+    // `ci && 'error'` outside CI: undefined used to turn the rule off; read as
+    // "not written" it would run at the preset severity without a message.
+    it('exits 2 for a rule set to undefined, discovered and with --config', () => {
+      const content =
+        'const ci = process.env.MADR_LINT_TEST_UNSET;\nexport default { extends: ["madr-lint:recommended"], rules: { "madr/no-duplicate-numbering": ci && "error" } };\n';
+      writeFileSync(join(dir, 'madr-lint.config.mjs'), content);
+      writeFileSync(join(dir, 'custom.mjs'), content);
+      const line =
+        'Invalid severity undefined for rule "madr/no-duplicate-numbering": use "off" instead, or remove the entry.';
+      expectConfigError(runCli(dir, ['--no-cache']), `${line}\n`);
+      expectConfigError(
+        runCli(dir, ['--no-cache', '--config', 'custom.mjs']),
+        `Failed to load config "custom.mjs": ${line}\n`,
+      );
+    }, 60_000);
+
+    // The linter reads the resolved value later; it must be the value that was
+    // checked, not a second read of the user's getter.
+    it('lints with the severity it checked when a getter would change it', () => {
+      writeFileSync(
+        join(dir, 'madr-lint.config.mjs'),
+        [
+          'let reads = 0;',
+          'const tuple = Object.defineProperty(["x"], 0, {',
+          '  get() { reads += 1; if (reads > 1) throw new Error("second read"); return "error"; },',
+          '});',
+          'export default { rules: { "madr/status-enum": tuple } };',
+          '',
+        ].join('\n'),
+      );
+      const r = runCli(dir, ['--no-cache', '--format', 'json']);
+      expect(r.stderr).toBe('');
+      expect(r.status).toBe(1);
+      expect(ruleNames(r)).toEqual(['error madr/status-enum']);
+    }, 30_000);
+
+    it('keeps the rule options error for an options object the rule rejects', () => {
+      writeFileSync(
+        join(dir, '.madrlintrc.json'),
+        JSON.stringify({ rules: { 'madr/status-enum': ['error', { bogus: 1 }] } }),
+      );
+      expectConfigError(
+        runCli(dir, ['--no-cache']),
+        'Invalid rule options in config: Invalid options for rule madr/status-enum: data must NOT have additional properties\n',
+      );
+    }, 30_000);
+
+    it.for([
+      ['["error"]', ['error'], 1, ['error madr/status-enum']],
+      ['["warn", {}]', ['warn', {}], 0, ['warn madr/status-enum']],
+      ['["off", options the rule rejects]', ['off', { bogus: 1 }], 0, []],
+      ['["error", null]', ['error', null], 1, ['error madr/status-enum']],
+    ] as const)('still lints with %s', { timeout: 30_000 }, ([, value, status, reported]) => {
+      writeFileSync(
+        join(dir, '.madrlintrc.json'),
+        JSON.stringify({ rules: { 'madr/status-enum': value } }),
+      );
+      const r = runCli(dir, ['--no-cache', '--format', 'json']);
+      expect(r.stderr).toBe('');
+      expect(r.status).toBe(status);
+      expect(ruleNames(r)).toEqual(reported);
+    });
+  });
+
   // ──────────────────────────────────────────────────────────────────────────
   // A discovered config file that cannot be loaded (#225) gets the message
   // --config already prints: `Failed to load config "<file>": <reason>`, no
