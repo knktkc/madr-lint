@@ -438,6 +438,19 @@ export function buildProjectFile(
 }
 
 /**
+ * Whether a project rule runs under the configured `madrVersion`. Decided by
+ * the configured version only: under `auto` the rule sees every file, because
+ * dropping files of other versions would turn valid cross-file references into
+ * dangling ones.
+ */
+export function projectRuleAppliesTo(
+  rule: ProjectRule,
+  madrVersion: MadrVersion | 'auto',
+): boolean {
+  return madrVersion === 'auto' || rule.meta.versionCompat.includes(madrVersion);
+}
+
+/**
  * Run multiple project rules across all parsed files. Each rule's
  * `check()` is called once with the full file array. Throws are
  * captured as `core/internal-error` diagnostics (attached to the
@@ -455,15 +468,7 @@ export function runRulesOnProject(
   const madrVersion = runtime.madrVersion ?? 'auto';
 
   for (const rule of rules) {
-    // Skip by the configured version only. Under `auto` the rule sees every
-    // file: dropping files of other versions would turn valid cross-file
-    // references into dangling ones.
-    if (
-      madrVersion !== 'auto' &&
-      !rule.meta.versionCompat.includes(madrVersion)
-    ) {
-      continue;
-    }
+    if (!projectRuleAppliesTo(rule, madrVersion)) continue;
 
     const perRuleOptions =
       runtime.optionsByRule?.[rule.meta.name] ?? runtime.options;
