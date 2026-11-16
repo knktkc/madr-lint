@@ -13,6 +13,7 @@ import {
 } from './core/baseline.js';
 import { computeConfigHash } from './core/cache.js';
 import {
+  CONFIG_FILES,
   ConfigFileNotFoundError,
   InvalidConfigError,
   loadConfig,
@@ -33,6 +34,16 @@ import * as builtinRules from './rules/index.js';
 function toPosix(p: string): string {
   if (sep === '/') return p;
   return p.split(sep).join('/');
+}
+
+// A config module can throw anything, including a value whose message getter
+// or string conversion throws. The handler that reports it must not throw.
+function describeError(err: unknown): string {
+  try {
+    return err instanceof Error ? String(err.message) : String(err);
+  } catch {
+    return 'the thrown value cannot be converted to a string';
+  }
 }
 
 const pkg = JSON.parse(
@@ -141,9 +152,7 @@ const main = defineCommand({
         if (err instanceof ConfigFileNotFoundError) {
           console.error(err.message);
         } else {
-          console.error(
-            `Failed to load config "${configArg}": ${err instanceof Error ? err.message : String(err)}`,
-          );
+          console.error(`Failed to load config "${configArg}": ${describeError(err)}`);
         }
         process.exit(2);
       }
@@ -151,8 +160,14 @@ const main = defineCommand({
       try {
         config = loadConfig(cwd);
       } catch (err) {
-        if (!(err instanceof InvalidConfigError)) throw err;
-        console.error(err.message);
+        if (err instanceof InvalidConfigError) {
+          console.error(err.message);
+        } else {
+          // Same existsSync walk as loadConfig, so this names the file it loaded.
+          const name = CONFIG_FILES.find((n) => existsSync(resolve(cwd, n)));
+          const what = name === undefined ? 'config' : `config "${name}"`;
+          console.error(`Failed to load ${what}: ${describeError(err)}`);
+        }
         process.exit(2);
       }
     }
